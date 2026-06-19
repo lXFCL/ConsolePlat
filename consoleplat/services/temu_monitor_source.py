@@ -504,7 +504,15 @@ class TemuMonitorSource:
 
     def close_monitor_pages(self) -> int:
         if getattr(self, "_context", None) is None:
-            self._ensure_page()
+            if self._playwright is None:
+                from playwright.sync_api import sync_playwright
+
+                self._playwright = sync_playwright().start()
+            try:
+                self._browser = self._playwright.chromium.connect_over_cdp(self.cdp_endpoint)
+                self._context = self._browser.contexts[0] if self._browser.contexts else None
+            except Exception:
+                return 0
         if self._context is None:
             return 0
         closed_count = 0
@@ -774,6 +782,39 @@ class TemuMonitorSource:
     const style = getComputedStyle(el);
     return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
   };
+  const clickableParent = el => {
+    let node = el;
+    for (let depth = 0; node && node !== document.body && depth < 8; depth += 1, node = node.parentElement) {
+      if (!visible(node)) continue;
+      const role = node.getAttribute('role') || '';
+      const aria = node.getAttribute('aria-haspopup') || '';
+      const cls = String(node.className || '').toLowerCase();
+      const style = getComputedStyle(node);
+      if (
+        node.tagName === 'BUTTON'
+        || node.tagName === 'SELECT'
+        || role === 'button'
+        || role === 'combobox'
+        || aria === 'listbox'
+        || aria === 'menu'
+        || style.cursor === 'pointer'
+        || cls.includes('select')
+        || cls.includes('dropdown')
+        || cls.includes('pagination')
+      ) {
+        return node;
+      }
+    }
+    return el;
+  };
+  const fireClick = el => {
+    const target = clickableParent(el);
+    target.scrollIntoView({block: 'center', inline: 'center'});
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      target.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, view: window}));
+    }
+    return true;
+  };
   const scoreBottomRight = el => {
     const rect = el.getBoundingClientRect();
     return Math.abs(window.innerWidth - rect.right) + Math.abs(window.innerHeight - rect.bottom);
@@ -820,9 +861,7 @@ class TemuMonitorSource:
 
   const trigger = findPageSizeTrigger();
   if (!trigger) return false;
-  trigger.scrollIntoView({block: 'center', inline: 'center'});
-  trigger.click();
-  return true;
+  return fireClick(trigger);
 }
 """
             )
@@ -838,6 +877,26 @@ class TemuMonitorSource:
     const style = getComputedStyle(el);
     return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
   };
+  const clickableParent = el => {
+    let node = el;
+    for (let depth = 0; node && node !== document.body && depth < 6; depth += 1, node = node.parentElement) {
+      if (!visible(node)) continue;
+      const role = node.getAttribute('role') || '';
+      const cls = String(node.className || '').toLowerCase();
+      const style = getComputedStyle(node);
+      if (node.tagName === 'LI' || node.tagName === 'BUTTON' || role === 'option' || role === 'menuitem' || style.cursor === 'pointer' || cls.includes('option') || cls.includes('item')) {
+        return node;
+      }
+    }
+    return el;
+  };
+  const fireClick = el => {
+    const target = clickableParent(el);
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+      target.dispatchEvent(new MouseEvent(type, {bubbles: true, cancelable: true, view: window}));
+    }
+    return true;
+  };
   const item100 = '100 ' + String.fromCharCode(0x6761);
   const itemPerPage100 = '100' + String.fromCharCode(0x6761, 0x002f, 0x9875);
   const options = Array.from(document.querySelectorAll('li,div,span,button,[role="option"],[role="menuitem"]')).filter(el => {
@@ -851,8 +910,7 @@ class TemuMonitorSource:
   });
   const target = options[0];
   if (!target) return false;
-  target.click();
-  return true;
+  return fireClick(target);
 }
 """
             )

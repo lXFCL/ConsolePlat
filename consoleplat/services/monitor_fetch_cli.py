@@ -19,7 +19,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     settings = SettingsStore().load()
     account = _monitor_account(settings)
+    if args.close_monitor_pages and account is None:
+        account = ShopAccount(shop_name=settings.active_shop or "YUHOOBO")
     if account and account.phone and account.password:
+        source = TemuMonitorSource(account, settings.cdp_endpoint, settings.refresh_interval_seconds)
+    elif args.close_monitor_pages and account is not None:
         source = TemuMonitorSource(account, settings.cdp_endpoint, settings.refresh_interval_seconds)
     else:
         source = EmptyMonitorSource(settings.refresh_interval_seconds, settings.active_shop)

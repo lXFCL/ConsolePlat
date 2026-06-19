@@ -273,6 +273,23 @@ def test_monitor_source_closes_only_target_monitor_pages():
     assert not other_site_page.closed
 
 
+def test_monitor_source_close_pages_does_not_launch_chrome_when_cdp_unavailable():
+    class FailingChromium:
+        def connect_over_cdp(self, _endpoint):
+            raise RuntimeError("cdp unavailable")
+
+    class FakePlaywright:
+        chromium = FailingChromium()
+
+    source = object.__new__(TemuMonitorSource)
+    source._context = None
+    source._playwright = FakePlaywright()
+    source.cdp_endpoint = "http://127.0.0.1:9222"
+    source._launch_chrome_for_cdp = lambda: (_ for _ in ()).throw(AssertionError("should not launch chrome"))
+
+    assert source.close_monitor_pages() == 0
+
+
 def test_page_size_script_handles_right_bottom_page_size_text_variants():
     class FakePage:
         def __init__(self):
@@ -294,6 +311,8 @@ def test_page_size_script_handles_right_bottom_page_size_text_variants():
     combined = "\n".join(page.scripts)
     assert "isPageSize100" in combined
     assert "findPageSizeTrigger" in combined
+    assert "clickableParent" in combined
+    assert "pointerdown" in combined
     assert "itemPerPage100" in combined
     assert "pageChar" in combined
 
