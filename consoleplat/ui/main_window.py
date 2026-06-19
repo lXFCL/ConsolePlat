@@ -142,3 +142,8 @@ class MainWindow(QMainWindow):
             button.setProperty("active", "true" if item_key == key else "false")
             button.style().unpolish(button)
             button.style().polish(button)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override name.
+        for monitor_page in self.findChildren(MonitorPage):
+            monitor_page._close_monitor_browser_pages()
+        super().closeEvent(event)

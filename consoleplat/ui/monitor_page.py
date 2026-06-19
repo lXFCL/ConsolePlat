@@ -73,6 +73,7 @@ class MonitorPage(QWidget):
         self.is_fetching = False
         self.fetch_process: QProcess | None = None
         self.export_process: QProcess | None = None
+        self.cleanup_started = False
 
         self._build_ui()
         initial = MonitorSnapshot.empty(
@@ -301,7 +302,6 @@ class MonitorPage(QWidget):
 
     def _handle_fetch_payload(self, payload: dict) -> None:
         if payload.get("ok"):
-            self.page_size_configured = bool(payload.get("page_size_configured") or self.page_size_configured)
             self.on_snapshot_ready(MonitorSnapshot.from_dict(payload.get("snapshot") or {}))
             return
         prefix = "LOGIN_REQUIRED::" if payload.get("kind") == "login" else ""
@@ -440,4 +440,20 @@ class MonitorPage(QWidget):
             self.export_process.kill()
             self.export_process.waitForFinished(1500)
             self.export_process = None
+        self._close_monitor_browser_pages()
         super().closeEvent(event)
+
+    def _close_monitor_browser_pages(self) -> None:
+        if self.cleanup_started:
+            return
+        self.cleanup_started = True
+        try:
+            subprocess.Popen(
+                [sys.executable, "-m", "consoleplat.services.monitor_fetch_cli", "--close-monitor-pages"],
+                cwd=os.getcwd(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except Exception as exc:  # noqa: BLE001
+            log_exception("monitor-close-pages", exc)

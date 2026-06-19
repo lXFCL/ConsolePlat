@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 
@@ -8,7 +9,14 @@ from consoleplat.services.monitor_service import EmptyMonitorSource
 from consoleplat.services.temu_monitor_source import LoginRequiredError, TemuMonitorSource
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="ConsolePlat Temu monitor worker")
+    parser.add_argument("--close-monitor-pages", action="store_true", help="Close open Temu urgency monitor pages.")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     settings = SettingsStore().load()
     account = _monitor_account(settings)
     if account and account.phone and account.password:
@@ -17,6 +25,11 @@ def main() -> int:
         source = EmptyMonitorSource(settings.refresh_interval_seconds, settings.active_shop)
 
     try:
+        if args.close_monitor_pages:
+            close_pages = getattr(source, "close_monitor_pages", None)
+            closed_count = close_pages() if callable(close_pages) else 0
+            _write({"ok": True, "closed_count": closed_count})
+            return 0
         snapshot = source.fetch()
         _write({"ok": True, "snapshot": snapshot.to_dict()})
         return 0

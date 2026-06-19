@@ -246,6 +246,58 @@ def test_monitor_source_does_not_scroll_when_page_size_is_already_100():
     assert "scrollTo" not in page.scripts[0]
 
 
+def test_monitor_source_closes_only_target_monitor_pages():
+    class FakePage:
+        def __init__(self, url):
+            self.url = url
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    target = FakePage("https://agentseller.temu.com/stock/fully-mgt/order-manage-urgency")
+    other_agent_page = FakePage("https://agentseller.temu.com/goods/list")
+    other_site_page = FakePage("https://example.com/stock/fully-mgt/order-manage-urgency")
+
+    class FakeContext:
+        pages = [target, other_agent_page, other_site_page]
+
+    source = object.__new__(TemuMonitorSource)
+    source._context = FakeContext()
+
+    closed_count = source.close_monitor_pages()
+
+    assert closed_count == 1
+    assert target.closed
+    assert not other_agent_page.closed
+    assert not other_site_page.closed
+
+
+def test_page_size_script_handles_right_bottom_page_size_text_variants():
+    class FakePage:
+        def __init__(self):
+            self.scripts = []
+            self.waits = []
+
+        def evaluate(self, script):
+            self.scripts.append(script)
+            return len(self.scripts) in {2, 3}
+
+        def wait_for_timeout(self, _ms):
+            self.waits.append(_ms)
+
+    source = object.__new__(TemuMonitorSource)
+    page = FakePage()
+
+    source._ensure_page_size_100(page)
+
+    combined = "\n".join(page.scripts)
+    assert "isPageSize100" in combined
+    assert "findPageSizeTrigger" in combined
+    assert "itemPerPage100" in combined
+    assert "pageChar" in combined
+
+
 def test_auth_gateway_detection_handles_region_center_page():
     assert is_auth_gateway_text("Beta 中文 卖家课堂 商家中心 中国地区 商家中心 其他地区 敬请期待")
     assert not is_auth_gateway_text("紧急备货建议 待发货 备货单号")

@@ -87,3 +87,20 @@ def test_monitor_page_has_open_export_folder_button():
     assert any(button.text() == "打开文件夹" for button in buttons)
 
     page.close()
+
+
+def test_monitor_page_starts_cleanup_process_on_close(monkeypatch):
+    calls = []
+
+    class DummyPopen:
+        def __init__(self, args, **kwargs):
+            calls.append((args, kwargs))
+
+    monkeypatch.setattr("consoleplat.ui.monitor_page.subprocess.Popen", DummyPopen)
+    app = QApplication.instance() or QApplication([])
+
+    page = MonitorPage()
+    page.close()
+
+    assert calls
+    assert "--close-monitor-pages" in calls[0][0]

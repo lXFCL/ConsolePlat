@@ -502,6 +502,25 @@ class TemuMonitorSource:
             self._browser = None
             self._owns_context = False
 
+    def close_monitor_pages(self) -> int:
+        if getattr(self, "_context", None) is None:
+            self._ensure_page()
+        if self._context is None:
+            return 0
+        closed_count = 0
+        for page in list(self._context.pages):
+            parsed = urlparse(getattr(page, "url", "") or "")
+            if parsed.netloc.lower() != "agentseller.temu.com":
+                continue
+            if parsed.path.lower() != "/stock/fully-mgt/order-manage-urgency":
+                continue
+            try:
+                page.close()
+                closed_count += 1
+            except Exception:
+                continue
+        return closed_count
+
     def _ensure_page(self):
         if self._playwright is None:
             from playwright.sync_api import sync_playwright
@@ -715,8 +734,30 @@ class TemuMonitorSource:
                 r"""
 () => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const isPageSize100 = text => {
+    const clean = norm(text);
+    if (!clean) return false;
+    const everyPage = String.fromCharCode(0x6bcf, 0x9875);
+    const item = String.fromCharCode(0x6761);
+    const page = String.fromCharCode(0x9875);
+    return new RegExp(everyPage + '\\s*100\\s*' + item).test(clean)
+      || new RegExp('100\\s*' + item + '\\s*/\\s*' + page).test(clean)
+      || new RegExp('100\\s*/\\s*page', 'i').test(clean)
+      || clean === '100';
+  };
+  const visible = el => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+  };
   const bodyText = norm(document.body ? document.body.innerText : '');
-  return new RegExp('\\u6bcf\\u9875\\s*100\\s*\\u6761').test(bodyText);
+  if (isPageSize100(bodyText)) return true;
+  return Array.from(document.querySelectorAll('button,[role="button"],div,span,select')).some(el => {
+    if (!visible(el)) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.y < window.innerHeight * 0.45) return false;
+    return isPageSize100(el.innerText || el.textContent || el.value || '');
+  });
 }
 """
             )
@@ -737,12 +778,38 @@ class TemuMonitorSource:
     const rect = el.getBoundingClientRect();
     return Math.abs(window.innerWidth - rect.right) + Math.abs(window.innerHeight - rect.bottom);
   };
+  const pageText = String.fromCharCode(0x6bcf, 0x9875);
+  const itemText = String.fromCharCode(0x6761);
+  const pageChar = String.fromCharCode(0x9875);
+  const isPageSize100 = text => {
+    const clean = norm(text);
+    return clean === '100'
+      || clean === '100 ' + itemText
+      || new RegExp('100\\s*' + itemText + '\\s*/\\s*' + pageChar).test(clean)
+      || /100\s*\/\s*page/i.test(clean)
+      || new RegExp(pageText + '\\s*100\\s*' + itemText).test(clean);
+  };
+  const findPageSizeTrigger = () => {
+    const controls = Array.from(document.querySelectorAll('button,[role="button"],div,span,[aria-haspopup="listbox"],[aria-haspopup="menu"]')).filter(el => {
+      if (!visible(el)) return false;
+      const text = norm(el.innerText || el.textContent);
+      const rect = el.getBoundingClientRect();
+      const paginationText = text.includes(pageText)
+        || text.includes(itemText + '/' + pageChar)
+        || /10|20|50|100/.test(text);
+      return rect.y > window.innerHeight * 0.45 && paginationText;
+    }).sort((a, b) => scoreBottomRight(a) - scoreBottomRight(b));
+    return controls.find(el => {
+      const text = norm(el.innerText || el.textContent);
+      return text.includes(pageText) || text.includes(itemText + '/' + pageChar) || /\b(10|20|50|100)\b/.test(text);
+    }) || controls[0];
+  };
 
   for (const select of Array.from(document.querySelectorAll('select'))) {
     if (!visible(select)) continue;
     const option = Array.from(select.options || []).find(item => {
       const text = norm(item.textContent);
-      return text === '100' || text === '100 ' + String.fromCharCode(0x6761);
+      return isPageSize100(text);
     });
     if (!option) continue;
     select.value = option.value;
@@ -751,15 +818,7 @@ class TemuMonitorSource:
     return true;
   }
 
-  const pageText = String.fromCharCode(0x6bcf, 0x9875);
-  const controls = Array.from(document.querySelectorAll('button,[role="button"],div,span')).filter(el => {
-    if (!visible(el)) return false;
-    const text = norm(el.innerText || el.textContent);
-    const rect = el.getBoundingClientRect();
-    return rect.y > window.innerHeight * 0.45 && (text.includes(pageText) || /^10$|^20$|^50$|^100$/.test(text));
-  }).sort((a, b) => scoreBottomRight(a) - scoreBottomRight(b));
-
-  const trigger = controls.find(el => norm(el.innerText || el.textContent).includes(pageText)) || controls[0];
+  const trigger = findPageSizeTrigger();
   if (!trigger) return false;
   trigger.scrollIntoView({block: 'center', inline: 'center'});
   trigger.click();
@@ -780,10 +839,11 @@ class TemuMonitorSource:
     return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
   };
   const item100 = '100 ' + String.fromCharCode(0x6761);
+  const itemPerPage100 = '100' + String.fromCharCode(0x6761, 0x002f, 0x9875);
   const options = Array.from(document.querySelectorAll('li,div,span,button,[role="option"],[role="menuitem"]')).filter(el => {
     if (!visible(el)) return false;
     const text = norm(el.innerText || el.textContent);
-    return text === '100' || text === item100;
+    return text === '100' || text === item100 || text === itemPerPage100 || /100\s*\/\s*page/i.test(text);
   }).sort((a, b) => {
     const ar = a.getBoundingClientRect();
     const br = b.getBoundingClientRect();
