@@ -110,7 +110,10 @@ def request_image_edit_batch(
     if not image_paths:
         raise ValueError("missing input images")
 
-    url = api_base.rstrip("/") + "/images/edits"
+    base_url = api_base.rstrip("/")
+    candidate_urls = [base_url + "/images/edits"]
+    if not base_url.endswith("/v1") and "/v1/" not in base_url:
+        candidate_urls.append(base_url + "/v1/images/edits")
     headers = {"Authorization": f"Bearer {api_key}"}
     files: list[tuple[str, tuple[str, bytes, str]]] = []
     for image_path in image_paths:
@@ -123,24 +126,42 @@ def request_image_edit_batch(
         "n": str(max(1, int(batch_count or 1))),
     }
 
-    try:
-        with httpx.Client(timeout=300.0) as client:
-            response = client.post(url, headers=headers, data=data, files=files)
-            response.raise_for_status()
-            payload = response.json()
-    except httpx.HTTPStatusError as exc:
-        detail = ""
-        response = exc.response
-        if response is not None:
+    last_error: Exception | None = None
+    with httpx.Client(timeout=300.0) as client:
+        for index, url in enumerate(candidate_urls):
             try:
-                error_payload = response.json()
-            except ValueError:
-                error_payload = {}
-            if isinstance(error_payload, dict):
-                error = error_payload.get("error")
-                if isinstance(error, dict):
-                    detail = str(error.get("message") or "").strip()
-        raise ValueError(detail or str(exc)) from exc
+                response = client.post(url, headers=headers, data=data, files=files)
+                response.raise_for_status()
+                payload = response.json()
+                break
+            except httpx.HTTPStatusError as exc:
+                if (
+                    exc.response is not None
+                    and exc.response.status_code == 404
+                    and index < len(candidate_urls) - 1
+                ):
+                    last_error = exc
+                    continue
+                detail = ""
+                response = exc.response
+                if response is not None:
+                    try:
+                        error_payload = response.json()
+                    except ValueError:
+                        error_payload = {}
+                    if isinstance(error_payload, dict):
+                        error = error_payload.get("error")
+                        if isinstance(error, dict):
+                            detail = str(error.get("message") or "").strip()
+                raise ValueError(detail or str(exc)) from exc
+            except Exception as exc:
+                last_error = exc
+                break
+        else:
+            payload = None
+
+    if payload is None:
+        raise ValueError(str(last_error) if last_error else "image edit request failed")
 
     results: list[GeneratedImageResult] = []
     for item in _extract_response_items(payload):

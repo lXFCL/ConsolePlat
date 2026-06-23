@@ -195,6 +195,55 @@ def test_ai_image_edit_cli_emits_api_error_details(tmp_path, monkeypatch, capsys
     assert "invalid image payload" in payload["failed"][0]
 
 
+def test_request_image_edit_batch_retries_v1_endpoint_after_404(tmp_path, monkeypatch):
+    source = tmp_path / "source.png"
+    source.write_bytes(b"png")
+    calls: list[str] = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"b64_json": base64_bytes("ok")}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            calls.append(url)
+            if url == "https://api.geek2api.com/images/edits":
+                request = httpx.Request("POST", url)
+                response = httpx.Response(404, request=request, text="not found")
+                raise httpx.HTTPStatusError("not found", request=request, response=response)
+            return FakeResponse()
+
+    monkeypatch.setattr(ai_image_edit_cli.httpx, "Client", FakeClient)
+
+    results = ai_image_edit_cli.request_image_edit_batch(
+        api_key="test-key",
+        api_base="https://api.geek2api.com",
+        model="gpt-image-2",
+        prompt="keep subject",
+        size="1024x1024",
+        image_paths=[source],
+        batch_count=1,
+    )
+
+    assert calls == [
+        "https://api.geek2api.com/images/edits",
+        "https://api.geek2api.com/v1/images/edits",
+    ]
+    assert results[0].image_bytes == b"ok"
+
+
 def base64_bytes(text: str) -> str:
     import base64
 
