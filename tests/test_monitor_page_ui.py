@@ -29,6 +29,9 @@ def test_monitor_page_initial_state_does_not_show_demo_orders():
     assert not page.order_empty_state.isHidden()
     assert page.order_empty_title.objectName() == "monitorEmptyTitle"
     assert page.order_empty_hint.objectName() == "monitorEmptyHint"
+    assert page.order_empty_state.minimumHeight() >= 120
+    assert page.order_empty_title.minimumHeight() >= 28
+    assert page.order_empty_hint.minimumHeight() >= 36
     assert all(card.value_label.text() == "0" for card in page.metric_cards.values())
     assert "等待刷新" in page.source_label.text()
 
