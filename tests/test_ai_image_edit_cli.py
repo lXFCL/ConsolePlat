@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import httpx
 from PIL import Image
 
 from consoleplat.services import ai_image_edit_cli
@@ -98,3 +99,103 @@ def test_ai_image_edit_cli_split_collage_writes_part_outputs(tmp_path, monkeypat
         "edited_round_01_part_03.png",
     ]
     assert all(path.exists() for path in outputs)
+
+
+def test_request_image_edit_batch_uses_matching_mime_types(tmp_path, monkeypatch):
+    jpg_path = tmp_path / "one.jpg"
+    png_path = tmp_path / "two.png"
+    jpg_path.write_bytes(b"jpg")
+    png_path.write_bytes(b"png")
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"b64_json": base64_bytes("ok")}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["data"] = data
+            captured["files"] = files
+            return FakeResponse()
+
+    monkeypatch.setattr(ai_image_edit_cli.httpx, "Client", FakeClient)
+
+    results = ai_image_edit_cli.request_image_edit_batch(
+        api_key="test-key",
+        api_base="https://api.example.test/v1",
+        model="gpt-image-2",
+        prompt="keep subject",
+        size="1024x1024",
+        image_paths=[jpg_path, png_path],
+        batch_count=1,
+    )
+
+    files = captured["files"]
+    assert results[0].image_bytes == b"ok"
+    assert files[0][0] == "image[]"
+    assert files[0][1][2] == "image/jpeg"
+    assert files[1][1][2] == "image/png"
+
+
+def test_ai_image_edit_cli_emits_api_error_details(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "source.png"
+    _make_png(source)
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, *args, **kwargs):
+            request = httpx.Request("POST", "https://api.example.test/v1/images/edits")
+            response = httpx.Response(
+                400,
+                request=request,
+                json={"error": {"message": "invalid image payload"}},
+            )
+            raise httpx.HTTPStatusError("bad request", request=request, response=response)
+
+    monkeypatch.setattr(ai_image_edit_cli.httpx, "Client", FakeClient)
+    monkeypatch.setenv("CONSOLEPLAT_AI_IMAGE_API_KEY", "test-key")
+
+    exit_code = ai_image_edit_cli.main(
+        [
+            "--image",
+            str(source),
+            "--prompt",
+            "keep subject",
+            "--output-dir",
+            str(tmp_path / "outputs"),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+    assert exit_code == 1
+    assert payload["failed"]
+    assert "invalid image payload" in payload["failed"][0]
+
+
+def base64_bytes(text: str) -> str:
+    import base64
+
+    return base64.b64encode(text.encode("utf-8")).decode("ascii")

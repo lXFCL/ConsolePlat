@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import mimetypes
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -113,7 +114,8 @@ def request_image_edit_batch(
     headers = {"Authorization": f"Bearer {api_key}"}
     files: list[tuple[str, tuple[str, bytes, str]]] = []
     for image_path in image_paths:
-        files.append(("image[]", (image_path.name, image_path.read_bytes(), "image/png")))
+        mime_type, _encoding = mimetypes.guess_type(str(image_path))
+        files.append(("image[]", (image_path.name, image_path.read_bytes(), mime_type or "application/octet-stream")))
     data = {
         "model": model,
         "prompt": prompt,
@@ -121,10 +123,24 @@ def request_image_edit_batch(
         "n": str(max(1, int(batch_count or 1))),
     }
 
-    with httpx.Client(timeout=300.0) as client:
-        response = client.post(url, headers=headers, data=data, files=files)
-        response.raise_for_status()
-        payload = response.json()
+    try:
+        with httpx.Client(timeout=300.0) as client:
+            response = client.post(url, headers=headers, data=data, files=files)
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        detail = ""
+        response = exc.response
+        if response is not None:
+            try:
+                error_payload = response.json()
+            except ValueError:
+                error_payload = {}
+            if isinstance(error_payload, dict):
+                error = error_payload.get("error")
+                if isinstance(error, dict):
+                    detail = str(error.get("message") or "").strip()
+        raise ValueError(detail or str(exc)) from exc
 
     results: list[GeneratedImageResult] = []
     for item in _extract_response_items(payload):
