@@ -354,6 +354,7 @@ class AIEditPage(QWidget):
         request_layout = QVBoxLayout(self.request_panel)
         request_layout.addWidget(QLabel("改图要求"))
         self.prompt_edit = QTextEdit()
+        self.prompt_edit.textChanged.connect(self._save_preferences)
         request_layout.addWidget(self.prompt_edit)
         layout.addWidget(self.request_panel)
 
@@ -446,6 +447,10 @@ class AIEditPage(QWidget):
         settings.ai_edit_split_count = self.split_count_spin.value()
         settings.ai_edit_total_return_count = self.total_return_count_spin.value()
         settings.local_image_test_mode = self.test_mode_check.isChecked()
+        settings.ai_edit_prompt = self.prompt_edit.toPlainText().strip() or settings.ai_edit_prompt
+        selected_images = self._selected_images()
+        if selected_images:
+            settings.ai_edit_reference_dir = str(selected_images[-1].parent)
         self.settings_store.save(settings)
 
     def _update_split_count_hint(self, value: int) -> None:
@@ -480,6 +485,7 @@ class AIEditPage(QWidget):
         self.image_list.addItem(item)
         self.image_list.setCurrentItem(item)
         self.selected_image_path_label.setText(str(path))
+        self._save_preferences()
 
     def _on_image_selection_changed(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None) -> None:
         if current is None:
@@ -590,7 +596,14 @@ class AIEditPage(QWidget):
         if self.process is not None:
             return
         job = self.build_job()
-        if not job.images or not job.prompt:
+        if not job.images:
+            self.status_label.setText("请先添加参考图")
+            return
+        if not job.prompt:
+            self.status_label.setText("请先填写改图要求")
+            return
+        if not job.api_key:
+            self.status_label.setText("请先配置 API Key")
             return
         self.current_task = self._create_task_record(job)
         self._append_log(f"启动任务：{self.current_task.title}")

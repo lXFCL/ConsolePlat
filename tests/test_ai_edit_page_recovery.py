@@ -92,6 +92,35 @@ def test_ai_edit_page_builds_job_and_persists_preferences(tmp_path, monkeypatch)
     page.close()
 
 
+def test_ai_edit_page_save_persists_prompt_and_reference_dir(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "refs" / "input.png"
+    image.parent.mkdir(parents=True, exist_ok=True)
+    image.write_bytes(b"fake")
+    page, path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_prompt="old prompt",
+            ai_edit_reference_dir="",
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+
+    page._add_image_item(str(image))
+    page.prompt_edit.setPlainText("new prompt")
+    page._save_preferences()
+
+    saved = SettingsStore(path).load()
+
+    assert saved.ai_edit_prompt == "new prompt"
+    assert saved.ai_edit_reference_dir == str(image.parent)
+
+    page.close()
+
+
 def test_ai_edit_page_restores_tasks_and_deletes_failed(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -646,6 +675,49 @@ def test_ai_edit_page_start_job_runs_cli_and_finishes_success(tmp_path, monkeypa
         page.close()
         server.shutdown()
         server.server_close()
+
+
+def test_ai_edit_page_start_job_validates_required_inputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "input.png"
+    image.write_bytes(b"fake")
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "",
+                    "api_base": "https://api.openai.com/v1",
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+
+    page.start_job()
+    assert page.process is None
+    assert page.status_label.text() == "请先添加参考图"
+
+    page._add_image_item(str(image))
+    page.prompt_edit.clear()
+    page.start_job()
+    assert page.process is None
+    assert page.status_label.text() == "请先填写改图要求"
+
+    page.prompt_edit.setPlainText("keep subject")
+    page.start_job()
+    assert page.process is None
+    assert page.status_label.text() == "请先配置 API Key"
+
+    page.close()
 
 
 def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path, monkeypatch):
