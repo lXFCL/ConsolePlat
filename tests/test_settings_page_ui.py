@@ -1,6 +1,6 @@
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.settings_page import SettingsPage
-from PyQt5.QtWidgets import QApplication, QComboBox, QLineEdit, QPushButton, QSpinBox
+from PyQt5.QtWidgets import QApplication, QComboBox, QFormLayout, QLineEdit, QPushButton, QSpinBox, QTextEdit
 
 
 def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):
@@ -188,5 +188,24 @@ def test_settings_page_save_persists_default_ai_provider(tmp_path, monkeypatch):
     assert saved.ai_providers[1].api_base == "https://two-new.example/v1"
     assert saved.ai_providers[1].model == "gpt-image-c"
     assert saved.ai_providers[1].size == "2048x2048"
+
+    page.close()
+
+
+def test_settings_page_image_panel_stays_compact(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    image_panel = page.stack.widget(2)
+    layout = image_panel.layout()
+    assert layout.spacing() <= 12
+    assert layout.contentsMargins().top() <= 18
+    assert page.ai_edit_prompt_edit.maximumHeight() <= 96
+    assert isinstance(image_panel.findChildren(QFormLayout)[0], QFormLayout)
+    assert page.ai_provider_combo.maximumWidth() <= 260
 
     page.close()

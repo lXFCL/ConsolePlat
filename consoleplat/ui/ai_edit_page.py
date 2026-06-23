@@ -625,6 +625,14 @@ class AIEditPage(QWidget):
     def _on_process_finished(self, exit_code: int, _exit_status) -> None:
         if self.process is None or self.current_task is None:
             return
+        stdout = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        stderr = bytes(self.process.readAllStandardError()).decode("utf-8", errors="replace")
+        if stdout.strip():
+            self._stdout_buffer += stdout
+            self._append_log(stdout.rstrip())
+        if stderr.strip():
+            self._stderr_buffer += stderr
+            self._append_log(stderr.rstrip())
         self.process = None
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)

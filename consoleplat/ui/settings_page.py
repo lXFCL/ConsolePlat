@@ -59,6 +59,7 @@ class SettingsPage(QWidget):
 
         self.ai_provider_combo = QComboBox()
         self.ai_provider_combo.setObjectName("aiProviderCombo")
+        self.ai_provider_combo.setMaximumWidth(260)
         self.ai_provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         self.ai_provider_name_edit = self._line_edit("aiProviderNameEdit", "默认接口")
         self.ai_edit_api_key_edit = self._line_edit("aiEditApiKeyEdit")
@@ -68,7 +69,7 @@ class SettingsPage(QWidget):
         self.ai_edit_size_edit = self._line_edit("aiEditSizeEdit", "1024x1024")
         self.ai_edit_prompt_edit = QTextEdit()
         self.ai_edit_prompt_edit.setObjectName("aiEditPromptEdit")
-        self.ai_edit_prompt_edit.setFixedHeight(120)
+        self.ai_edit_prompt_edit.setMaximumHeight(96)
 
         self.bo_product_title_edit = self._line_edit("boProductTitleEdit")
         self.szw_product_title_edit = self._line_edit("szwProductTitleEdit")
@@ -171,6 +172,8 @@ class SettingsPage(QWidget):
     def _build_image_panel(self) -> QFrame:
         panel = self._make_panel("生图 / 改图", "恢复多套 AI 接口配置、PosAiImg 路径和默认改图提示词。")
         layout = panel.layout()
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
 
         path_form = QFormLayout()
         path_form.setLabelAlignment(Qt.AlignRight)
@@ -182,8 +185,8 @@ class SettingsPage(QWidget):
         provider_panel = QFrame()
         provider_panel.setObjectName("subPanel")
         provider_layout = QVBoxLayout(provider_panel)
-        provider_layout.setContentsMargins(16, 14, 16, 14)
-        provider_layout.setSpacing(12)
+        provider_layout.setContentsMargins(12, 10, 12, 10)
+        provider_layout.setSpacing(8)
         provider_layout.addWidget(QLabel("AI 接口配置"))
 
         provider_toolbar = QHBoxLayout()

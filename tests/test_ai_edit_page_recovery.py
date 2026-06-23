@@ -460,3 +460,54 @@ def test_ai_edit_page_backfills_xlsx_colors_when_restoring_history(tmp_path, mon
     wb.close()
 
     page.close()
+
+
+def test_ai_edit_page_reads_remaining_stdout_on_finish(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://api.openai.com/v1",
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            posai_gallery_root=str(tmp_path / "gallery-root"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    page.current_task = AIEditTaskRecord(
+        task_id="20260623125900",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体"),
+        output_dir=str(tmp_path),
+    )
+
+    class FakeProcess:
+        def readAllStandardOutput(self):
+            return (
+                b'{"output_dir":"E:/tmp/out","outputs":["E:/tmp/out/a.png"],"failed":[],"warnings":[],"message":"ok"}'
+            )
+
+        def readAllStandardError(self):
+            return b""
+
+    page.process = FakeProcess()
+    page._stdout_buffer = ""
+    page._stderr_buffer = ""
+
+    page._on_process_finished(0, None)
+
+    assert page.current_task.status == "完成"
+    assert page.current_task.output_dir == "E:/tmp/out"
+    assert page.current_task.outputs == ["E:/tmp/out/a.png"]
+
+    page.close()
