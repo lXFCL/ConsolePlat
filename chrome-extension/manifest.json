@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "ConsolePlat Monitor Helper",
+  "version": "0.1.0",
+  "description": "Read-only helper for ConsolePlat Temu monitor debugging.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://agentseller.temu.com/*",
+        "https://seller.kuajingmaihuo.com/*"
+      ],
+      "js": ["monitor-helper.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
