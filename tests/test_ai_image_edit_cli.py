@@ -12,6 +12,18 @@ def _make_png(path: Path, color=(255, 0, 0, 255)) -> None:
     Image.new("RGBA", (32, 32), color).save(path)
 
 
+def _make_collage_png(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGBA", (160, 80), (255, 255, 255, 255))
+    for x in range(18, 58):
+        for y in range(18, 62):
+            image.putpixel((x, y), (220, 40, 40, 255))
+    for x in range(102, 142):
+        for y in range(18, 62):
+            image.putpixel((x, y), (40, 40, 220, 255))
+    image.save(path)
+
+
 def test_ai_image_edit_cli_emits_json_and_writes_outputs(tmp_path, monkeypatch, capsys):
     source = tmp_path / "source.png"
     _make_png(source)
@@ -242,6 +254,45 @@ def test_request_image_edit_batch_retries_v1_endpoint_after_404(tmp_path, monkey
         "https://api.geek2api.com/v1/images/edits",
     ]
     assert results[0].image_bytes == b"ok"
+
+
+def test_convert_image_to_transparent_background_removes_border_background(tmp_path):
+    source = tmp_path / "collage.png"
+    _make_collage_png(source)
+
+    output = Path(ai_image_edit_cli.convert_image_to_transparent_background(source))
+    image = Image.open(output).convert("RGBA")
+
+    assert output.name == "collage_transparent.png"
+    assert image.getpixel((0, 0))[3] == 0
+    assert image.getpixel((35, 35))[3] == 255
+
+
+def test_split_collage_image_with_guides_exports_individual_prints(tmp_path):
+    source = tmp_path / "collage.png"
+    _make_collage_png(source)
+    transparent = Path(ai_image_edit_cli.convert_image_to_transparent_background(source))
+
+    outputs = [
+        Path(path)
+        for path in ai_image_edit_cli.split_collage_image_with_guides(
+            transparent,
+            tmp_path / "split",
+            2,
+        )
+    ]
+
+    assert [path.name for path in outputs] == [
+        "collage_transparent_part_01.png",
+        "collage_transparent_part_02.png",
+    ]
+    assert all(path.exists() for path in outputs)
+    first = Image.open(outputs[0]).convert("RGBA")
+    second = Image.open(outputs[1]).convert("RGBA")
+    assert first.width < Image.open(transparent).width
+    assert second.width < Image.open(transparent).width
+    assert first.getpixel((first.width // 2, first.height // 2))[0] > 150
+    assert second.getpixel((second.width // 2, second.height // 2))[2] > 150
 
 
 def base64_bytes(text: str) -> str:

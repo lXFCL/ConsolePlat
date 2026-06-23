@@ -121,6 +121,40 @@ def test_ai_edit_page_save_persists_prompt_and_reference_dir(tmp_path, monkeypat
     page.close()
 
 
+def test_ai_edit_page_save_persists_ai_edit_controls(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            publish_prefix="BO",
+            publish_start_number=1421,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+
+    page.prefix_combo.setCurrentText("SZW")
+    page.start_spin.setValue(3113)
+    page.total_return_count_spin.setValue(6)
+    page.split_collage_check.setChecked(True)
+    page.split_count_spin.setValue(9)
+    page.test_mode_check.setChecked(False)
+    page._save_preferences()
+
+    saved = SettingsStore(path).load()
+
+    assert saved.publish_prefix == "SZW"
+    assert saved.publish_start_number == 3113
+    assert saved.ai_edit_total_return_count == 6
+    assert saved.ai_edit_split_collage is True
+    assert saved.ai_edit_split_count == 9
+    assert saved.local_image_test_mode is False
+
+    page.close()
+
+
 def test_ai_edit_page_restores_tasks_and_deletes_failed(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

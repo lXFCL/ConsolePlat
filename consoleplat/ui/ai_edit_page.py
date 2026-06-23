@@ -443,6 +443,8 @@ class AIEditPage(QWidget):
         if self._loading_preferences:
             return
         settings = self.settings_store.load()
+        settings.publish_prefix = self.prefix_combo.currentText()
+        settings.publish_start_number = self.start_spin.value()
         settings.ai_edit_split_collage = self.split_collage_check.isChecked()
         settings.ai_edit_split_count = self.split_count_spin.value()
         settings.ai_edit_total_return_count = self.total_return_count_spin.value()
@@ -714,6 +716,10 @@ class AIEditPage(QWidget):
             if self.current_task.job.prefix == "BO"
             else settings.szw_product_title.strip()
         )
+        prepared_paths = self._prepare_formalize_input_paths()
+        if prepared_paths:
+            self.current_task.outputs = [str(path) for path in prepared_paths]
+            self.current_task.round_sources = self._derive_round_sources_from_outputs(self.current_task.outputs)
         split_paths = self._collect_formalize_input_paths()
         if not split_paths:
             self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
@@ -759,6 +765,44 @@ class AIEditPage(QWidget):
         if split_paths:
             return split_paths
         return png_paths
+
+    def _prepare_formalize_input_paths(self) -> list[Path]:
+        if self.current_task is None:
+            return []
+        prepared: list[Path] = []
+        sources = self._derive_round_sources_from_outputs(self.current_task.outputs)
+        for source_text in sources:
+            source = Path(source_text)
+            if source.suffix.lower() != ".png" or not source.exists():
+                continue
+            source_for_split = source
+            if "transparent" not in source.stem.lower():
+                source_for_split = Path(convert_image_to_transparent_background(source))
+                prepared.append(source_for_split)
+            if self.current_task.job.split_collage:
+                split_output_dir = self._build_output_path_for_source(str(source_for_split))
+                split_results = [
+                    Path(path)
+                    for path in split_collage_image_with_guides(
+                        source_for_split,
+                        split_output_dir,
+                        self.current_task.job.split_count,
+                        list(self.current_task.split_profile.get("x_guides") or []),
+                        list(self.current_task.split_profile.get("y_guides") or []),
+                    )
+                ]
+                prepared.extend(split_results)
+            else:
+                prepared.append(source_for_split)
+        unique: list[Path] = []
+        seen: set[str] = set()
+        for path in prepared:
+            key = str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(path)
+        return unique
 
     def _derive_round_sources_from_outputs(self, outputs: list[str]) -> list[str]:
         non_split = [path for path in outputs if Path(path).suffix.lower() == ".png" and "_part_" not in Path(path).stem.lower()]

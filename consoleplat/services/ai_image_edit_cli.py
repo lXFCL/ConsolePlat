@@ -5,10 +5,13 @@ import base64
 import json
 import mimetypes
 import os
+from collections import deque
 from dataclasses import dataclass
+from math import ceil, sqrt
 from pathlib import Path
 
 import httpx
+from PIL import Image
 
 
 @dataclass(frozen=True)
@@ -17,15 +20,177 @@ class GeneratedImageResult:
     revised_prompt: str = ""
 
 
+def _estimate_border_color(image: Image.Image) -> tuple[int, int, int] | None:
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    pixels = rgba.load()
+    samples: list[tuple[int, int, int]] = []
+    for x in range(width):
+        for y in (0, height - 1):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha > 200:
+                samples.append((red, green, blue))
+    for y in range(1, height - 1):
+        for x in (0, width - 1):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha > 200:
+                samples.append((red, green, blue))
+    if not samples:
+        return None
+    samples.sort()
+    middle = len(samples) // 2
+    return (
+        samples[middle][0],
+        samples[middle][1],
+        samples[middle][2],
+    )
+
+
+def _background_candidate_mask(image: Image.Image) -> list[list[bool]]:
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    pixels = rgba.load()
+    border_color = _estimate_border_color(rgba)
+    mask: list[list[bool]] = [[False] * width for _ in range(height)]
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha <= 8:
+                mask[y][x] = True
+                continue
+            spread = max(red, green, blue) - min(red, green, blue)
+            near_white = red >= 244 and green >= 244 and blue >= 244 and spread < 24
+            near_border = False
+            if border_color is not None:
+                br, bg, bb = border_color
+                distance = ((red - br) ** 2 + (green - bg) ** 2 + (blue - bb) ** 2) ** 0.5
+                near_border = distance <= 42.0
+            mask[y][x] = near_white or near_border
+    return mask
+
+
+def _edge_connected_background(mask: list[list[bool]]) -> list[list[bool]]:
+    height = len(mask)
+    width = len(mask[0]) if height else 0
+    connected: list[list[bool]] = [[False] * width for _ in range(height)]
+    queue: deque[tuple[int, int]] = deque()
+    for x in range(width):
+        queue.append((x, 0))
+        queue.append((x, height - 1))
+    for y in range(1, height - 1):
+        queue.append((0, y))
+        queue.append((width - 1, y))
+    while queue:
+        x, y = queue.popleft()
+        if x < 0 or y < 0 or x >= width or y >= height:
+            continue
+        if connected[y][x] or not mask[y][x]:
+            continue
+        connected[y][x] = True
+        queue.append((x - 1, y))
+        queue.append((x + 1, y))
+        queue.append((x, y - 1))
+        queue.append((x, y + 1))
+    return connected
+
+
 def convert_image_to_transparent_background(source_image: str | Path, output_dir: str | Path | None = None) -> str:
     source = Path(source_image)
     target_dir = Path(output_dir) if output_dir else source.parent
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{source.stem}_transparent{source.suffix or '.png'}"
-    if source.exists():
-        target.write_bytes(source.read_bytes())
-    else:
-        target.write_bytes(b"")
+    target = target_dir / f"{source.stem}_transparent.png"
+    image = Image.open(source).convert("RGBA")
+    width, height = image.size
+    pixels = image.load()
+    background = _edge_connected_background(_background_candidate_mask(image))
+    for y in range(height):
+        for x in range(width):
+            if background[y][x]:
+                red, green, blue, _alpha = pixels[x, y]
+                pixels[x, y] = (red, green, blue, 0)
+    image.save(target)
+    return str(target)
+
+
+def _grid_boxes(width: int, height: int, split_count: int) -> list[tuple[int, int, int, int]]:
+    columns = max(1, ceil(sqrt(max(1, split_count))))
+    rows = max(1, ceil(max(1, split_count) / columns))
+    boxes: list[tuple[int, int, int, int]] = []
+    for row in range(rows):
+        top = round(row * height / rows)
+        bottom = round((row + 1) * height / rows)
+        for column in range(columns):
+            left = round(column * width / columns)
+            right = round((column + 1) * width / columns)
+            boxes.append((left, top, right, bottom))
+    return boxes
+
+
+def _guide_boxes(
+    width: int,
+    height: int,
+    x_guides: list[int] | None,
+    y_guides: list[int] | None,
+) -> list[tuple[int, int, int, int]]:
+    x_edges = [0] + sorted({int(value) for value in (x_guides or []) if 0 < int(value) < width}) + [width]
+    y_edges = [0] + sorted({int(value) for value in (y_guides or []) if 0 < int(value) < height}) + [height]
+    boxes: list[tuple[int, int, int, int]] = []
+    for top, bottom in zip(y_edges, y_edges[1:]):
+        for left, right in zip(x_edges, x_edges[1:]):
+            boxes.append((left, top, right, bottom))
+    return boxes
+
+
+def _has_visible_pixels(image: Image.Image) -> bool:
+    alpha = image.getchannel("A")
+    return alpha.getbbox() is not None
+
+
+def _extract_component_boxes(image: Image.Image) -> list[tuple[int, int, int, int]]:
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    pixels = rgba.load()
+    visited: list[list[bool]] = [[False] * width for _ in range(height)]
+    boxes: list[tuple[int, int, int, int]] = []
+    for y in range(height):
+        for x in range(width):
+            if visited[y][x] or pixels[x, y][3] <= 8:
+                continue
+            queue: deque[tuple[int, int]] = deque([(x, y)])
+            visited[y][x] = True
+            min_x = max_x = x
+            min_y = max_y = y
+            while queue:
+                current_x, current_y = queue.popleft()
+                min_x = min(min_x, current_x)
+                max_x = max(max_x, current_x)
+                min_y = min(min_y, current_y)
+                max_y = max(max_y, current_y)
+                for next_x, next_y in (
+                    (current_x - 1, current_y),
+                    (current_x + 1, current_y),
+                    (current_x, current_y - 1),
+                    (current_x, current_y + 1),
+                ):
+                    if next_x < 0 or next_y < 0 or next_x >= width or next_y >= height:
+                        continue
+                    if visited[next_y][next_x] or pixels[next_x, next_y][3] <= 8:
+                        continue
+                    visited[next_y][next_x] = True
+                    queue.append((next_x, next_y))
+            boxes.append((min_x, min_y, max_x + 1, max_y + 1))
+    boxes.sort(key=lambda item: (item[1], item[0]))
+    return boxes
+
+
+def _crop_and_save_part(image: Image.Image, box: tuple[int, int, int, int], target: Path) -> str | None:
+    cropped = image.crop(box)
+    alpha_box = cropped.getchannel("A").getbbox()
+    if alpha_box is None:
+        return None
+    result = cropped.crop(alpha_box)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    result.save(target)
     return str(target)
 
 
@@ -39,14 +204,21 @@ def split_collage_image_with_guides(
     source = Path(source_image)
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
+    image = Image.open(source).convert("RGBA")
+    width, height = image.size
     outputs: list[str] = []
-    for index in range(1, max(1, int(split_count or 1)) + 1):
+    boxes = _guide_boxes(width, height, x_guides, y_guides) if (x_guides or y_guides) else []
+    if not boxes:
+        boxes = _extract_component_boxes(image)
+    if boxes and len(boxes) < max(1, int(split_count or 1)) and not (x_guides or y_guides):
+        boxes = _grid_boxes(width, height, split_count)
+    if not boxes:
+        boxes = _grid_boxes(width, height, split_count)
+    for index, box in enumerate(boxes[: max(1, int(split_count or 1))], start=1):
         target = target_dir / f"{source.stem}_part_{index:02d}.png"
-        if source.exists():
-            target.write_bytes(source.read_bytes())
-        else:
-            target.write_bytes(b"")
-        outputs.append(str(target))
+        saved = _crop_and_save_part(image, box, target)
+        if saved is not None:
+            outputs.append(saved)
     return outputs
 
 
