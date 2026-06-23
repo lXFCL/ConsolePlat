@@ -28,7 +28,10 @@ from PyQt5.QtWidgets import (
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, PosAiImgAdapter
 from consoleplat.config import AppSettings, SettingsStore
-from consoleplat.services.ai_edit_formalize_service import backfill_xlsx_colors_from_transparent_dir
+from consoleplat.services.ai_edit_formalize_service import (
+    backfill_xlsx_colors_from_transparent_dir,
+    formalize_ai_edit_outputs,
+)
 from consoleplat.services.ai_image_edit_cli import convert_image_to_transparent_background, split_collage_image_with_guides
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
 from consoleplat.services.split_profile_store import SplitProfile, SplitProfileStore
@@ -637,6 +640,8 @@ class AIEditPage(QWidget):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         summary = self.adapter.parse_ai_edit_result(self._stdout_buffer)
+        self._finalize_task(summary, exit_code)
+        return
         self._update_current_task(
             status="完成" if summary.ok and exit_code == 0 else "失败",
             stage_text="已完成" if summary.ok and exit_code == 0 else "失败",
@@ -658,6 +663,72 @@ class AIEditPage(QWidget):
         self.status_label.setText("启动失败")
         self._update_current_task(status="启动失败", stage_text="启动失败", progress_percent=0)
         self._append_log(f"AI 改图进程启动失败：{error}")
+
+    def _finalize_task(self, summary, exit_code: int) -> None:
+        if self.current_task is None:
+            return
+        is_ok = bool(summary.ok and exit_code == 0)
+        self._update_current_task(
+            status="完成" if is_ok else "失败",
+            stage_text="已完成" if is_ok else "失败",
+            progress_percent=100 if is_ok else 0,
+            output_dir=summary.output_dir or self.current_task.output_dir,
+        )
+        self.current_task.outputs = list(summary.outputs or self.current_task.outputs)
+        self.current_task.failed = list(summary.failed or [])
+        self.current_task.warnings = list(summary.warnings or [])
+        self.current_task.round_sources = self._derive_round_sources_from_outputs(self.current_task.outputs)
+        if is_ok and not self.current_task.job.test_mode:
+            self._run_formalize_post_process()
+        self.status_label.setText(self.current_task.status)
+        self._save_task_history()
+        self._append_log(summary.message)
+
+    def _run_formalize_post_process(self) -> None:
+        if self.current_task is None:
+            return
+        settings = self.settings_store.load()
+        product_title = (
+            settings.bo_product_title.strip()
+            if self.current_task.job.prefix == "BO"
+            else settings.szw_product_title.strip()
+        )
+        split_paths = [Path(path) for path in self.current_task.outputs if "_part_" in Path(path).stem.lower()]
+        if not split_paths:
+            self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
+            self.current_task.failed = list(self.current_task.failed) + ["未找到可正式入库的切图产物"]
+            self._append_log("正式模式后处理失败：未找到可正式入库的切图产物")
+            return
+        try:
+            formalize_summary = formalize_ai_edit_outputs(
+                split_paths=split_paths,
+                final_transparent_dir=Path(self.current_task.final_transparent_dir),
+                final_product_dir=Path(self.current_task.final_product_dir),
+                xlsx_path=Path(self.current_task.xlsx_path),
+                putaway_data_dir=Path(settings.putaway_data_dir),
+                prefix=self.current_task.job.prefix,
+                start_number=self.current_task.job.start_number,
+                product_title=product_title,
+                xlsx_batch_start_number=self.current_task.job.start_number,
+                xlsx_batch_count=max(1, len(split_paths)),
+            )
+        except Exception as exc:
+            self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
+            self.current_task.failed = list(self.current_task.failed) + [str(exc)]
+            self._append_log(f"正式模式后处理失败：{exc}")
+            return
+        if not formalize_summary.ok:
+            self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
+            if formalize_summary.putaway and formalize_summary.putaway.message:
+                self.current_task.warnings = list(self.current_task.warnings) + [formalize_summary.putaway.message]
+            self._append_log(formalize_summary.message)
+            return
+        self.current_task.xlsx_path = formalize_summary.xlsx_path or self.current_task.xlsx_path
+        self.current_task.outputs = list(formalize_summary.product_outputs or self.current_task.outputs)
+        self.current_task.round_sources = list(formalize_summary.renamed_outputs or self.current_task.round_sources)
+        if formalize_summary.putaway and formalize_summary.putaway.message:
+            self.current_task.warnings = list(self.current_task.warnings) + [formalize_summary.putaway.message]
+        self._append_log(formalize_summary.message)
 
     def _derive_round_sources_from_outputs(self, outputs: list[str]) -> list[str]:
         non_split = [path for path in outputs if Path(path).suffix.lower() == ".png" and "_part_" not in Path(path).stem.lower()]

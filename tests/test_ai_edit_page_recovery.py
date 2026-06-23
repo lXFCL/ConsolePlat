@@ -7,6 +7,8 @@ from PIL import Image
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
+from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary
+from consoleplat.services.putaway_sync_service import PutawaySyncSummary
 from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskDetailDialog, AIEditTaskRecord
 
 
@@ -509,5 +511,109 @@ def test_ai_edit_page_reads_remaining_stdout_on_finish(tmp_path, monkeypatch):
     assert page.current_task.status == "完成"
     assert page.current_task.output_dir == "E:/tmp/out"
     assert page.current_task.outputs == ["E:/tmp/out/a.png"]
+
+    page.close()
+
+
+def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://api.openai.com/v1",
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            bo_product_title="BO固定产品标题",
+            putaway_data_dir=str(tmp_path / "putaway-data"),
+            posai_gallery_root=str(tmp_path / "gallery-root"),
+            posai_mockup_root=str(tmp_path / "mockup-root"),
+            posai_xlsx_root=str(tmp_path / "xlsx-root"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    page.current_task = AIEditTaskRecord(
+        task_id="20260623130000",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="保留主体",
+            output_dir=tmp_path / "output",
+            prefix="BO",
+            start_number=1661,
+            total_return_count=2,
+            split_collage=True,
+            split_count=2,
+            test_mode=False,
+        ),
+        output_dir=str(tmp_path / "output"),
+        final_transparent_dir=str(tmp_path / "final-transparent"),
+        final_product_dir=str(tmp_path / "final-product"),
+        xlsx_path=str(tmp_path / "final-product.xlsx"),
+    )
+
+    called: dict[str, object] = {}
+
+    def fake_formalize(**kwargs):
+        called.update(kwargs)
+        return AIEditFormalizeSummary(
+            ok=True,
+            renamed_outputs=[str(tmp_path / "final-transparent" / "BO-1661.png")],
+            product_outputs=[str(tmp_path / "final-product" / "BO-1661_BO固定产品标题.png")],
+            xlsx_path=str(tmp_path / "final-product.xlsx"),
+            putaway=PutawaySyncSummary(
+                ok=True,
+                copied_images=1,
+                copied_xlsx=True,
+                images_target_dir=str(tmp_path / "putaway-data" / "pic" / "1"),
+                xlsx_target_path=str(tmp_path / "putaway-data" / "final-product.xlsx"),
+                message="已同步 1 张图片和 final-product.xlsx",
+            ),
+            color_assignments={"BO-1661": "黑"},
+            message="正式模式后处理完成：透明底 1 张，产品图 1 张，XLSX final-product.xlsx",
+        )
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.formalize_ai_edit_outputs", fake_formalize)
+
+    class FakeProcess:
+        def readAllStandardOutput(self):
+            return (
+                b'{"output_dir":"E:/tmp/out","outputs":["E:/tmp/out/a_part_1.png"],"failed":[],"warnings":[],"message":"ok"}'
+            )
+
+        def readAllStandardError(self):
+            return b""
+
+    page.process = FakeProcess()
+    page._stdout_buffer = ""
+    page._stderr_buffer = ""
+
+    page._on_process_finished(0, None)
+
+    assert called["prefix"] == "BO"
+    assert called["start_number"] == 1661
+    assert called["product_title"] == "BO固定产品标题"
+    assert Path(called["final_transparent_dir"]) == tmp_path / "final-transparent"
+    assert Path(called["final_product_dir"]) == tmp_path / "final-product"
+    assert Path(called["xlsx_path"]) == tmp_path / "final-product.xlsx"
+    assert Path(called["putaway_data_dir"]) == tmp_path / "putaway-data"
+    assert [Path(item) for item in called["split_paths"]] == [Path("E:/tmp/out/a_part_1.png")]
+    assert page.current_task.status == "完成"
+    assert page.current_task.stage_text == "已完成"
+    assert page.current_task.progress_percent == 100
+    assert page.current_task.final_transparent_dir == str(tmp_path / "final-transparent")
+    assert page.current_task.final_product_dir == str(tmp_path / "final-product")
+    assert page.current_task.xlsx_path == str(tmp_path / "final-product.xlsx")
+    assert page.current_task.outputs == [str(tmp_path / "final-product" / "BO-1661_BO固定产品标题.png")]
+    assert any("正式模式后处理完成" in line for line in page.current_task.logs)
 
     page.close()

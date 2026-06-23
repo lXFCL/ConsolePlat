@@ -209,3 +209,25 @@ def test_settings_page_image_panel_stays_compact(tmp_path, monkeypatch):
     assert page.ai_provider_combo.maximumWidth() <= 260
 
     page.close()
+
+
+def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    for index in (0, 1, 3, 4):
+        panel = page.stack.widget(index)
+        layout = panel.layout()
+        assert layout.spacing() <= 14
+        assert layout.contentsMargins().top() <= 22
+        forms = panel.findChildren(QFormLayout)
+        assert forms
+        for form in forms:
+            assert form.verticalSpacing() <= 10
+            assert form.horizontalSpacing() <= 12
+
+    page.close()
