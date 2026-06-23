@@ -193,3 +193,55 @@ def test_prepare_ai_edit_print_assets_renames_split_outputs_into_final_transpare
     assert assets[0].transparent_path == converted
     assert [path.name for path in assets[0].split_paths] == ["BO-1661.png", "BO-1662.png"]
     assert all(path.parent == tmp_path / "final-transparent" for path in assets[0].split_paths)
+
+
+def test_ai_edit_page_manual_split_rebuilds_final_transparent_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    transparent = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(transparent)
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623180000",
+        title="AI edit BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            output_dir=tmp_path / "output",
+            prefix="BO",
+            start_number=1661,
+            total_return_count=1,
+            split_collage=True,
+            split_count=2,
+            test_mode=True,
+        ),
+        output_dir=str(tmp_path / "output"),
+        outputs=[str(transparent)],
+        final_transparent_dir=str(tmp_path / "final-transparent"),
+    )
+
+    split_part_a = tmp_path / "edited_round_01_transparent_split" / "edited_round_01_transparent_part_01.png"
+    split_part_b = tmp_path / "edited_round_01_transparent_split" / "edited_round_01_transparent_part_02.png"
+
+    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None, original_image=None):
+        split_part_a.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(split_part_a)
+        Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(split_part_b)
+        return [str(split_part_a), str(split_part_b)]
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)
+
+    page.split_current_round(record, str(transparent))
+
+    assert sorted(path.name for path in Path(record.final_transparent_dir).glob("*.png")) == [
+        "BO-1661.png",
+        "BO-1662.png",
+    ]

@@ -668,10 +668,11 @@ def test_ai_edit_page_edit_split_profile_saves_preview_guides_and_replaces_split
     monkeypatch.setattr("consoleplat.ui.ai_edit_page.SplitProfileEditorDialog", _FakeDialog)
     captured = {}
 
-    def fake_split(source_path, output_dir, split_count, x_guides, y_guides):
+    def fake_split(source_path, output_dir, split_count, x_guides, y_guides, original_image=None):
         captured["source_path"] = source_path
         captured["x_guides"] = x_guides
         captured["y_guides"] = y_guides
+        captured["original_image"] = original_image
         return []
 
     monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)

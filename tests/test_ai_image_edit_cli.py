@@ -331,6 +331,45 @@ def test_split_collage_image_ignores_tiny_fragment_components(tmp_path):
     ]
 
 
+def test_split_collage_image_uses_original_boxes_and_falls_back_to_5x5_grid(tmp_path, monkeypatch):
+    original = tmp_path / "edited_round_01.png"
+    transparent = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (255, 255, 255, 255)).save(original)
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(transparent)
+
+    boxes_seen = []
+
+    def fake_extract(image):
+        if image.getbbox() == Image.open(original).convert("RGBA").getbbox():
+            return [(0, 0, 200, 200)] * 10
+        return [(0, 0, 100, 100)]
+
+    def fake_filter(boxes, *, image_width, image_height, requested_count):
+        if len(boxes) == 10:
+            return boxes
+        return []
+
+    def fake_crop(image, box, target):
+        boxes_seen.append(box)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(target)
+        return str(target)
+
+    monkeypatch.setattr(ai_image_edit_cli, "_extract_component_boxes", fake_extract)
+    monkeypatch.setattr(ai_image_edit_cli, "_filter_component_boxes", fake_filter)
+    monkeypatch.setattr(ai_image_edit_cli, "_crop_and_save_part", fake_crop)
+
+    outputs = ai_image_edit_cli.split_collage_image_with_guides(
+        transparent,
+        tmp_path / "split",
+        25,
+        original_image=original,
+    )
+
+    assert len(outputs) == 25
+    assert len(boxes_seen) == 25
+
+
 def base64_bytes(text: str) -> str:
     import base64
 

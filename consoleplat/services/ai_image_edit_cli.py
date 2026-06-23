@@ -218,6 +218,29 @@ def _filter_component_boxes(
     return fallback
 
 
+def derive_split_boxes(
+    image: Image.Image,
+    split_count: int,
+    x_guides: list[int] | None = None,
+    y_guides: list[int] | None = None,
+    *,
+    enforce_exact_count: bool = False,
+) -> list[tuple[int, int, int, int]]:
+    width, height = image.size
+    requested_count = max(1, int(split_count or 1))
+    boxes = _guide_boxes(width, height, x_guides, y_guides) if (x_guides or y_guides) else []
+    if not boxes:
+        boxes = _filter_component_boxes(
+            _extract_component_boxes(image),
+            image_width=width,
+            image_height=height,
+            requested_count=requested_count,
+        )
+    if not boxes or (enforce_exact_count and len(boxes) != requested_count):
+        boxes = _grid_boxes(width, height, split_count)
+    return boxes[:requested_count]
+
+
 def _crop_and_save_part(image: Image.Image, box: tuple[int, int, int, int], target: Path) -> str | None:
     cropped = image.crop(box)
     alpha_box = cropped.getchannel("A").getbbox()
@@ -235,23 +258,25 @@ def split_collage_image_with_guides(
     split_count: int,
     x_guides: list[int] | None = None,
     y_guides: list[int] | None = None,
+    original_image: str | Path | None = None,
 ) -> list[str]:
     source = Path(source_image)
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     image = Image.open(source).convert("RGBA")
-    width, height = image.size
     outputs: list[str] = []
-    boxes = _guide_boxes(width, height, x_guides, y_guides) if (x_guides or y_guides) else []
-    if not boxes:
-        boxes = _filter_component_boxes(
-            _extract_component_boxes(image),
-            image_width=width,
-            image_height=height,
-            requested_count=max(1, int(split_count or 1)),
-        )
-    if not boxes:
-        boxes = _grid_boxes(width, height, split_count)
+    reference_image = image
+    if original_image:
+        original_path = Path(original_image)
+        if original_path.exists():
+            reference_image = Image.open(original_path).convert("RGBA")
+    boxes = derive_split_boxes(
+        reference_image,
+        split_count,
+        x_guides,
+        y_guides,
+        enforce_exact_count=original_image is not None,
+    )
     for index, box in enumerate(boxes[: max(1, int(split_count or 1))], start=1):
         target = target_dir / f"{source.stem}_part_{index:02d}.png"
         saved = _crop_and_save_part(image, box, target)

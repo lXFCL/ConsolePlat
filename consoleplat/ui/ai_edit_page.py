@@ -1212,9 +1212,28 @@ class AIEditPage(QWidget):
             record.job.split_count,
             list(record.split_profile.get("x_guides") or []),
             list(record.split_profile.get("y_guides") or []),
+            original_image=self._find_original_round_source(record, source_path),
         )
         self._replace_split_outputs(record, source_path, split_paths)
+        final_outputs = self._copy_split_outputs_to_final_gallery(record, [Path(path) for path in split_paths])
+        if final_outputs:
+            record.outputs = [str(path) for path in final_outputs]
+            record.round_sources = [source_path]
         self._save_task_history()
+
+    def _find_original_round_source(self, record: AIEditTaskRecord, source_path: str) -> str | None:
+        source = Path(source_path)
+        candidate_name = source.stem.replace("_transparent", "")
+        candidate = source.with_name(f"{candidate_name}{source.suffix}")
+        if candidate.exists():
+            return str(candidate)
+        for output in record.outputs:
+            output_path = Path(output)
+            if output_path == source:
+                continue
+            if output_path.stem == candidate_name and output_path.suffix.lower() == source.suffix.lower() and output_path.exists():
+                return str(output_path)
+        return None
 
     def edit_split_profile(self, record: AIEditTaskRecord, source_path: str) -> None:
         if self.split_profile_store is None or not source_path:
