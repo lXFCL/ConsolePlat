@@ -5,7 +5,14 @@ from PyQt5.QtWidgets import QApplication
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
-from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary, rename_split_outputs
+from consoleplat.services.ai_edit_formalize_service import (
+    AIEditFormalizeSummary,
+    BLACK_COLOR_NAME,
+    WHITE_COLOR_NAME,
+    choose_mockup_models_for_batch,
+    fit_print_within_safe_box,
+    rename_split_outputs,
+)
 from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary, sync_putaway_assets
 from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskRecord
@@ -261,6 +268,76 @@ def test_sync_putaway_assets_can_force_replace_existing_outputs(tmp_path):
     assert summary.ok is True
     assert target_image.read_bytes() == b"new-image"
     assert target_xlsx.read_bytes() == b"new-xlsx"
+
+
+def test_choose_mockup_models_for_batch_balances_black_and_white_for_even_count(tmp_path):
+    model_dir = tmp_path / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("主图1-黑.jpg", "主图2-黑.png", "主图3-黑.jpg", "主图4-黑.jpg", "主图5-白.jpg", "主图6-白.jpg"):
+        mode = "RGB" if name.lower().endswith(".jpg") else "RGBA"
+        color = (255, 255, 255) if mode == "RGB" else (255, 255, 255, 255)
+        Image.new(mode, (40, 40), color).save(model_dir / name)
+
+    print_paths = []
+    for index in range(10):
+        path = tmp_path / f"BO-{1661 + index}.png"
+        Image.new("RGBA", (60, 60), (255, 0, 0, 255)).save(path)
+        print_paths.append(path)
+
+    assignments = choose_mockup_models_for_batch(
+        print_paths,
+        model_dir=model_dir,
+        assignment_seed="BO-1661",
+    )
+
+    colors = [assignment.color_name for assignment in assignments.values()]
+    assert colors.count(BLACK_COLOR_NAME) == 5
+    assert colors.count(WHITE_COLOR_NAME) == 5
+
+
+def test_choose_mockup_models_for_batch_balances_black_and_white_for_odd_count(tmp_path):
+    model_dir = tmp_path / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("主图1-黑.jpg", "主图2-黑.png", "主图3-黑.jpg", "主图4-黑.jpg", "主图5-白.jpg", "主图6-白.jpg"):
+        mode = "RGB" if name.lower().endswith(".jpg") else "RGBA"
+        color = (255, 255, 255) if mode == "RGB" else (255, 255, 255, 255)
+        Image.new(mode, (40, 40), color).save(model_dir / name)
+
+    print_paths = []
+    for index in range(25):
+        path = tmp_path / f"SZW-{3338 + index}.png"
+        Image.new("RGBA", (60, 60), (255, 0, 0, 255)).save(path)
+        print_paths.append(path)
+
+    assignments = choose_mockup_models_for_batch(
+        print_paths,
+        model_dir=model_dir,
+        assignment_seed="SZW-3338",
+    )
+
+    colors = [assignment.color_name for assignment in assignments.values()]
+    black_count = colors.count(BLACK_COLOR_NAME)
+    white_count = colors.count(WHITE_COLOR_NAME)
+    assert abs(black_count - white_count) == 1
+    assert black_count + white_count == 25
+
+
+def test_fit_print_within_safe_box_limits_tall_design_height():
+    design = Image.new("RGBA", (100, 600), (255, 0, 0, 255))
+
+    fitted = fit_print_within_safe_box(
+        print_img=design,
+        base_size=(1350, 1800),
+        width_ratio=0.30,
+        height_ratio=0.22,
+        remove_white_bg=False,
+        wave_strength=0.0,
+        rotation=0.0,
+        opacity=1.0,
+    )
+
+    assert fitted.width <= int(1350 * 0.30)
+    assert fitted.height <= int(1800 * 0.22)
 
 
 def test_ai_edit_page_manual_split_rebuilds_final_transparent_outputs(tmp_path, monkeypatch):

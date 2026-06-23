@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import random
 import re
 import shutil
 import sys
@@ -17,9 +19,21 @@ if str(POSAI_ROOT) not in sys.path:
     sys.path.append(str(POSAI_ROOT))
 
 try:
-    from tools.tshirt_print_tool import Placement, composite_one  # type: ignore
+    from tools.tshirt_print_tool import (  # type: ignore
+        Placement,
+        composite_one,
+        crop_to_alpha,
+        remove_near_white_background,
+        wave_displace,
+    )
 except ModuleNotFoundError:  # pragma: no cover
-    from tshirt_print_tool import Placement, composite_one  # type: ignore
+    from tshirt_print_tool import (  # type: ignore
+        Placement,
+        composite_one,
+        crop_to_alpha,
+        remove_near_white_background,
+        wave_displace,
+    )
 
 
 STORE_NAMES = {"BO": "YUHAOBO", "SZW": "YUHOOBO"}
@@ -42,6 +56,25 @@ class AIEditFormalizeSummary:
     putaway: PutawaySyncSummary | None
     color_assignments: dict[str, str] | None = None
     message: str = ""
+
+
+@dataclass(frozen=True)
+class MockupAssignment:
+    model_path: Path
+    color_name: str
+
+
+DEFAULT_CHEST_SAFE_BOX = {
+    "center_x": 0.50,
+    "center_y": 0.43,
+    "max_width_ratio": 0.30,
+    "max_height_ratio": 0.22,
+}
+
+
+def _stable_seed_text(text: str) -> int:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return int(digest[:16], 16)
 
 
 def safe_filename(text: str) -> str:
@@ -95,20 +128,102 @@ def choose_mockup_model_for_print(print_path: Path) -> str:
     return "white" if _subject_brightness(print_path) < 128 else "black"
 
 
-def choose_mockup_models_for_batch(print_paths: list[Path]) -> dict[Path, str]:
+def _collect_model_pools(model_dir: Path) -> tuple[list[Path], list[Path]]:
+    black_pool: list[Path] = []
+    white_pool: list[Path] = []
+    for path in sorted(model_dir.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        stem = path.stem
+        if "黑" in stem:
+            black_pool.append(path)
+        elif "白" in stem:
+            white_pool.append(path)
+    if not black_pool:
+        black_pool = [choose_black_model(model_dir)]
+    if not white_pool:
+        white_pool = [choose_white_model(model_dir)]
+    return black_pool, white_pool
+
+
+def choose_mockup_models_for_batch(
+    print_paths: list[Path],
+    *,
+    model_dir: Path,
+    assignment_seed: str,
+) -> dict[Path, MockupAssignment]:
     if not print_paths:
         return {}
-    brightness_pairs = [(path, _subject_brightness(path)) for path in print_paths]
-    average_brightness = sum(value for _path, value in brightness_pairs) / len(brightness_pairs)
-    if average_brightness >= 210:
-        return {path: "black" for path, _value in brightness_pairs}
-    if average_brightness <= 45:
-        return {path: "white" for path, _value in brightness_pairs}
-    return {path: ("white" if brightness < 128 else "black") for path, brightness in brightness_pairs}
+    black_pool, white_pool = _collect_model_pools(model_dir)
+    ordered_paths = sorted(print_paths, key=lambda path: path.name.lower())
+    rng = random.Random(_stable_seed_text(assignment_seed))
+    shuffled_indexes = list(range(len(ordered_paths)))
+    rng.shuffle(shuffled_indexes)
+
+    black_target = len(ordered_paths) // 2
+    white_target = len(ordered_paths) - black_target
+    color_slots = [BLACK_COLOR_NAME] * black_target + [WHITE_COLOR_NAME] * white_target
+    rng.shuffle(color_slots)
+
+    black_cycle = 0
+    white_cycle = 0
+    assignments: dict[Path, MockupAssignment] = {}
+    for order_index, shuffled_index in enumerate(shuffled_indexes):
+        print_path = ordered_paths[shuffled_index]
+        color_name = color_slots[order_index]
+        if color_name == BLACK_COLOR_NAME:
+            model_path = black_pool[black_cycle % len(black_pool)]
+            black_cycle += 1
+        else:
+            model_path = white_pool[white_cycle % len(white_pool)]
+            white_cycle += 1
+        assignments[print_path] = MockupAssignment(model_path=model_path, color_name=color_name)
+    return assignments
 
 
 def _assignment_to_color_name(assignment: str) -> str:
     return WHITE_COLOR_NAME if assignment == "white" else BLACK_COLOR_NAME
+
+
+def fit_print_within_safe_box(
+    *,
+    print_img: Image.Image,
+    base_size: tuple[int, int],
+    width_ratio: float,
+    height_ratio: float,
+    remove_white_bg: bool,
+    wave_strength: float,
+    rotation: float,
+    opacity: float,
+) -> Image.Image:
+    if remove_white_bg:
+        print_img = remove_near_white_background(print_img)
+    print_img = crop_to_alpha(print_img)
+
+    max_width = max(1, int(base_size[0] * width_ratio))
+    max_height = max(1, int(base_size[1] * height_ratio))
+    ratio = min(max_width / max(1, print_img.width), max_height / max(1, print_img.height))
+    target_w = max(1, int(print_img.width * ratio))
+    target_h = max(1, int(print_img.height * ratio))
+    print_img = print_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+    if wave_strength:
+        print_img = wave_displace(print_img, wave_strength)
+
+    if rotation:
+        print_img = print_img.rotate(
+            rotation,
+            expand=True,
+            resample=Image.Resampling.BICUBIC,
+            fillcolor=(0, 0, 0, 0),
+        )
+
+    if opacity < 1:
+        r, g, b, a = print_img.split()
+        alpha = max(0, min(1, opacity))
+        a = a.point(lambda value: round(value * alpha))
+        print_img = Image.merge("RGBA", (r, g, b, a))
+    return print_img
 
 
 def rename_split_outputs(
@@ -140,31 +255,107 @@ def build_product_images(
     if not model_dir.exists() or not model_dir.is_dir():
         raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
     final_product_dir.mkdir(parents=True, exist_ok=True)
-    white_model = choose_white_model(model_dir)
-    black_model = choose_black_model(model_dir)
     placement = Placement(
-        center_x=0.50,
-        center_y=0.43,
-        width=0.30,
+        center_x=DEFAULT_CHEST_SAFE_BOX["center_x"],
+        center_y=DEFAULT_CHEST_SAFE_BOX["center_y"],
+        width=DEFAULT_CHEST_SAFE_BOX["max_width_ratio"],
         opacity=0.92,
         rotation=0.0,
         shadow_strength=0.32,
         wave_strength=0.012,
         remove_white_bg=False,
     )
-    assignments = choose_mockup_models_for_batch(print_paths)
+    assignments = choose_mockup_models_for_batch(
+        print_paths,
+        model_dir=model_dir,
+        assignment_seed=f"{print_paths[0].stem}-{len(print_paths)}",
+    )
     outputs: list[Path] = []
     color_assignments: dict[str, str] = {}
     for print_path in print_paths:
         sku = print_path.stem
         output = final_product_dir / safe_filename(f"{sku}_{product_title}.png")
         output.unlink(missing_ok=True)
-        assignment = assignments.get(print_path) or "black"
-        model = white_model if assignment == "white" else black_model
-        color_assignments[sku] = _assignment_to_color_name(assignment)
-        composite_one(model, print_path, output, placement)
+        assignment = assignments[print_path]
+        color_assignments[sku] = assignment.color_name
+        base = Image.open(assignment.model_path).convert("RGBA")
+        design = Image.open(print_path).convert("RGBA")
+        design = fit_print_within_safe_box(
+            print_img=design,
+            base_size=base.size,
+            width_ratio=DEFAULT_CHEST_SAFE_BOX["max_width_ratio"],
+            height_ratio=DEFAULT_CHEST_SAFE_BOX["max_height_ratio"],
+            remove_white_bg=placement.remove_white_bg,
+            wave_strength=placement.wave_strength,
+            rotation=placement.rotation,
+            opacity=placement.opacity,
+        )
+        x = int(base.width * placement.center_x - design.width / 2)
+        y = int(base.height * placement.center_y - design.height / 2)
+        result = composite_one.__globals__["cloth_blend"](base, design, x, y, placement)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        result.save(output)
         outputs.append(output)
     return outputs, color_assignments
+
+
+def _build_product_images_balanced(
+    *,
+    print_paths: list[Path],
+    final_product_dir: Path,
+    product_title: str,
+    model_dir: Path,
+) -> tuple[list[Path], dict[str, str]]:
+    if not model_dir.exists() or not model_dir.is_dir():
+        raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
+    final_product_dir.mkdir(parents=True, exist_ok=True)
+    placement = Placement(
+        center_x=DEFAULT_CHEST_SAFE_BOX["center_x"],
+        center_y=DEFAULT_CHEST_SAFE_BOX["center_y"],
+        width=DEFAULT_CHEST_SAFE_BOX["max_width_ratio"],
+        opacity=0.92,
+        rotation=0.0,
+        shadow_strength=0.32,
+        wave_strength=0.012,
+        remove_white_bg=False,
+    )
+    assignments = choose_mockup_models_for_batch(
+        print_paths,
+        model_dir=model_dir,
+        assignment_seed=f"{print_paths[0].stem}-{len(print_paths)}",
+    )
+    cloth_blend = composite_one.__globals__["cloth_blend"]
+    outputs: list[Path] = []
+    color_assignments: dict[str, str] = {}
+    for print_path in print_paths:
+        sku = print_path.stem
+        output = final_product_dir / safe_filename(f"{sku}_{product_title}.png")
+        output.unlink(missing_ok=True)
+        assignment = assignments[print_path]
+        color_assignments[sku] = assignment.color_name
+        with Image.open(assignment.model_path).convert("RGBA") as base_image:
+            base = base_image.copy()
+        with Image.open(print_path).convert("RGBA") as design_image:
+            design = fit_print_within_safe_box(
+                print_img=design_image.copy(),
+                base_size=base.size,
+                width_ratio=DEFAULT_CHEST_SAFE_BOX["max_width_ratio"],
+                height_ratio=DEFAULT_CHEST_SAFE_BOX["max_height_ratio"],
+                remove_white_bg=placement.remove_white_bg,
+                wave_strength=placement.wave_strength,
+                rotation=placement.rotation,
+                opacity=placement.opacity,
+            )
+        x = int(base.width * placement.center_x - design.width / 2)
+        y = int(base.height * placement.center_y - design.height / 2)
+        result = cloth_blend(base, design, x, y, placement)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        result.save(output)
+        outputs.append(output)
+    return outputs, color_assignments
+
+
+build_product_images = _build_product_images_balanced
 
 
 def _load_existing_color_assignments(xlsx_path: Path) -> dict[str, str]:

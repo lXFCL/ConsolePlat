@@ -271,6 +271,34 @@ def test_ai_edit_task_detail_enables_batch_action_buttons_when_outputs_exist(tmp
     dialog.close()
 
 
+def test_ai_edit_task_detail_uses_two_rows_of_four_action_buttons(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    source = tmp_path / "edited_round_01_transparent.png"
+    source.write_bytes(b"image")
+    record = AIEditTaskRecord(
+        task_id="20260623223001",
+        title="AI 改图 SZW-3338",
+        job=AIEditJob(images=[], prompt="prompt", prefix="SZW", start_number=3338),
+        round_sources=[str(source)],
+    )
+
+    dialog = AIEditTaskDetailDialog(record)
+
+    assert hasattr(dialog, "action_grid")
+    assert dialog.action_grid.count() == 8
+    assert dialog.action_grid.itemAtPosition(0, 0).widget() is dialog.prev_round_button
+    assert dialog.action_grid.itemAtPosition(0, 1).widget() is dialog.next_round_button
+    assert dialog.action_grid.itemAtPosition(0, 2).widget() is dialog.convert_transparent_button
+    assert dialog.action_grid.itemAtPosition(0, 3).widget() is dialog.start_split_button
+    assert dialog.action_grid.itemAtPosition(1, 0).widget() is dialog.edit_split_profile_button
+    assert dialog.action_grid.itemAtPosition(1, 1).widget() is dialog.export_product_button
+    assert dialog.action_grid.itemAtPosition(1, 2).widget() is dialog.export_xlsx_button
+    assert dialog.action_grid.itemAtPosition(1, 3).widget() is dialog.sync_putaway_button
+
+    dialog.close()
+
+
 def test_ai_edit_page_finalize_task_schedules_post_process_in_background(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

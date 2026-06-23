@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QSizePolicy,
     QListWidget,
     QListWidgetItem,
@@ -374,6 +375,232 @@ class AIEditTaskDetailDialog(QDialog):
         row_two.addStretch(1)
         layout.addLayout(row_one)
         layout.addLayout(row_two)
+
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        layout.addWidget(self.log, stretch=1)
+
+        self.refresh(record)
+
+    def refresh(self, record: AIEditTaskRecord) -> None:
+        self.record = record
+        self.meta_label.setText(
+            f"状态: {record.status}    阶段: {record.stage_text}    前缀: {record.job.prefix}    起始: {record.job.start_number}    轮数: {record.job.total_return_count}"
+        )
+        self._set_path_button(self.batch_path_button, record.output_dir)
+        self._set_path_button(self.transparent_path_button, record.final_transparent_dir)
+        self._set_path_button(self.product_path_button, record.final_product_dir)
+        self._set_path_button(self.xlsx_path_button, record.xlsx_path)
+        sections: list[str] = []
+        if record.failed:
+            sections.append("失败项:\n" + "\n".join(str(item) for item in record.failed))
+        if record.warnings:
+            sections.append("警告:\n" + "\n".join(str(item) for item in record.warnings))
+        if record.logs:
+            sections.append("日志:\n" + "\n".join(record.logs))
+        self.log.setPlainText("\n\n".join(sections))
+        self._refresh_round_view()
+
+    def _derive_round_sources(self, record: AIEditTaskRecord) -> list[str]:
+        if record.round_sources:
+            return list(record.round_sources)
+        outputs = [path for path in record.outputs if path.lower().endswith(".png")]
+        transparent = [
+            path
+            for path in outputs
+            if "transparent" in Path(path).stem.lower() and "_part_" not in Path(path).stem.lower()
+        ]
+        if transparent:
+            return transparent
+        non_split = [path for path in outputs if "_part_" not in Path(path).stem.lower()]
+        return non_split or outputs
+
+    def _find_split_source(self, record: AIEditTaskRecord) -> str:
+        sources = self._derive_round_sources(record)
+        if not sources:
+            return ""
+        return sources[min(self._active_source_index, len(sources) - 1)]
+
+    def _refresh_round_view(self) -> None:
+        sources = self._derive_round_sources(self.record)
+        if not sources:
+            self.round_index_label.setText("--")
+            self.source_path_label.setText("--")
+            self.prev_round_button.setEnabled(False)
+            self.next_round_button.setEnabled(False)
+            self.convert_transparent_button.setEnabled(False)
+            self.start_split_button.setEnabled(False)
+            self.edit_split_profile_button.setEnabled(False)
+            self.export_product_button.setEnabled(False)
+            self.export_xlsx_button.setEnabled(False)
+            self.sync_putaway_button.setEnabled(False)
+            return
+        self._active_source_index = max(0, min(self._active_source_index, len(sources) - 1))
+        self.round_index_label.setText(f"{self._active_source_index + 1}/{len(sources)}")
+        self.source_path_label.setText(sources[self._active_source_index])
+        self.prev_round_button.setEnabled(self._active_source_index > 0)
+        self.next_round_button.setEnabled(self._active_source_index < len(sources) - 1)
+        self.convert_transparent_button.setEnabled(True)
+        self.start_split_button.setEnabled(True)
+        self.edit_split_profile_button.setEnabled(True)
+        has_products = self._has_product_outputs()
+        has_xlsx = bool(self.record.xlsx_path and Path(self.record.xlsx_path).exists())
+        self.export_product_button.setEnabled(has_products)
+        self.export_xlsx_button.setEnabled(has_xlsx)
+        self.sync_putaway_button.setEnabled(has_products and has_xlsx)
+
+    def _has_product_outputs(self) -> bool:
+        if not self.record.final_product_dir:
+            return False
+        directory = Path(self.record.final_product_dir)
+        if not directory.exists() or not directory.is_dir():
+            return False
+        return any(path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES for path in directory.iterdir())
+
+    def show_previous_round(self) -> None:
+        if self._active_source_index > 0:
+            self._active_source_index -= 1
+            self._refresh_round_view()
+
+    def show_next_round(self) -> None:
+        sources = self._derive_round_sources(self.record)
+        if self._active_source_index < len(sources) - 1:
+            self._active_source_index += 1
+            self._refresh_round_view()
+
+    def _set_path_button(self, button: QPushButton, path: str) -> None:
+        text = str(path or "--")
+        button.setText(text)
+        button.setToolTip(text)
+        button.setEnabled(bool(path))
+
+    def open_path(self, path_text: str) -> None:
+        path = path_text if path_text and path_text != "--" else ""
+        if not path:
+            return
+        target = Path(path)
+        folder = target if target.is_dir() else target.parent
+        try:
+            os.startfile(str(folder))  # noqa: S606
+        except Exception:
+            subprocess.Popen(["explorer", str(folder)])
+
+    def convert_current_round(self) -> None:
+        if self._page is not None:
+            self._page.convert_current_round(self.record, self._find_split_source(self.record))
+
+    def split_current_round(self) -> None:
+        if self._page is not None:
+            self._page.split_current_round(self.record, self._find_split_source(self.record))
+
+    def edit_split_profile(self) -> None:
+        if self._page is not None:
+            self._page.edit_split_profile(self.record, self._find_split_source(self.record))
+
+    def export_product_images(self) -> None:
+        if self._page is not None:
+            self._page.export_task_product_images(self.record)
+
+    def export_xlsx(self) -> None:
+        if self._page is not None:
+            self._page.export_task_xlsx(self.record)
+
+    def sync_to_putaway_data(self) -> None:
+        if self._page is not None:
+            self._page.sync_task_to_putaway_data(self.record)
+
+
+class AIEditTaskDetailDialog(QDialog):
+    def __init__(self, record: AIEditTaskRecord, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.record = record
+        self._page = parent
+        self._active_source_index = 0
+        self.setWindowTitle(f"任务详情 - {record.title}")
+        self.resize(920, 680)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel(record.title)
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
+
+        self.meta_label = QLabel()
+        self.meta_label.setWordWrap(True)
+        layout.addWidget(self.meta_label)
+
+        self.path_panel = QFrame()
+        self.path_panel.setObjectName("panel")
+        path_layout = QGridLayout(self.path_panel)
+        path_layout.setContentsMargins(16, 14, 16, 14)
+        path_layout.setHorizontalSpacing(10)
+        path_layout.setVerticalSpacing(10)
+        self.batch_path_button = QPushButton("--")
+        self.batch_path_button.setObjectName("ghostButton")
+        self.batch_path_button.clicked.connect(lambda: self.open_path(self.batch_path_button.text()))
+        self.transparent_path_button = QPushButton("--")
+        self.transparent_path_button.setObjectName("ghostButton")
+        self.transparent_path_button.clicked.connect(lambda: self.open_path(self.transparent_path_button.text()))
+        self.product_path_button = QPushButton("--")
+        self.product_path_button.setObjectName("ghostButton")
+        self.product_path_button.clicked.connect(lambda: self.open_path(self.product_path_button.text()))
+        self.xlsx_path_button = QPushButton("--")
+        self.xlsx_path_button.setObjectName("ghostButton")
+        self.xlsx_path_button.clicked.connect(lambda: self.open_path(self.xlsx_path_button.text()))
+        path_layout.addWidget(QLabel("任务目录"), 0, 0)
+        path_layout.addWidget(self.batch_path_button, 0, 1)
+        path_layout.addWidget(QLabel("最终透明底"), 1, 0)
+        path_layout.addWidget(self.transparent_path_button, 1, 1)
+        path_layout.addWidget(QLabel("最终产品图"), 2, 0)
+        path_layout.addWidget(self.product_path_button, 2, 1)
+        path_layout.addWidget(QLabel("XLSX"), 3, 0)
+        path_layout.addWidget(self.xlsx_path_button, 3, 1)
+        layout.addWidget(self.path_panel)
+
+        self.round_index_label = QLabel()
+        self.round_index_label.setObjectName("panelTitle")
+        self.source_path_label = QLabel("--")
+        self.source_path_label.setWordWrap(True)
+        layout.addWidget(self.round_index_label)
+        layout.addWidget(self.source_path_label)
+
+        self.prev_round_button = QPushButton("上一轮")
+        self.prev_round_button.clicked.connect(self.show_previous_round)
+        self.next_round_button = QPushButton("下一轮")
+        self.next_round_button.clicked.connect(self.show_next_round)
+        self.convert_transparent_button = QPushButton("转透明底")
+        self.convert_transparent_button.clicked.connect(self.convert_current_round)
+        self.start_split_button = QPushButton("直接切割")
+        self.start_split_button.clicked.connect(self.split_current_round)
+        self.edit_split_profile_button = QPushButton("手动切线")
+        self.edit_split_profile_button.clicked.connect(self.edit_split_profile)
+        self.export_product_button = QPushButton("导出产品图")
+        self.export_product_button.clicked.connect(self.export_product_images)
+        self.export_xlsx_button = QPushButton("导出 xlsx")
+        self.export_xlsx_button.clicked.connect(self.export_xlsx)
+        self.sync_putaway_button = QPushButton("同步到上架 data")
+        self.sync_putaway_button.clicked.connect(self.sync_to_putaway_data)
+
+        self.action_grid = QGridLayout()
+        self.action_grid.setHorizontalSpacing(10)
+        self.action_grid.setVerticalSpacing(10)
+        action_buttons = [
+            self.prev_round_button,
+            self.next_round_button,
+            self.convert_transparent_button,
+            self.start_split_button,
+            self.edit_split_profile_button,
+            self.export_product_button,
+            self.export_xlsx_button,
+            self.sync_putaway_button,
+        ]
+        for index, button in enumerate(action_buttons):
+            button.setObjectName("ghostButton")
+            button.setMinimumHeight(36)
+            self.action_grid.addWidget(button, index // 4, index % 4)
+        layout.addLayout(self.action_grid)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
