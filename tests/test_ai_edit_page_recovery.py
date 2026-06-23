@@ -663,7 +663,7 @@ def test_split_profile_editor_dialog_parses_guides(tmp_path):
     dialog.close()
 
 
-def test_split_profile_editor_dialog_builds_default_5x5_guides_from_image_size(tmp_path):
+def test_split_profile_editor_dialog_uses_fixed_default_guides(tmp_path):
     app = QApplication.instance() or QApplication([])
 
     image_path = tmp_path / "edited_round_01_transparent.png"
@@ -679,12 +679,12 @@ def test_split_profile_editor_dialog_builds_default_5x5_guides_from_image_size(t
 
     dialog = SplitProfileEditorDialog(record, str(image_path))
 
-    assert dialog.parsed_guides() == ([200, 400, 600, 800], [200, 400, 600, 800])
+    assert dialog.parsed_guides() == ([458, 805, 1229, 1638], [482, 852, 1229, 1587])
 
     dialog.close()
 
 
-def test_split_profile_editor_dialog_can_reset_guides_to_default_grid(tmp_path):
+def test_split_profile_editor_dialog_can_reset_guides_to_fixed_defaults(tmp_path):
     app = QApplication.instance() or QApplication([])
 
     image_path = tmp_path / "edited_round_01_transparent.png"
@@ -701,7 +701,7 @@ def test_split_profile_editor_dialog_can_reset_guides_to_default_grid(tmp_path):
     dialog = SplitProfileEditorDialog(record, str(image_path))
     dialog.reset_guides()
 
-    assert dialog.parsed_guides() == ([100, 200, 300, 400], [200, 400, 600, 800])
+    assert dialog.parsed_guides() == ([458, 805, 1229, 1638], [482, 852, 1229, 1587])
 
     dialog.close()
 
@@ -727,6 +727,24 @@ def test_split_profile_editor_dialog_updates_text_fields_when_guides_change(tmp_
     assert dialog.y_guides_edit.text() == "190,390,610,805"
 
     dialog.close()
+
+
+def test_ai_edit_page_load_split_profile_uses_fixed_default_guides_without_saved_profile(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    page.split_profile_store = None
+    job = AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25)
+
+    profile = page._load_split_profile_for_job(job)
+
+    assert profile["x_guides"] == [458, 805, 1229, 1638]
+    assert profile["y_guides"] == [482, 852, 1229, 1587]
+    assert profile["split_count"] == 25
+    assert profile["columns"] == 5
+    assert profile["rows"] == 5
+
+    page.close()
 
 
 def test_split_guide_preview_widget_move_guide_clamps_and_sorts(tmp_path):

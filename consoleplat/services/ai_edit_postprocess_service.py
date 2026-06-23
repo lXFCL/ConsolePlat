@@ -59,8 +59,9 @@ def prepare_ai_edit_print_assets(
         renamed_paths: list[Path] = []
         for raw_path in raw_split_paths:
             target = final_dir / f"{prefix}-{next_number}.png"
-            target.unlink(missing_ok=True)
-            target.write_bytes(raw_path.read_bytes())
+            if raw_path.resolve() != target.resolve():
+                target.unlink(missing_ok=True)
+                target.write_bytes(raw_path.read_bytes())
             renamed_paths.append(target)
             next_number += 1
         prepared.append(

@@ -195,6 +195,28 @@ def test_prepare_ai_edit_print_assets_renames_split_outputs_into_final_transpare
     assert all(path.parent == tmp_path / "final-transparent" for path in assets[0].split_paths)
 
 
+def test_prepare_ai_edit_print_assets_keeps_existing_final_transparent_files(tmp_path):
+    source = tmp_path / "final-transparent" / "SZW-3263.png"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(source)
+    transparent_source = tmp_path / "final-transparent" / "SZW-3263_transparent.png"
+    Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(transparent_source)
+
+    assets = prepare_ai_edit_print_assets(
+        source_paths=[transparent_source],
+        final_transparent_dir=source.parent,
+        prefix="SZW",
+        start_number=3263,
+        split_collage=False,
+        split_count=1,
+    )
+
+    assert len(assets) == 1
+    assert assets[0].transparent_path == transparent_source
+    assert assets[0].split_paths == [source]
+    assert source.exists() is True
+
+
 def test_ai_edit_page_manual_split_rebuilds_final_transparent_outputs(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

@@ -45,6 +45,9 @@ from consoleplat.services.posai_batch_service import build_batch_paths, suggest_
 from consoleplat.services.split_profile_store import SplitProfile, SplitProfileStore
 from consoleplat.services.task_store import TaskStore
 
+DEFAULT_SPLIT_X_GUIDES = [458, 805, 1229, 1638]
+DEFAULT_SPLIT_Y_GUIDES = [482, 852, 1229, 1587]
+
 
 class NoWheelSpinBox(QSpinBox):
     def wheelEvent(self, event) -> None:  # noqa: N802
@@ -245,6 +248,18 @@ def _best_grid_for_count(count: int) -> tuple[int, int]:
     columns = min(5, count)
     rows = (count + columns - 1) // columns
     return columns, rows
+
+
+def _default_split_profile(split_count: int) -> dict[str, object]:
+    columns = len(DEFAULT_SPLIT_X_GUIDES) + 1
+    rows = len(DEFAULT_SPLIT_Y_GUIDES) + 1
+    return {
+        "split_count": max(1, int(split_count or columns * rows)),
+        "columns": columns,
+        "rows": rows,
+        "x_guides": list(DEFAULT_SPLIT_X_GUIDES),
+        "y_guides": list(DEFAULT_SPLIT_Y_GUIDES),
+    }
 
 
 def _format_split_count_hint(count: int) -> str:
@@ -533,11 +548,7 @@ class SplitProfileEditorDialog(QDialog):
             return (1000, 1000)
 
     def _default_guides(self) -> tuple[list[int], list[int]]:
-        width, height = self._image_size
-        columns = rows = 5
-        x_guides = [round(width * index / columns) for index in range(1, columns)]
-        y_guides = [round(height * index / rows) for index in range(1, rows)]
-        return x_guides, y_guides
+        return list(DEFAULT_SPLIT_X_GUIDES), list(DEFAULT_SPLIT_Y_GUIDES)
 
     def _stats_text(self, x_guides: list[int], y_guides: list[int]) -> str:
         width, height = self._image_size
@@ -1019,10 +1030,11 @@ class AIEditPage(QWidget):
         process.setProcessEnvironment(env)
 
     def _load_split_profile_for_job(self, job: AIEditJob) -> dict[str, object]:
+        fallback = _default_split_profile(job.split_count)
         if self.split_profile_store is None or not job.images:
-            return {}
+            return fallback
         profile = self.split_profile_store.load(str(job.images[0]))
-        return {} if profile is None else {
+        return fallback if profile is None else {
             "source_image": profile.source_image,
             "split_count": profile.split_count,
             "columns": profile.columns,
