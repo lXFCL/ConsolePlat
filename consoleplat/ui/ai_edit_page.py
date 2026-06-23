@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import site
 import subprocess
@@ -7,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QProcess, Qt, pyqtSignal
+from PyQt5.QtCore import QProcess, Qt, QThread, QObject, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -75,6 +76,168 @@ class AIEditTaskRecord:
     final_product_dir: str = ""
     xlsx_path: str = ""
     split_profile: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass
+class BackgroundTaskResult:
+    action: str
+    task_id: str
+    outputs: list[str] = field(default_factory=list)
+    round_sources: list[str] = field(default_factory=list)
+    final_transparent_dir: str = ""
+    final_product_dir: str = ""
+    xlsx_path: str = ""
+    failed: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    logs: list[str] = field(default_factory=list)
+
+
+class AIEditBackgroundWorker(QObject):
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str, str, str)
+
+    def __init__(self, action: str, record: AIEditTaskRecord, settings: AppSettings) -> None:
+        super().__init__()
+        self.action = action
+        self.record = copy.deepcopy(record)
+        self.settings = copy.deepcopy(settings)
+
+    def run(self) -> None:
+        try:
+            if self.action == "post_process":
+                result = self._run_post_process()
+            elif self.action == "split_current_round":
+                result = self._run_split_current_round()
+            elif self.action == "convert_current_round":
+                result = self._run_convert_current_round()
+            else:
+                raise ValueError(f"unsupported background action: {self.action}")
+        except Exception as exc:
+            self.failed.emit(self.action, self.record.task_id, str(exc))
+            return
+        self.finished.emit(result)
+
+    def _run_post_process(self) -> BackgroundTaskResult:
+        result = BackgroundTaskResult(action=self.action, task_id=self.record.task_id)
+        prepared_assets = prepare_ai_edit_print_assets(
+            source_paths=[str(path) for path in self.record.round_sources or self._derive_round_sources_from_outputs(self.record.outputs)],
+            final_transparent_dir=self.record.final_transparent_dir or self.record.output_dir,
+            prefix=self.record.job.prefix,
+            start_number=self.record.job.start_number,
+            split_collage=self.record.job.split_collage,
+            split_count=self.record.job.split_count,
+            x_guides=list(self.record.split_profile.get("x_guides") or []),
+            y_guides=list(self.record.split_profile.get("y_guides") or []),
+        )
+        prepared_paths = [str(path) for asset in prepared_assets for path in asset.split_paths]
+        transparent_rounds = [str(asset.transparent_path) for asset in prepared_assets if asset.transparent_path]
+        result.outputs = prepared_paths or list(self.record.outputs)
+        result.round_sources = transparent_rounds or list(self.record.round_sources)
+        if prepared_paths:
+            result.final_transparent_dir = str(Path(prepared_paths[0]).parent)
+
+        if not self.record.job.test_mode:
+            split_paths = [Path(path) for path in result.outputs if Path(path).suffix.lower() == ".png"]
+            if not split_paths:
+                raise ValueError("未找到可正式入库的切图产物")
+            product_title = (
+                self.settings.bo_product_title.strip()
+                if self.record.job.prefix == "BO"
+                else self.settings.szw_product_title.strip()
+            )
+            formalize_summary = formalize_ai_edit_outputs(
+                split_paths=split_paths,
+                final_transparent_dir=Path(result.final_transparent_dir or self.record.final_transparent_dir),
+                final_product_dir=Path(self.record.final_product_dir),
+                xlsx_path=Path(self.record.xlsx_path),
+                putaway_data_dir=Path(self.settings.putaway_data_dir),
+                prefix=self.record.job.prefix,
+                start_number=self.record.job.start_number,
+                product_title=product_title,
+                xlsx_batch_start_number=self.record.job.start_number,
+                xlsx_batch_count=max(1, len(split_paths)),
+            )
+            if not formalize_summary.ok:
+                raise ValueError(formalize_summary.message)
+            result.outputs = list(formalize_summary.product_outputs or result.outputs)
+            result.round_sources = list(formalize_summary.renamed_outputs or result.round_sources)
+            result.final_product_dir = self.record.final_product_dir
+            result.xlsx_path = formalize_summary.xlsx_path or self.record.xlsx_path
+            if formalize_summary.putaway and formalize_summary.putaway.message:
+                result.warnings.append(formalize_summary.putaway.message)
+            result.logs.append(formalize_summary.message)
+        return result
+
+    def _run_split_current_round(self) -> BackgroundTaskResult:
+        source_path = self.record.round_sources[0] if self.record.round_sources else ""
+        if not source_path:
+            raise ValueError("missing split source")
+        output_dir = Path(source_path).parent / f"{Path(source_path).stem}_split"
+        split_paths = split_collage_image_with_guides(
+            source_path,
+            output_dir,
+            self.record.job.split_count,
+            list(self.record.split_profile.get("x_guides") or []),
+            list(self.record.split_profile.get("y_guides") or []),
+            original_image=self._find_original_round_source(source_path, self.record.outputs),
+        )
+        final_outputs = self._copy_split_outputs_to_final_gallery(self.record, [Path(path) for path in split_paths])
+        return BackgroundTaskResult(
+            action=self.action,
+            task_id=self.record.task_id,
+            outputs=[str(path) for path in (final_outputs or [Path(path) for path in split_paths])],
+            round_sources=[source_path],
+            final_transparent_dir=self.record.final_transparent_dir,
+        )
+
+    def _run_convert_current_round(self) -> BackgroundTaskResult:
+        source_path = self.record.round_sources[0] if self.record.round_sources else ""
+        if not source_path:
+            raise ValueError("missing convert source")
+        output = convert_image_to_transparent_background(source_path)
+        outputs = list(self.record.outputs)
+        if output not in outputs:
+            outputs.append(output)
+        return BackgroundTaskResult(
+            action=self.action,
+            task_id=self.record.task_id,
+            outputs=outputs,
+            round_sources=self._derive_round_sources_from_outputs(outputs),
+        )
+
+    def _derive_round_sources_from_outputs(self, outputs: list[str]) -> list[str]:
+        non_split = [path for path in outputs if Path(path).suffix.lower() == ".png" and "_part_" not in Path(path).stem.lower()]
+        return non_split or [path for path in outputs if Path(path).suffix.lower() == ".png"]
+
+    def _find_original_round_source(self, source_path: str, outputs: list[str]) -> str | None:
+        source = Path(source_path)
+        candidate_name = source.stem.replace("_transparent", "")
+        candidate = source.with_name(f"{candidate_name}{source.suffix}")
+        if candidate.exists():
+            return str(candidate)
+        for output in outputs:
+            output_path = Path(output)
+            if output_path == source:
+                continue
+            if output_path.stem == candidate_name and output_path.suffix.lower() == source.suffix.lower() and output_path.exists():
+                return str(output_path)
+        return None
+
+    def _copy_split_outputs_to_final_gallery(self, record: AIEditTaskRecord, split_paths: list[Path]) -> list[Path]:
+        split_paths = [path for path in split_paths if "_part_" in path.stem.lower()]
+        if not split_paths:
+            return []
+        target_root = Path(record.final_transparent_dir) if record.final_transparent_dir else Path(record.output_dir)
+        target_root.mkdir(parents=True, exist_ok=True)
+        outputs: list[Path] = []
+        current_number = record.job.start_number
+        for source in split_paths:
+            target = target_root / f"{record.job.prefix}-{current_number}.png"
+            target.write_bytes(source.read_bytes())
+            outputs.append(target)
+            current_number += 1
+        record.final_transparent_dir = str(target_root)
+        return outputs
 
 
 def _best_grid_for_count(count: int) -> tuple[int, int]:
@@ -548,6 +711,7 @@ class AIEditPage(QWidget):
         self.task_detail_dialog: AIEditTaskDetailDialog | None = None
         self.current_task: AIEditTaskRecord | None = None
         self.tasks: list[AIEditTaskRecord] = []
+        self._background_threads: list[QThread] = []
         self._stdout_buffer = ""
         self._stderr_buffer = ""
         self._loading_preferences = False
@@ -1003,12 +1167,77 @@ class AIEditPage(QWidget):
         self.current_task.warnings = list(summary.warnings or [])
         self.current_task.round_sources = self._derive_round_sources_from_outputs(self.current_task.outputs)
         if is_ok:
-            self._run_prepare_post_process()
-            if not self.current_task.job.test_mode:
-                self._run_formalize_post_process()
+            self._append_log("开始后台处理 AI 改图结果...")
+            self._start_post_process_job(self.current_task)
         self.status_label.setText(self.current_task.status)
         self._save_task_history()
         self._append_log(summary.message)
+
+    def _start_post_process_job(self, record: AIEditTaskRecord) -> None:
+        self._start_background_job("post_process", record)
+
+    def _start_background_job(self, action: str, record: AIEditTaskRecord) -> None:
+        thread = QThread(self)
+        worker = AIEditBackgroundWorker(action, record, self.settings_store.load())
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_background_job_finished)
+        worker.failed.connect(self._on_background_job_failed)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._cleanup_background_thread(thread))
+        self._background_threads.append(thread)
+        thread.start()
+
+    def _cleanup_background_thread(self, thread: QThread) -> None:
+        self._background_threads = [item for item in self._background_threads if item is not thread]
+
+    def _find_task_by_id(self, task_id: str) -> AIEditTaskRecord | None:
+        for record in self.tasks:
+            if record.task_id == task_id:
+                return record
+        return None
+
+    def _on_background_job_finished(self, result: BackgroundTaskResult) -> None:
+        record = self._find_task_by_id(result.task_id)
+        if record is None:
+            return
+        if result.outputs:
+            record.outputs = list(result.outputs)
+        if result.round_sources:
+            record.round_sources = list(result.round_sources)
+        if result.final_transparent_dir:
+            record.final_transparent_dir = result.final_transparent_dir
+        if result.final_product_dir:
+            record.final_product_dir = result.final_product_dir
+        if result.xlsx_path:
+            record.xlsx_path = result.xlsx_path
+        if result.failed:
+            record.failed = list(record.failed) + list(result.failed)
+            record.status = "失败"
+            record.stage_text = "失败"
+        if result.warnings:
+            record.warnings = list(record.warnings) + list(result.warnings)
+        for line in result.logs:
+            self._append_log(line)
+        self.status_label.setText(record.status)
+        self._save_task_history()
+        self._refresh_task_detail_dialog()
+
+    def _on_background_job_failed(self, action: str, task_id: str, error_text: str) -> None:
+        record = self._find_task_by_id(task_id)
+        if record is None:
+            return
+        record.failed = list(record.failed) + [error_text]
+        record.status = "失败"
+        record.stage_text = "失败"
+        self.status_label.setText(record.status)
+        self._append_log(f"{action} 后台任务失败：{error_text}")
+        self._save_task_history()
+        self._refresh_task_detail_dialog()
 
     def _run_prepare_post_process(self) -> None:
         if self.current_task is None:
@@ -1196,30 +1425,16 @@ class AIEditPage(QWidget):
     def convert_current_round(self, record: AIEditTaskRecord, source_path: str) -> None:
         if not source_path:
             return
-        output = convert_image_to_transparent_background(source_path)
-        if output not in record.outputs:
-            record.outputs.append(output)
-        record.round_sources = self._derive_round_sources_from_outputs(record.outputs)
-        self._save_task_history()
+        record.round_sources = [source_path]
+        self._append_log("开始后台转透明底...")
+        self._start_background_job("convert_current_round", record)
 
     def split_current_round(self, record: AIEditTaskRecord, source_path: str) -> None:
         if not source_path:
             return
-        output_dir = self._build_output_path_for_source(source_path)
-        split_paths = split_collage_image_with_guides(
-            source_path,
-            output_dir,
-            record.job.split_count,
-            list(record.split_profile.get("x_guides") or []),
-            list(record.split_profile.get("y_guides") or []),
-            original_image=self._find_original_round_source(record, source_path),
-        )
-        self._replace_split_outputs(record, source_path, split_paths)
-        final_outputs = self._copy_split_outputs_to_final_gallery(record, [Path(path) for path in split_paths])
-        if final_outputs:
-            record.outputs = [str(path) for path in final_outputs]
-            record.round_sources = [source_path]
-        self._save_task_history()
+        record.round_sources = [source_path]
+        self._append_log("开始后台切割当前轮...")
+        self._start_background_job("split_current_round", record)
 
     def _find_original_round_source(self, record: AIEditTaskRecord, source_path: str) -> str | None:
         source = Path(source_path)
@@ -1432,4 +1647,8 @@ class AIEditPage(QWidget):
             if wait_for_finished is not None:
                 wait_for_finished(1500)
             self.process = None
+        for thread in list(self._background_threads):
+            thread.quit()
+            thread.wait(1500)
+        self._background_threads.clear()
         super().closeEvent(event)

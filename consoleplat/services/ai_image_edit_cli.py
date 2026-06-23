@@ -362,6 +362,7 @@ def request_image_edit_batch(
     }
 
     last_error: Exception | None = None
+    payload: dict | None = None
     with httpx.Client(timeout=300.0) as client:
         for index, url in enumerate(candidate_urls):
             try:
@@ -392,8 +393,6 @@ def request_image_edit_batch(
             except Exception as exc:
                 last_error = exc
                 break
-        else:
-            payload = None
 
     if payload is None:
         raise ValueError(str(last_error) if last_error else "image edit request failed")

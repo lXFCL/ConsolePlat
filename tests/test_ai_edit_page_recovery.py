@@ -239,6 +239,90 @@ def test_ai_edit_page_copy_split_outputs_and_detail_dialog(tmp_path, monkeypatch
     page.close()
 
 
+def test_ai_edit_page_finalize_task_schedules_post_process_in_background(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    page.current_task = AIEditTaskRecord(
+        task_id="20260623192000",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=2,
+            prefix="BO",
+            start_number=1661,
+            test_mode=False,
+        ),
+        output_dir=str(tmp_path),
+    )
+
+    scheduled = {}
+
+    def fake_start_post_process(task):
+        scheduled["task_id"] = task.task_id
+
+    monkeypatch.setattr(page, "_start_post_process_job", fake_start_post_process)
+
+    class _Summary:
+        ok = True
+        output_dir = str(tmp_path)
+        outputs = [str(tmp_path / "edited_round_01.png")]
+        failed = []
+        warnings = []
+        message = "done"
+
+    page._finalize_task(_Summary(), 0)
+
+    assert scheduled["task_id"] == "20260623192000"
+
+    page.close()
+
+
+def test_ai_edit_page_split_current_round_schedules_background_job(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    transparent = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(transparent)
+    record = AIEditTaskRecord(
+        task_id="20260623192100",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=2,
+            prefix="BO",
+            start_number=1661,
+        ),
+        output_dir=str(tmp_path),
+    )
+
+    scheduled = {}
+
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["task_id"] = current_record.task_id
+
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
+
+    page.split_current_round(record, str(transparent))
+
+    assert scheduled == {"action": "split_current_round", "task_id": "20260623192100"}
+
+    page.close()
+
+
 def test_ai_edit_task_detail_dialog_shows_failed_and_warning_messages(tmp_path):
     app = QApplication.instance() or QApplication([])
 
@@ -666,22 +750,22 @@ def test_ai_edit_page_edit_split_profile_saves_preview_guides_and_replaces_split
             return [210, 420, 630, 840], [205, 405, 615, 825]
 
     monkeypatch.setattr("consoleplat.ui.ai_edit_page.SplitProfileEditorDialog", _FakeDialog)
-    captured = {}
+    scheduled = {}
 
-    def fake_split(source_path, output_dir, split_count, x_guides, y_guides, original_image=None):
-        captured["source_path"] = source_path
-        captured["x_guides"] = x_guides
-        captured["y_guides"] = y_guides
-        captured["original_image"] = original_image
-        return []
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["task_id"] = current_record.task_id
+        scheduled["x_guides"] = list(current_record.split_profile.get("x_guides") or [])
+        scheduled["y_guides"] = list(current_record.split_profile.get("y_guides") or [])
 
-    monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
 
     page.edit_split_profile(record, str(image_path))
 
-    assert captured["source_path"] == str(image_path)
-    assert captured["x_guides"] == [210, 420, 630, 840]
-    assert captured["y_guides"] == [205, 405, 615, 825]
+    assert scheduled["action"] == "split_current_round"
+    assert scheduled["task_id"] == "20260623170300"
+    assert scheduled["x_guides"] == [210, 420, 630, 840]
+    assert scheduled["y_guides"] == [205, 405, 615, 825]
 
 
 def test_ai_edit_page_restores_legacy_collage_transparent_sources(tmp_path, monkeypatch):
@@ -1052,28 +1136,13 @@ def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path
         xlsx_path=str(tmp_path / "final-product.xlsx"),
     )
 
-    called: dict[str, object] = {}
+    scheduled: dict[str, object] = {}
 
-    def fake_formalize(**kwargs):
-        called.update(kwargs)
-        return AIEditFormalizeSummary(
-            ok=True,
-            renamed_outputs=[str(tmp_path / "final-transparent" / "BO-1661.png")],
-            product_outputs=[str(tmp_path / "final-product" / "BO-1661_BO固定产品标题.png")],
-            xlsx_path=str(tmp_path / "final-product.xlsx"),
-            putaway=PutawaySyncSummary(
-                ok=True,
-                copied_images=1,
-                copied_xlsx=True,
-                images_target_dir=str(tmp_path / "putaway-data" / "pic" / "1"),
-                xlsx_target_path=str(tmp_path / "putaway-data" / "final-product.xlsx"),
-                message="已同步 1 张图片和 final-product.xlsx",
-            ),
-            color_assignments={"BO-1661": "黑"},
-            message="正式模式后处理完成：透明底 1 张，产品图 1 张，XLSX final-product.xlsx",
-        )
+    def fake_start_post_process(task):
+        scheduled["task_id"] = task.task_id
+        scheduled["outputs"] = list(task.outputs)
 
-    monkeypatch.setattr("consoleplat.ui.ai_edit_page.formalize_ai_edit_outputs", fake_formalize)
+    monkeypatch.setattr(page, "_start_post_process_job", fake_start_post_process)
 
     class FakeProcess:
         def readAllStandardOutput(self):
@@ -1090,22 +1159,15 @@ def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path
 
     page._on_process_finished(0, None)
 
-    assert called["prefix"] == "BO"
-    assert called["start_number"] == 1661
-    assert called["product_title"] == "BO固定产品标题"
-    assert Path(called["final_transparent_dir"]) == tmp_path / "final-transparent"
-    assert Path(called["final_product_dir"]) == tmp_path / "final-product"
-    assert Path(called["xlsx_path"]) == tmp_path / "final-product.xlsx"
-    assert Path(called["putaway_data_dir"]) == tmp_path / "putaway-data"
-    assert [Path(item) for item in called["split_paths"]] == [Path("E:/tmp/out/a_part_1.png")]
+    assert scheduled["task_id"] == "20260623130000"
+    assert scheduled["outputs"] == ["E:/tmp/out/a_part_1.png"]
     assert page.current_task.status == "完成"
     assert page.current_task.stage_text == "已完成"
     assert page.current_task.progress_percent == 100
     assert page.current_task.final_transparent_dir == str(tmp_path / "final-transparent")
     assert page.current_task.final_product_dir == str(tmp_path / "final-product")
     assert page.current_task.xlsx_path == str(tmp_path / "final-product.xlsx")
-    assert page.current_task.outputs == [str(tmp_path / "final-product" / "BO-1661_BO固定产品标题.png")]
-    assert any("正式模式后处理完成" in line for line in page.current_task.logs)
+    assert page.current_task.outputs == ["E:/tmp/out/a_part_1.png"]
 
     page.close()
 
@@ -1153,21 +1215,13 @@ def test_ai_edit_page_formal_mode_accepts_non_split_png_outputs(tmp_path, monkey
         xlsx_path=str(tmp_path / "final-product.xlsx"),
     )
 
-    called: dict[str, object] = {}
+    scheduled: dict[str, object] = {}
 
-    def fake_formalize(**kwargs):
-        called.update(kwargs)
-        return AIEditFormalizeSummary(
-            ok=True,
-            renamed_outputs=[str(tmp_path / "final-transparent" / "SZW-3113.png")],
-            product_outputs=[str(tmp_path / "final-product" / "SZW-3113_SZW固定产品标题.png")],
-            xlsx_path=str(tmp_path / "final-product.xlsx"),
-            putaway=PutawaySyncSummary(ok=True, message="已同步 1 张图片和 final-product.xlsx"),
-            color_assignments={"SZW-3113": "白"},
-            message="正式模式后处理完成：透明底 1 张，产品图 1 张，XLSX final-product.xlsx",
-        )
+    def fake_start_post_process(task):
+        scheduled["task_id"] = task.task_id
+        scheduled["outputs"] = list(task.outputs)
 
-    monkeypatch.setattr("consoleplat.ui.ai_edit_page.formalize_ai_edit_outputs", fake_formalize)
+    monkeypatch.setattr(page, "_start_post_process_job", fake_start_post_process)
 
     class FakeProcess:
         def readAllStandardOutput(self):
@@ -1184,8 +1238,9 @@ def test_ai_edit_page_formal_mode_accepts_non_split_png_outputs(tmp_path, monkey
 
     page._on_process_finished(0, None)
 
-    assert [Path(item) for item in called["split_paths"]] == [Path("E:/tmp/out/transparent_master.png")]
+    assert scheduled["task_id"] == "20260623130100"
+    assert scheduled["outputs"] == ["E:/tmp/out/transparent_master.png"]
     assert page.current_task.status == "完成"
-    assert page.current_task.outputs == [str(tmp_path / "final-product" / "SZW-3113_SZW固定产品标题.png")]
+    assert page.current_task.outputs == ["E:/tmp/out/transparent_master.png"]
 
     page.close()

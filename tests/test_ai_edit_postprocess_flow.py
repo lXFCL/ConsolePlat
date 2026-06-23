@@ -228,20 +228,19 @@ def test_ai_edit_page_manual_split_rebuilds_final_transparent_outputs(tmp_path, 
         final_transparent_dir=str(tmp_path / "final-transparent"),
     )
 
-    split_part_a = tmp_path / "edited_round_01_transparent_split" / "edited_round_01_transparent_part_01.png"
-    split_part_b = tmp_path / "edited_round_01_transparent_split" / "edited_round_01_transparent_part_02.png"
+    scheduled = {}
 
-    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None, original_image=None):
-        split_part_a.parent.mkdir(parents=True, exist_ok=True)
-        Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(split_part_a)
-        Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(split_part_b)
-        return [str(split_part_a), str(split_part_b)]
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["task_id"] = current_record.task_id
+        scheduled["round_sources"] = list(current_record.round_sources)
 
-    monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
 
     page.split_current_round(record, str(transparent))
 
-    assert sorted(path.name for path in Path(record.final_transparent_dir).glob("*.png")) == [
-        "BO-1661.png",
-        "BO-1662.png",
-    ]
+    assert scheduled == {
+        "action": "split_current_round",
+        "task_id": "20260623180000",
+        "round_sources": [str(transparent)],
+    }

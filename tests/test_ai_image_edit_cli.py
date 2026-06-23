@@ -271,6 +271,41 @@ def test_request_image_edit_batch_retries_v1_endpoint_after_404(tmp_path, monkey
     assert results[0].image_bytes == b"ok"
 
 
+def test_request_image_edit_batch_raises_original_error_when_request_breaks_before_payload_assignment(tmp_path, monkeypatch):
+    source = tmp_path / "source.png"
+    source.write_bytes(b"png")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            raise RuntimeError("socket dropped")
+
+    monkeypatch.setattr(ai_image_edit_cli.httpx, "Client", FakeClient)
+
+    try:
+        ai_image_edit_cli.request_image_edit_batch(
+            api_key="test-key",
+            api_base="https://api.example.test/v1",
+            model="gpt-image-2",
+            prompt="keep subject",
+            size="1024x1024",
+            image_paths=[source],
+            batch_count=1,
+        )
+    except ValueError as exc:
+        assert "socket dropped" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_convert_image_to_transparent_background_removes_border_background(tmp_path):
     source = tmp_path / "collage.png"
     _make_collage_png(source)
