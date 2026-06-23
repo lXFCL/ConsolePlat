@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QApplication
 from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary
+from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary
 from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskRecord
 
@@ -134,16 +135,20 @@ def test_ai_edit_page_formal_mode_converts_and_splits_before_formalize(tmp_path,
             message="formalize done",
         )
 
-    monkeypatch.setattr("consoleplat.ui.ai_edit_page.convert_image_to_transparent_background", fake_convert)
-    monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)
+    monkeypatch.setattr("consoleplat.services.ai_edit_postprocess_service.convert_image_to_transparent_background", fake_convert)
+    monkeypatch.setattr("consoleplat.services.ai_edit_postprocess_service.split_collage_image_with_guides", fake_split)
     monkeypatch.setattr("consoleplat.ui.ai_edit_page.formalize_ai_edit_outputs", fake_formalize)
 
+    page._run_prepare_post_process()
     page._run_formalize_post_process()
 
     assert called["convert_path"] == str(source)
     assert called["split_path"] == str(converted)
     assert called["split_count"] == 2
-    assert called["formalize_split_paths"] == [part_a, part_b]
+    assert called["formalize_split_paths"] == [
+        tmp_path / "final-transparent" / "BO-1661.png",
+        tmp_path / "final-transparent" / "BO-1662.png",
+    ]
     assert page.current_task.round_sources == [
         str(tmp_path / "final-transparent" / "BO-1661.png"),
         str(tmp_path / "final-transparent" / "BO-1662.png"),
@@ -151,3 +156,40 @@ def test_ai_edit_page_formal_mode_converts_and_splits_before_formalize(tmp_path,
     assert page.current_task.outputs == [str(tmp_path / "final-product" / "BO-1661_BO fixed title.png")]
 
     page.close()
+
+
+def test_prepare_ai_edit_print_assets_renames_split_outputs_into_final_transparent_dir(tmp_path, monkeypatch):
+    source = tmp_path / "edited_round_01.png"
+    Image.new("RGBA", (64, 64), (255, 255, 255, 255)).save(source)
+
+    converted = tmp_path / "edited_round_01_transparent.png"
+    split_dir = tmp_path / "edited_round_01_transparent_split"
+    raw_part_a = split_dir / "edited_round_01_transparent_part_01.png"
+    raw_part_b = split_dir / "edited_round_01_transparent_part_02.png"
+
+    def fake_convert(path, output_dir=None):
+        Image.new("RGBA", (64, 64), (0, 0, 0, 0)).save(converted)
+        return str(converted)
+
+    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None):
+        split_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(raw_part_a)
+        Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(raw_part_b)
+        return [str(raw_part_a), str(raw_part_b)]
+
+    monkeypatch.setattr("consoleplat.services.ai_edit_postprocess_service.convert_image_to_transparent_background", fake_convert)
+    monkeypatch.setattr("consoleplat.services.ai_edit_postprocess_service.split_collage_image_with_guides", fake_split)
+
+    assets = prepare_ai_edit_print_assets(
+        source_paths=[source],
+        final_transparent_dir=tmp_path / "final-transparent",
+        prefix="BO",
+        start_number=1661,
+        split_collage=True,
+        split_count=2,
+    )
+
+    assert len(assets) == 1
+    assert assets[0].transparent_path == converted
+    assert [path.name for path in assets[0].split_paths] == ["BO-1661.png", "BO-1662.png"]
+    assert all(path.parent == tmp_path / "final-transparent" for path in assets[0].split_paths)

@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -32,6 +33,7 @@ from consoleplat.services.ai_edit_formalize_service import (
     backfill_xlsx_colors_from_transparent_dir,
     formalize_ai_edit_outputs,
 )
+from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.ai_image_edit_cli import convert_image_to_transparent_background, split_collage_image_with_guides
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
 from consoleplat.services.split_profile_store import SplitProfile, SplitProfileStore
@@ -121,6 +123,34 @@ class AIEditTaskDetailDialog(QDialog):
         self.meta_label = QLabel()
         layout.addWidget(self.meta_label)
 
+        self.path_panel = QFrame()
+        self.path_panel.setObjectName("subPanel")
+        path_layout = QGridLayout(self.path_panel)
+        path_layout.setContentsMargins(12, 12, 12, 12)
+        path_layout.setHorizontalSpacing(10)
+        path_layout.setVerticalSpacing(8)
+        self.batch_path_button = QPushButton("--")
+        self.batch_path_button.setObjectName("ghostButton")
+        self.batch_path_button.clicked.connect(lambda: self.open_path(self.batch_path_button.text()))
+        self.transparent_path_button = QPushButton("--")
+        self.transparent_path_button.setObjectName("ghostButton")
+        self.transparent_path_button.clicked.connect(lambda: self.open_path(self.transparent_path_button.text()))
+        self.product_path_button = QPushButton("--")
+        self.product_path_button.setObjectName("ghostButton")
+        self.product_path_button.clicked.connect(lambda: self.open_path(self.product_path_button.text()))
+        self.xlsx_path_button = QPushButton("--")
+        self.xlsx_path_button.setObjectName("ghostButton")
+        self.xlsx_path_button.clicked.connect(lambda: self.open_path(self.xlsx_path_button.text()))
+        path_layout.addWidget(QLabel("任务目录"), 0, 0)
+        path_layout.addWidget(self.batch_path_button, 0, 1)
+        path_layout.addWidget(QLabel("最终透明底"), 1, 0)
+        path_layout.addWidget(self.transparent_path_button, 1, 1)
+        path_layout.addWidget(QLabel("最终产品图"), 2, 0)
+        path_layout.addWidget(self.product_path_button, 2, 1)
+        path_layout.addWidget(QLabel("XLSX"), 3, 0)
+        path_layout.addWidget(self.xlsx_path_button, 3, 1)
+        layout.addWidget(self.path_panel)
+
         self.round_index_label = QLabel()
         self.source_path_label = QLabel("--")
         self.source_path_label.setWordWrap(True)
@@ -156,6 +186,11 @@ class AIEditTaskDetailDialog(QDialog):
         self.meta_label.setText(
             f"状态: {record.status}    阶段: {record.stage_text}    前缀: {record.job.prefix}    起始: {record.job.start_number}    轮数: {record.job.total_return_count}"
         )
+        self._set_path_button(self.batch_path_button, record.output_dir)
+        self._set_path_button(self.transparent_path_button, record.final_transparent_dir)
+        self._set_path_button(self.product_path_button, record.final_product_dir)
+        self._set_path_button(self.xlsx_path_button, record.xlsx_path)
+        self.open_output_dir_button.hide()
         sections: list[str] = []
         if record.failed:
             sections.append("失败项:\n" + "\n".join(str(item) for item in record.failed))
@@ -223,6 +258,23 @@ class AIEditTaskDetailDialog(QDialog):
             os.startfile(path)  # noqa: S606
         except Exception:
             subprocess.Popen(["explorer", path])
+
+    def _set_path_button(self, button: QPushButton, path: str) -> None:
+        text = str(path or "--")
+        button.setText(text)
+        button.setToolTip(text)
+        button.setEnabled(bool(path))
+
+    def open_path(self, path_text: str) -> None:
+        path = path_text if path_text and path_text != "--" else ""
+        if not path:
+            return
+        target = Path(path)
+        folder = target if target.is_dir() else target.parent
+        try:
+            os.startfile(str(folder))  # noqa: S606
+        except Exception:
+            subprocess.Popen(["explorer", str(folder)])
 
     def convert_current_round(self) -> None:
         if self._page is not None:
@@ -701,11 +753,33 @@ class AIEditPage(QWidget):
         self.current_task.failed = list(summary.failed or [])
         self.current_task.warnings = list(summary.warnings or [])
         self.current_task.round_sources = self._derive_round_sources_from_outputs(self.current_task.outputs)
-        if is_ok and not self.current_task.job.test_mode:
-            self._run_formalize_post_process()
+        if is_ok:
+            self._run_prepare_post_process()
+            if not self.current_task.job.test_mode:
+                self._run_formalize_post_process()
         self.status_label.setText(self.current_task.status)
         self._save_task_history()
         self._append_log(summary.message)
+
+    def _run_prepare_post_process(self) -> None:
+        if self.current_task is None:
+            return
+        prepared_assets = prepare_ai_edit_print_assets(
+            source_paths=self._derive_round_sources_from_outputs(self.current_task.outputs),
+            final_transparent_dir=self.current_task.final_transparent_dir or self.current_task.output_dir,
+            prefix=self.current_task.job.prefix,
+            start_number=self.current_task.job.start_number,
+            split_collage=self.current_task.job.split_collage,
+            split_count=self.current_task.job.split_count,
+            x_guides=list(self.current_task.split_profile.get("x_guides") or []),
+            y_guides=list(self.current_task.split_profile.get("y_guides") or []),
+        )
+        prepared_paths = [path for asset in prepared_assets for path in asset.split_paths]
+        if not prepared_paths:
+            return
+        self.current_task.outputs = [str(path) for path in prepared_paths]
+        self.current_task.round_sources = [str(path) for path in prepared_paths]
+        self.current_task.final_transparent_dir = str(Path(prepared_paths[0]).parent)
 
     def _run_formalize_post_process(self) -> None:
         if self.current_task is None:
@@ -716,10 +790,6 @@ class AIEditPage(QWidget):
             if self.current_task.job.prefix == "BO"
             else settings.szw_product_title.strip()
         )
-        prepared_paths = self._prepare_formalize_input_paths()
-        if prepared_paths:
-            self.current_task.outputs = [str(path) for path in prepared_paths]
-            self.current_task.round_sources = self._derive_round_sources_from_outputs(self.current_task.outputs)
         split_paths = self._collect_formalize_input_paths()
         if not split_paths:
             self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)

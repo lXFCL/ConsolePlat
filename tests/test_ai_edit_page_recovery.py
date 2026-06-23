@@ -232,7 +232,8 @@ def test_ai_edit_page_copy_split_outputs_and_detail_dialog(tmp_path, monkeypatch
     assert [path.name for path in outputs] == ["BO-1661.png", "BO-1662.png"]
     assert dialog.start_split_button.isEnabled() is True
     assert dialog.convert_transparent_button.isEnabled() is True
-    assert dialog.open_output_dir_button.text()
+    assert dialog.batch_path_button.text() == str(tmp_path / "output")
+    assert dialog.transparent_path_button.text() == str(tmp_path / "output")
 
     dialog.close()
     page.close()
@@ -611,12 +612,24 @@ def test_ai_edit_page_reads_remaining_stdout_on_finish(tmp_path, monkeypatch):
         title="AI 改图 BO-1661",
         job=AIEditJob(images=[], prompt="保留主体"),
         output_dir=str(tmp_path),
+        final_transparent_dir=str(tmp_path / "final-transparent"),
     )
 
     class FakeProcess:
         def readAllStandardOutput(self):
             return (
-                b'{"output_dir":"E:/tmp/out","outputs":["E:/tmp/out/a.png"],"failed":[],"warnings":[],"message":"ok"}'
+                bytes(
+                    json.dumps(
+                        {
+                            "output_dir": str(tmp_path / "out").replace("\\", "/"),
+                            "outputs": [str((tmp_path / "out" / "a.png")).replace("\\", "/")],
+                            "failed": [],
+                            "warnings": [],
+                            "message": "ok",
+                        }
+                    ),
+                    "utf-8",
+                )
             )
 
         def readAllStandardError(self):
@@ -629,8 +642,8 @@ def test_ai_edit_page_reads_remaining_stdout_on_finish(tmp_path, monkeypatch):
     page._on_process_finished(0, None)
 
     assert page.current_task.status == "完成"
-    assert page.current_task.output_dir == "E:/tmp/out"
-    assert page.current_task.outputs == ["E:/tmp/out/a.png"]
+    assert page.current_task.output_dir == str(tmp_path / "out").replace("\\", "/")
+    assert page.current_task.outputs
 
     page.close()
 
