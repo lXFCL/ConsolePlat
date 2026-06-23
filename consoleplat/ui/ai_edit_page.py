@@ -712,6 +712,7 @@ class AIEditPage(QWidget):
         self.current_task: AIEditTaskRecord | None = None
         self.tasks: list[AIEditTaskRecord] = []
         self._background_threads: list[QThread] = []
+        self._background_workers: list[AIEditBackgroundWorker] = []
         self._stdout_buffer = ""
         self._stderr_buffer = ""
         self._loading_preferences = False
@@ -1188,12 +1189,14 @@ class AIEditPage(QWidget):
         worker.finished.connect(worker.deleteLater)
         worker.failed.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda: self._cleanup_background_thread(thread))
+        thread.finished.connect(lambda: self._cleanup_background_job(thread, worker))
         self._background_threads.append(thread)
+        self._background_workers.append(worker)
         thread.start()
 
-    def _cleanup_background_thread(self, thread: QThread) -> None:
+    def _cleanup_background_job(self, thread: QThread, worker: AIEditBackgroundWorker) -> None:
         self._background_threads = [item for item in self._background_threads if item is not thread]
+        self._background_workers = [item for item in self._background_workers if item is not worker]
 
     def _find_task_by_id(self, task_id: str) -> AIEditTaskRecord | None:
         for record in self.tasks:
@@ -1651,4 +1654,5 @@ class AIEditPage(QWidget):
             thread.quit()
             thread.wait(1500)
         self._background_threads.clear()
+        self._background_workers.clear()
         super().closeEvent(event)

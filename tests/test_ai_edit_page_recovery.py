@@ -13,7 +13,7 @@ from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary
-from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskDetailDialog, AIEditTaskRecord
+from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskDetailDialog, AIEditTaskRecord, BackgroundTaskResult
 
 
 def _page_with_temp_store(tmp_path, monkeypatch, settings=None):
@@ -319,6 +319,82 @@ def test_ai_edit_page_split_current_round_schedules_background_job(tmp_path, mon
     page.split_current_round(record, str(transparent))
 
     assert scheduled == {"action": "split_current_round", "task_id": "20260623192100"}
+
+    page.close()
+
+
+def test_ai_edit_page_start_background_job_retains_worker_reference(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623192200",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661),
+        output_dir=str(tmp_path),
+    )
+
+    started = {}
+
+    def fake_start(self):
+        started["called"] = True
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.QThread.start", fake_start)
+
+    page._start_background_job("post_process", record)
+
+    assert started["called"] is True
+    assert len(page._background_threads) == 1
+    assert len(page._background_workers) == 1
+
+    page.close()
+
+
+def test_ai_edit_page_background_post_process_result_updates_formal_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623192300",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661, test_mode=False),
+        output_dir=str(tmp_path),
+        final_transparent_dir=str(tmp_path / "final-transparent"),
+        final_product_dir=str(tmp_path / "final-product"),
+        xlsx_path=str(tmp_path / "batch.xlsx"),
+    )
+    page.tasks = [record]
+    page.current_task = record
+
+    result = BackgroundTaskResult(
+        action="post_process",
+        task_id="20260623192300",
+        outputs=[str(tmp_path / "final-product" / "BO-1661_title.png")],
+        round_sources=[str(tmp_path / "final-transparent" / "BO-1661.png")],
+        final_transparent_dir=str(tmp_path / "final-transparent"),
+        final_product_dir=str(tmp_path / "final-product"),
+        xlsx_path=str(tmp_path / "batch.xlsx"),
+        warnings=["synced"],
+        logs=["formalize done"],
+    )
+
+    page._on_background_job_finished(result)
+
+    assert page.current_task.outputs == [str(tmp_path / "final-product" / "BO-1661_title.png")]
+    assert page.current_task.round_sources == [str(tmp_path / "final-transparent" / "BO-1661.png")]
+    assert page.current_task.final_transparent_dir == str(tmp_path / "final-transparent")
+    assert page.current_task.final_product_dir == str(tmp_path / "final-product")
+    assert page.current_task.xlsx_path == str(tmp_path / "batch.xlsx")
+    assert "synced" in page.current_task.warnings
+    assert any("formalize done" in line for line in page.current_task.logs)
 
     page.close()
 
