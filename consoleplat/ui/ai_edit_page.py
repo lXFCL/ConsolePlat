@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import (
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, PosAiImgAdapter
 from consoleplat.config import AppSettings, SettingsStore
+from consoleplat.services.ai_edit_formalize_service import backfill_xlsx_colors_from_transparent_dir
 from consoleplat.services.ai_image_edit_cli import convert_image_to_transparent_background, split_collage_image_with_guides
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
 from consoleplat.services.split_profile_store import SplitProfile, SplitProfileStore
@@ -58,6 +59,7 @@ class AIEditTaskRecord:
     failed: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     round_sources: list[str] = field(default_factory=list)
+    collage_transparent_sources: list[str] = field(default_factory=list)
     active_round_index: int = 0
     final_transparent_dir: str = ""
     final_product_dir: str = ""
@@ -85,6 +87,18 @@ def _format_task_timestamp(value: str) -> str:
     if len(clean) == 12:
         return f"{clean[:4]}.{clean[4:8]}.{clean[8:12]}"
     return str(value or "")
+
+
+def _progress_from_text(text: str) -> int | None:
+    matches: list[int] = []
+    for token in str(text or "").replace("，", " ").replace(",", " ").split():
+        if token.endswith("%"):
+            number = token[:-1]
+            if number.isdigit():
+                matches.append(int(number))
+    if not matches:
+        return None
+    return max(0, min(100, matches[-1]))
 
 
 class AIEditTaskDetailDialog(QDialog):
@@ -146,6 +160,13 @@ class AIEditTaskDetailDialog(QDialog):
         if record.round_sources:
             return list(record.round_sources)
         outputs = [path for path in record.outputs if path.lower().endswith(".png")]
+        transparent = [
+            path
+            for path in outputs
+            if "transparent" in Path(path).stem.lower() and "_part_" not in Path(path).stem.lower()
+        ]
+        if transparent:
+            return transparent
         non_split = [path for path in outputs if "_part_" not in Path(path).stem.lower()]
         return non_split or outputs
 
@@ -641,6 +662,9 @@ class AIEditPage(QWidget):
             stripped = line.strip()
             if stripped:
                 self.current_task.logs.append(f"{time_text}  {stripped}")
+                progress = _progress_from_text(stripped)
+                if progress is not None:
+                    self.current_task.progress_percent = progress
         self._save_task_history()
 
     def _update_current_task(
@@ -786,6 +810,7 @@ class AIEditPage(QWidget):
             "failed": list(record.failed),
             "warnings": list(record.warnings),
             "round_sources": list(record.round_sources),
+            "collage_transparent_sources": list(record.collage_transparent_sources),
             "active_round_index": int(record.active_round_index or 0),
             "final_transparent_dir": record.final_transparent_dir,
             "final_product_dir": record.final_product_dir,
@@ -845,18 +870,34 @@ class AIEditPage(QWidget):
             failed=[str(path) for path in (payload.get("failed") or [])],
             warnings=[str(path) for path in (payload.get("warnings") or [])],
             round_sources=[str(path) for path in (payload.get("round_sources") or [])],
+            collage_transparent_sources=[str(path) for path in (payload.get("collage_transparent_sources") or [])],
             active_round_index=max(0, int(payload.get("active_round_index") or 0)),
             final_transparent_dir=str(payload.get("final_transparent_dir") or ""),
             final_product_dir=str(payload.get("final_product_dir") or ""),
             xlsx_path=str(payload.get("xlsx_path") or ""),
             split_profile=dict(payload.get("split_profile") or {}),
         )
+        if record.collage_transparent_sources and not record.round_sources:
+            record.round_sources = list(record.collage_transparent_sources)
         return record
 
     def _save_task_history(self) -> None:
         if self.task_store is None:
             return
         self.task_store.save([self._task_to_dict(record) for record in self.tasks])
+
+    def _backfill_history_xlsx_colors(self, record: AIEditTaskRecord) -> None:
+        xlsx_path = Path(record.xlsx_path) if record.xlsx_path else None
+        final_transparent_dir = Path(record.final_transparent_dir) if record.final_transparent_dir else None
+        if xlsx_path is None or final_transparent_dir is None:
+            return
+        try:
+            backfill_xlsx_colors_from_transparent_dir(
+                xlsx_path=xlsx_path,
+                final_transparent_dir=final_transparent_dir,
+            )
+        except Exception:
+            return
 
     def _load_task_history(self) -> None:
         if self.task_store is None:
@@ -865,6 +906,7 @@ class AIEditPage(QWidget):
             record = self._task_from_dict(payload)
             if record is None:
                 continue
+            self._backfill_history_xlsx_colors(record)
             self.tasks.append(record)
         self._rebuild_task_list()
 
