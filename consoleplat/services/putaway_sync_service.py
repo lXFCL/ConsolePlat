@@ -33,6 +33,7 @@ def sync_putaway_assets(
     source_xlsx_path: str | Path,
     target_data_dir: str | Path,
     replace_image_names: set[str] | None = None,
+    force_replace: bool = False,
 ) -> PutawaySyncSummary:
     source_images_dir = Path(source_images_dir)
     source_xlsx_path = Path(source_xlsx_path)
@@ -54,13 +55,15 @@ def sync_putaway_assets(
 
     for image in images:
         target = images_target_dir / image.name
-        if target.exists() and replace_image_names and image.name not in replace_image_names:
+        if target.exists() and not force_replace and replace_image_names and image.name not in replace_image_names:
             continue
         shutil.copy2(image, target)
         copied_images += 1
 
     xlsx_target_path = target_data_dir / source_xlsx_path.name
     xlsx_target_path.parent.mkdir(parents=True, exist_ok=True)
+    if xlsx_target_path.exists() and not force_replace:
+        xlsx_target_path.unlink(missing_ok=True)
     shutil.copy2(source_xlsx_path, xlsx_target_path)
 
     return PutawaySyncSummary(

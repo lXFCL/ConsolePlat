@@ -56,6 +56,7 @@ class SettingsPage(QWidget):
         self.posai_gallery_root_edit = self._line_edit("posaiGalleryRootEdit", "E:/1PythonProject/PosAiImg/图库")
         self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "E:/1PythonProject/PosAiImg/批量贴图结果")
         self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "E:/1PythonProject/PosAiImg/衣物对应的xlsx")
+        self.posai_model_root_edit = self._line_edit("posaiModelRootEdit", "E:/1PythonProject/PosAiImg/模特图-干净")
 
         self.ai_provider_combo = QComboBox()
         self.ai_provider_combo.setObjectName("aiProviderCombo")
@@ -184,6 +185,7 @@ class SettingsPage(QWidget):
         path_form.addRow("图库目录", self._browse_row(self.posai_gallery_root_edit, self.choose_posai_gallery_root))
         path_form.addRow("产品图目录", self._browse_row(self.posai_mockup_root_edit, self.choose_posai_mockup_root))
         path_form.addRow("XLSX 目录", self._browse_row(self.posai_xlsx_root_edit, self.choose_posai_xlsx_root))
+        path_form.addRow("模特底图目录", self._browse_row(self.posai_model_root_edit, self.choose_posai_model_root))
         layout.addLayout(path_form)
 
         provider_panel = QFrame()
@@ -403,6 +405,7 @@ class SettingsPage(QWidget):
         self.posai_gallery_root_edit.setText(settings.posai_gallery_root)
         self.posai_mockup_root_edit.setText(settings.posai_mockup_root)
         self.posai_xlsx_root_edit.setText(settings.posai_xlsx_root)
+        self.posai_model_root_edit.setText(settings.posai_model_root)
         self._load_providers(settings)
         self.ai_edit_prompt_edit.setPlainText(settings.ai_edit_prompt or DEFAULT_AI_EDIT_PROMPT)
 
@@ -457,6 +460,7 @@ class SettingsPage(QWidget):
             posai_gallery_root=self.posai_gallery_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/图库",
             posai_mockup_root=self.posai_mockup_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/批量贴图结果",
             posai_xlsx_root=self.posai_xlsx_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/衣物对应的xlsx",
+            posai_model_root=self.posai_model_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/模特图-干净",
             putaway_project_dir=self.putaway_project_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot",
             putaway_data_dir=self.putaway_data_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot/data",
             putaway_log_dir=self.putaway_log_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot/log",
@@ -500,6 +504,9 @@ class SettingsPage(QWidget):
 
     def choose_posai_xlsx_root(self) -> None:
         self._choose_directory_for(self.posai_xlsx_root_edit, "选择 XLSX 目录")
+
+    def choose_posai_model_root(self) -> None:
+        self._choose_directory_for(self.posai_model_root_edit, "选择模特底图目录")
 
     def choose_putaway_project_dir(self) -> None:
         self._choose_directory_for(self.putaway_project_dir_edit, "选择 Putaway 项目目录")

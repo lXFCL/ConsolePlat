@@ -7,7 +7,7 @@ from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary, rename_split_outputs
 from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
-from consoleplat.services.putaway_sync_service import PutawaySyncSummary
+from consoleplat.services.putaway_sync_service import PutawaySyncSummary, sync_putaway_assets
 from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskRecord
 
 
@@ -232,6 +232,35 @@ def test_rename_split_outputs_keeps_existing_final_transparent_files(tmp_path):
 
     assert outputs == [source]
     assert source.exists() is True
+
+
+def test_sync_putaway_assets_can_force_replace_existing_outputs(tmp_path):
+    source_images_dir = tmp_path / "products"
+    source_images_dir.mkdir(parents=True, exist_ok=True)
+    source_image = source_images_dir / "BO-1661_title.png"
+    source_image.write_bytes(b"new-image")
+    source_xlsx_path = tmp_path / "batch.xlsx"
+    source_xlsx_path.write_bytes(b"new-xlsx")
+
+    target_data_dir = tmp_path / "data"
+    target_image = target_data_dir / "pic" / "1" / source_image.name
+    target_image.parent.mkdir(parents=True, exist_ok=True)
+    target_image.write_bytes(b"old-image")
+    target_xlsx = target_data_dir / source_xlsx_path.name
+    target_xlsx.parent.mkdir(parents=True, exist_ok=True)
+    target_xlsx.write_bytes(b"old-xlsx")
+
+    summary = sync_putaway_assets(
+        source_images_dir=source_images_dir,
+        source_xlsx_path=source_xlsx_path,
+        target_data_dir=target_data_dir,
+        replace_image_names={source_image.name},
+        force_replace=True,
+    )
+
+    assert summary.ok is True
+    assert target_image.read_bytes() == b"new-image"
+    assert target_xlsx.read_bytes() == b"new-xlsx"
 
 
 def test_ai_edit_page_manual_split_rebuilds_final_transparent_outputs(tmp_path, monkeypatch):

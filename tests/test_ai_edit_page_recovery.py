@@ -232,11 +232,43 @@ def test_ai_edit_page_copy_split_outputs_and_detail_dialog(tmp_path, monkeypatch
     assert [path.name for path in outputs] == ["BO-1661.png", "BO-1662.png"]
     assert dialog.start_split_button.isEnabled() is True
     assert dialog.convert_transparent_button.isEnabled() is True
+    assert dialog.export_product_button.isEnabled() is False
+    assert dialog.export_xlsx_button.isEnabled() is False
+    assert dialog.sync_putaway_button.isEnabled() is False
     assert dialog.batch_path_button.text() == str(tmp_path / "output")
     assert dialog.transparent_path_button.text() == str(tmp_path / "output")
 
     dialog.close()
     page.close()
+
+
+def test_ai_edit_task_detail_enables_batch_action_buttons_when_outputs_exist(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    product_dir = tmp_path / "final-product"
+    product_dir.mkdir(parents=True, exist_ok=True)
+    (product_dir / "BO-1661_title.png").write_bytes(b"image")
+    xlsx_path = tmp_path / "batch.xlsx"
+    xlsx_path.write_bytes(b"xlsx")
+    source = tmp_path / "edited_round_01_transparent.png"
+    source.write_bytes(b"image")
+
+    record = AIEditTaskRecord(
+        task_id="20260623123001",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="prompt", prefix="BO", start_number=1661),
+        round_sources=[str(source)],
+        final_product_dir=str(product_dir),
+        xlsx_path=str(xlsx_path),
+    )
+
+    dialog = AIEditTaskDetailDialog(record)
+
+    assert dialog.export_product_button.isEnabled() is True
+    assert dialog.export_xlsx_button.isEnabled() is True
+    assert dialog.sync_putaway_button.isEnabled() is True
+
+    dialog.close()
 
 
 def test_ai_edit_page_finalize_task_schedules_post_process_in_background(tmp_path, monkeypatch):
@@ -1061,6 +1093,67 @@ def test_ai_edit_page_reads_remaining_stdout_on_finish(tmp_path, monkeypatch):
     assert page.current_task.status == "完成"
     assert page.current_task.output_dir == str(tmp_path / "out").replace("\\", "/")
     assert page.current_task.outputs
+
+    page.close()
+
+
+def test_ai_edit_page_formal_mode_passes_model_dir_from_settings(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    model_root = tmp_path / "models"
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            bo_product_title="BO title",
+            putaway_data_dir=str(tmp_path / "putaway-data"),
+            posai_model_root=str(model_root),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    transparent_dir = tmp_path / "final-transparent"
+    transparent_dir.mkdir(parents=True, exist_ok=True)
+    split_path = transparent_dir / "BO-1661.png"
+    split_path.write_bytes(b"image")
+    page.current_task = AIEditTaskRecord(
+        task_id="20260623130110",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            output_dir=tmp_path / "output",
+            prefix="BO",
+            start_number=1661,
+            split_collage=False,
+            split_count=1,
+            test_mode=False,
+        ),
+        output_dir=str(tmp_path / "output"),
+        outputs=[str(split_path)],
+        final_transparent_dir=str(transparent_dir),
+        final_product_dir=str(tmp_path / "final-product"),
+        xlsx_path=str(tmp_path / "final-product.xlsx"),
+    )
+
+    captured = {}
+
+    def fake_formalize(**kwargs):
+        captured["model_dir"] = kwargs["model_dir"]
+        return AIEditFormalizeSummary(
+            ok=True,
+            renamed_outputs=[str(split_path)],
+            product_outputs=[str(tmp_path / "final-product" / "BO-1661_title.png")],
+            xlsx_path=str(tmp_path / "final-product.xlsx"),
+            putaway=PutawaySyncSummary(ok=True, message="synced"),
+            message="formalize done",
+        )
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.formalize_ai_edit_outputs", fake_formalize)
+
+    page._run_formalize_post_process()
+
+    assert captured["model_dir"] == model_root
 
     page.close()
 

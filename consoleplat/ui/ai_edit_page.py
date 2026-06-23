@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import os
 import site
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -42,6 +43,7 @@ from consoleplat.services.ai_edit_formalize_service import (
 from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.ai_image_edit_cli import convert_image_to_transparent_background, split_collage_image_with_guides
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
+from consoleplat.services.putaway_sync_service import IMAGE_SUFFIXES, sync_putaway_assets
 from consoleplat.services.split_profile_store import SplitProfile, SplitProfileStore
 from consoleplat.services.task_store import TaskStore
 
@@ -154,6 +156,7 @@ class AIEditBackgroundWorker(QObject):
                 final_product_dir=Path(self.record.final_product_dir),
                 xlsx_path=Path(self.record.xlsx_path),
                 putaway_data_dir=Path(self.settings.putaway_data_dir),
+                model_dir=Path(self.settings.posai_model_root),
                 prefix=self.record.job.prefix,
                 start_number=self.record.job.start_number,
                 product_title=product_title,
@@ -340,26 +343,37 @@ class AIEditTaskDetailDialog(QDialog):
         layout.addWidget(self.round_index_label)
         layout.addWidget(self.source_path_label)
 
-        nav = QHBoxLayout()
+        row_one = QHBoxLayout()
         self.prev_round_button = QPushButton("上一轮")
         self.prev_round_button.clicked.connect(self.show_previous_round)
         self.next_round_button = QPushButton("下一轮")
         self.next_round_button.clicked.connect(self.show_next_round)
         self.convert_transparent_button = QPushButton("转透明底")
         self.convert_transparent_button.clicked.connect(self.convert_current_round)
+        row_one.addWidget(self.prev_round_button)
+        row_one.addWidget(self.next_round_button)
+        row_one.addWidget(self.convert_transparent_button)
+        row_one.addStretch(1)
+
+        row_two = QHBoxLayout()
         self.start_split_button = QPushButton("直接切割")
         self.start_split_button.clicked.connect(self.split_current_round)
         self.edit_split_profile_button = QPushButton("手动切线")
         self.edit_split_profile_button.clicked.connect(self.edit_split_profile)
-        self.open_output_dir_button = QPushButton("打开印花文件夹")
-        self.open_output_dir_button.clicked.connect(self.open_output_dir)
-        nav.addWidget(self.prev_round_button)
-        nav.addWidget(self.next_round_button)
-        nav.addWidget(self.convert_transparent_button)
-        nav.addWidget(self.start_split_button)
-        nav.addWidget(self.edit_split_profile_button)
-        nav.addWidget(self.open_output_dir_button)
-        layout.addLayout(nav)
+        self.export_product_button = QPushButton("导出产品图")
+        self.export_product_button.clicked.connect(self.export_product_images)
+        self.export_xlsx_button = QPushButton("导出 xlsx")
+        self.export_xlsx_button.clicked.connect(self.export_xlsx)
+        self.sync_putaway_button = QPushButton("同步到上架 data")
+        self.sync_putaway_button.clicked.connect(self.sync_to_putaway_data)
+        row_two.addWidget(self.start_split_button)
+        row_two.addWidget(self.edit_split_profile_button)
+        row_two.addWidget(self.export_product_button)
+        row_two.addWidget(self.export_xlsx_button)
+        row_two.addWidget(self.sync_putaway_button)
+        row_two.addStretch(1)
+        layout.addLayout(row_one)
+        layout.addLayout(row_two)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
@@ -376,7 +390,6 @@ class AIEditTaskDetailDialog(QDialog):
         self._set_path_button(self.transparent_path_button, record.final_transparent_dir)
         self._set_path_button(self.product_path_button, record.final_product_dir)
         self._set_path_button(self.xlsx_path_button, record.xlsx_path)
-        self.open_output_dir_button.hide()
         sections: list[str] = []
         if record.failed:
             sections.append("失败项:\n" + "\n".join(str(item) for item in record.failed))
@@ -417,6 +430,9 @@ class AIEditTaskDetailDialog(QDialog):
             self.convert_transparent_button.setEnabled(False)
             self.start_split_button.setEnabled(False)
             self.edit_split_profile_button.setEnabled(False)
+            self.export_product_button.setEnabled(False)
+            self.export_xlsx_button.setEnabled(False)
+            self.sync_putaway_button.setEnabled(False)
             return
         self._active_source_index = max(0, min(self._active_source_index, len(sources) - 1))
         self.round_index_label.setText(f"{self._active_source_index + 1}/{len(sources)}")
@@ -426,6 +442,19 @@ class AIEditTaskDetailDialog(QDialog):
         self.convert_transparent_button.setEnabled(True)
         self.start_split_button.setEnabled(True)
         self.edit_split_profile_button.setEnabled(True)
+        has_products = self._has_product_outputs()
+        has_xlsx = bool(self.record.xlsx_path and Path(self.record.xlsx_path).exists())
+        self.export_product_button.setEnabled(has_products)
+        self.export_xlsx_button.setEnabled(has_xlsx)
+        self.sync_putaway_button.setEnabled(has_products and has_xlsx)
+
+    def _has_product_outputs(self) -> bool:
+        if not self.record.final_product_dir:
+            return False
+        directory = Path(self.record.final_product_dir)
+        if not directory.exists() or not directory.is_dir():
+            return False
+        return any(path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES for path in directory.iterdir())
 
     def show_previous_round(self) -> None:
         if self._active_source_index > 0:
@@ -437,15 +466,6 @@ class AIEditTaskDetailDialog(QDialog):
         if self._active_source_index < len(sources) - 1:
             self._active_source_index += 1
             self._refresh_round_view()
-
-    def open_output_dir(self) -> None:
-        path = self.record.final_product_dir or self.record.final_transparent_dir or self.record.output_dir
-        if not path:
-            return
-        try:
-            os.startfile(path)  # noqa: S606
-        except Exception:
-            subprocess.Popen(["explorer", path])
 
     def _set_path_button(self, button: QPushButton, path: str) -> None:
         text = str(path or "--")
@@ -475,6 +495,18 @@ class AIEditTaskDetailDialog(QDialog):
     def edit_split_profile(self) -> None:
         if self._page is not None:
             self._page.edit_split_profile(self.record, self._find_split_source(self.record))
+
+    def export_product_images(self) -> None:
+        if self._page is not None:
+            self._page.export_task_product_images(self.record)
+
+    def export_xlsx(self) -> None:
+        if self._page is not None:
+            self._page.export_task_xlsx(self.record)
+
+    def sync_to_putaway_data(self) -> None:
+        if self._page is not None:
+            self._page.sync_task_to_putaway_data(self.record)
 
 
 class SplitProfileEditorDialog(QDialog):
@@ -1298,6 +1330,7 @@ class AIEditPage(QWidget):
                 final_product_dir=Path(self.current_task.final_product_dir),
                 xlsx_path=Path(self.current_task.xlsx_path),
                 putaway_data_dir=Path(settings.putaway_data_dir),
+                model_dir=Path(settings.posai_model_root),
                 prefix=self.current_task.job.prefix,
                 start_number=self.current_task.job.start_number,
                 product_title=product_title,
@@ -1428,6 +1461,82 @@ class AIEditPage(QWidget):
         elif not record.final_transparent_dir:
             record.final_transparent_dir = str(target_root)
         return outputs
+
+    def _image_files_in_dir(self, folder: Path) -> list[Path]:
+        if not folder.exists() or not folder.is_dir():
+            return []
+        return sorted(
+            [path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES],
+            key=lambda path: path.name.lower(),
+        )
+
+    def export_task_product_images(self, record: AIEditTaskRecord) -> None:
+        source_dir = Path(record.final_product_dir) if record.final_product_dir else None
+        if source_dir is None or not source_dir.exists():
+            self._append_log(f"导出产品图失败：最终产品图目录不存在 {record.final_product_dir or '--'}")
+            return
+        images = self._image_files_in_dir(source_dir)
+        if not images:
+            self._append_log(f"导出产品图失败：最终产品图目录没有图片 {source_dir}")
+            return
+        target_dir = Path(record.output_dir) / "导出产品图"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        replaced = 0
+        for image in images:
+            target = target_dir / image.name
+            if target.exists():
+                replaced += 1
+            shutil.copy2(image, target)
+        self._append_log(f"已导出产品图 {len(images)} 张到 {target_dir}，覆盖 {replaced} 张")
+        self._refresh_task_detail_dialog()
+
+    def export_task_xlsx(self, record: AIEditTaskRecord) -> None:
+        source_path = Path(record.xlsx_path) if record.xlsx_path else None
+        if source_path is None or not source_path.exists():
+            self._append_log(f"导出 xlsx 失败：XLSX 不存在 {record.xlsx_path or '--'}")
+            return
+        target_dir = Path(record.output_dir) / "导出xlsx"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / source_path.name
+        replaced = target_path.exists()
+        shutil.copy2(source_path, target_path)
+        replace_text = "，已覆盖同名文件" if replaced else ""
+        self._append_log(f"已导出 xlsx 到 {target_path}{replace_text}")
+        self._refresh_task_detail_dialog()
+
+    def sync_task_to_putaway_data(self, record: AIEditTaskRecord) -> None:
+        source_images_dir = Path(record.final_product_dir) if record.final_product_dir else None
+        source_xlsx_path = Path(record.xlsx_path) if record.xlsx_path else None
+        settings = self.settings_store.load()
+        if source_images_dir is None or not source_images_dir.exists():
+            message = f"同步到上架 data 失败：最终产品图目录不存在 {record.final_product_dir or '--'}"
+            record.failed = list(record.failed) + [message]
+            self._append_log(message)
+            self._save_task_history()
+            self._refresh_task_detail_dialog()
+            return
+        if source_xlsx_path is None or not source_xlsx_path.exists():
+            message = f"同步到上架 data 失败：XLSX 不存在 {record.xlsx_path or '--'}"
+            record.failed = list(record.failed) + [message]
+            self._append_log(message)
+            self._save_task_history()
+            self._refresh_task_detail_dialog()
+            return
+        summary = sync_putaway_assets(
+            source_images_dir=source_images_dir,
+            source_xlsx_path=source_xlsx_path,
+            target_data_dir=Path(settings.putaway_data_dir),
+            force_replace=True,
+        )
+        if not summary.ok:
+            record.failed = list(record.failed) + [summary.message]
+            self._append_log(f"同步到上架 data 失败：{summary.message}")
+        else:
+            self._append_log(
+                f"已同步到上架 data：图片目录 {summary.images_target_dir}，XLSX {summary.xlsx_target_path}"
+            )
+        self._save_task_history()
+        self._refresh_task_detail_dialog()
 
     def _replace_split_outputs(self, record: AIEditTaskRecord, source_path: str, new_split_paths: list[str]) -> None:
         if source_path not in record.outputs:

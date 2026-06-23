@@ -50,7 +50,7 @@ def safe_filename(text: str) -> str:
     return re.sub(r"_+", "_", cleaned).strip(" ._")
 
 
-def choose_white_model(model_dir: Path = DEFAULT_MODEL_DIR) -> Path:
+def choose_white_model(model_dir: Path) -> Path:
     for name in DEFAULT_WHITE_MODEL_NAMES:
         path = model_dir / name
         if path.exists():
@@ -61,7 +61,7 @@ def choose_white_model(model_dir: Path = DEFAULT_MODEL_DIR) -> Path:
     raise FileNotFoundError(f"未找到白色模特图：{model_dir}")
 
 
-def choose_black_model(model_dir: Path = DEFAULT_MODEL_DIR) -> Path:
+def choose_black_model(model_dir: Path) -> Path:
     for name in DEFAULT_BLACK_MODEL_NAMES:
         path = model_dir / name
         if path.exists():
@@ -135,8 +135,10 @@ def build_product_images(
     print_paths: list[Path],
     final_product_dir: Path,
     product_title: str,
-    model_dir: Path = DEFAULT_MODEL_DIR,
+    model_dir: Path,
 ) -> tuple[list[Path], dict[str, str]]:
+    if not model_dir.exists() or not model_dir.is_dir():
+        raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
     final_product_dir.mkdir(parents=True, exist_ok=True)
     white_model = choose_white_model(model_dir)
     black_model = choose_black_model(model_dir)
@@ -267,12 +269,15 @@ def formalize_ai_edit_outputs(
     final_product_dir: Path,
     xlsx_path: Path,
     putaway_data_dir: Path,
+    model_dir: Path,
     prefix: str,
     start_number: int,
     product_title: str,
     xlsx_batch_start_number: int | None = None,
     xlsx_batch_count: int | None = None,
 ) -> AIEditFormalizeSummary:
+    if not model_dir.exists() or not model_dir.is_dir():
+        raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
     renamed_outputs = rename_split_outputs(
         split_paths=split_paths,
         final_transparent_dir=final_transparent_dir,
@@ -283,6 +288,7 @@ def formalize_ai_edit_outputs(
         print_paths=renamed_outputs,
         final_product_dir=final_product_dir,
         product_title=product_title,
+        model_dir=model_dir,
     )
     write_xlsx(
         xlsx_path=xlsx_path,

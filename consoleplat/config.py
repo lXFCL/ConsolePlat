@@ -145,6 +145,7 @@ class AppSettings:
     posai_gallery_root: str = "E:/1PythonProject/PosAiImg/图库"
     posai_mockup_root: str = "E:/1PythonProject/PosAiImg/批量贴图结果"
     posai_xlsx_root: str = "E:/1PythonProject/PosAiImg/衣物对应的xlsx"
+    posai_model_root: str = "E:/1PythonProject/PosAiImg/模特图-干净"
     putaway_project_dir: str = "E:/1PythonProject/PutawayAiRobot"
     putaway_data_dir: str = "E:/1PythonProject/PutawayAiRobot/data"
     putaway_log_dir: str = "E:/1PythonProject/PutawayAiRobot/log"
@@ -254,6 +255,7 @@ class SettingsStore:
             posai_gallery_root=str(data.get("posai_gallery_root") or "E:/1PythonProject/PosAiImg/图库"),
             posai_mockup_root=str(data.get("posai_mockup_root") or "E:/1PythonProject/PosAiImg/批量贴图结果"),
             posai_xlsx_root=str(data.get("posai_xlsx_root") or "E:/1PythonProject/PosAiImg/衣物对应的xlsx"),
+            posai_model_root=str(data.get("posai_model_root") or "E:/1PythonProject/PosAiImg/模特图-干净"),
             putaway_project_dir=str(data.get("putaway_project_dir") or "E:/1PythonProject/PutawayAiRobot"),
             putaway_data_dir=str(data.get("putaway_data_dir") or "E:/1PythonProject/PutawayAiRobot/data"),
             putaway_log_dir=str(data.get("putaway_log_dir") or "E:/1PythonProject/PutawayAiRobot/log"),
@@ -318,6 +320,7 @@ class SettingsStore:
             "posai_gallery_root": settings.posai_gallery_root or "E:/1PythonProject/PosAiImg/图库",
             "posai_mockup_root": settings.posai_mockup_root or "E:/1PythonProject/PosAiImg/批量贴图结果",
             "posai_xlsx_root": settings.posai_xlsx_root or "E:/1PythonProject/PosAiImg/衣物对应的xlsx",
+            "posai_model_root": settings.posai_model_root or "E:/1PythonProject/PosAiImg/模特图-干净",
             "putaway_project_dir": settings.putaway_project_dir or "E:/1PythonProject/PutawayAiRobot",
             "putaway_data_dir": settings.putaway_data_dir or "E:/1PythonProject/PutawayAiRobot/data",
             "putaway_log_dir": settings.putaway_log_dir or "E:/1PythonProject/PutawayAiRobot/log",

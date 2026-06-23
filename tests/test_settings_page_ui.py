@@ -231,3 +231,34 @@ def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
             assert form.horizontalSpacing() <= 12
 
     page.close()
+
+
+def test_settings_page_loads_posai_model_root(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(posai_model_root="E:/1PythonProject/PosAiImg/模特图-干净"))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    edits = {edit.objectName(): edit.text() for edit in page.findChildren(QLineEdit)}
+    assert edits["posaiModelRootEdit"] == "E:/1PythonProject/PosAiImg/模特图-干净"
+
+    page.close()
+
+
+def test_settings_page_save_persists_posai_model_root(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page.findChild(QLineEdit, "posaiModelRootEdit").setText("E:/1PythonProject/PosAiImg/custom-models")
+    page.save_settings()
+
+    saved = SettingsStore(path).load()
+    assert saved.posai_model_root == "E:/1PythonProject/PosAiImg/custom-models"
+
+    page.close()
