@@ -1,6 +1,6 @@
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.settings_page import SettingsPage
-from PyQt5.QtWidgets import QApplication, QComboBox, QFormLayout, QLineEdit, QPushButton, QSpinBox, QTextEdit
+from PyQt5.QtWidgets import QApplication, QComboBox, QFormLayout, QLineEdit, QPushButton, QSpinBox
 
 
 def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):

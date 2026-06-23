@@ -59,8 +59,9 @@ def test_product_publish_page_toggles_generation_parameters(tmp_path, monkeypatc
     assert not page.local_params_panel.isHidden()
     assert page.ai_params_panel.isHidden()
 
-    page.generation_mode_combo.setCurrentText("AI 改图")
+    page.generation_mode_combo.setCurrentIndex(1)
 
+    assert page.generation_mode_combo.currentText() == "AI 改图"
     assert not page.ai_params_panel.isHidden()
     assert page.local_params_panel.isHidden()
     assert page.count_label.text() == "本次轮数"
@@ -78,14 +79,14 @@ def test_product_publish_page_moves_generation_mode_above_count_and_updates_labe
     labels = [page.form_layout.labelForField(widget).text() for widget in (page.generation_mode_combo, page.count_spin)]
     assert labels == ["生图方式", "计划张数"]
 
-    page.generation_mode_combo.setCurrentText("AI 改图")
+    page.generation_mode_combo.setCurrentIndex(1)
 
     labels = [page.form_layout.labelForField(widget).text() for widget in (page.generation_mode_combo, page.count_spin)]
     assert labels == ["生图方式", "本次轮数"]
     assert page.count_spin.value() == 2
     assert page.count_spin.suffix() == " 轮"
 
-    page.generation_mode_combo.setCurrentText("本地生图")
+    page.generation_mode_combo.setCurrentIndex(0)
 
     assert page.count_label.text() == "计划张数"
     assert page.count_spin.value() == 10
@@ -165,7 +166,7 @@ def test_product_publish_page_builds_local_and_ai_jobs(tmp_path, monkeypatch):
     assert local_job.count == 5
     assert local_job.test_mode is False
 
-    page.generation_mode_combo.setCurrentText("AI 改图")
+    page.generation_mode_combo.setCurrentIndex(1)
     page._add_reference_image(str(image))
     page.ai_prompt_edit.setPlainText("keep subject and generate print")
 
@@ -547,12 +548,12 @@ def test_product_publish_page_auto_saves_adjustable_config(tmp_path, monkeypatch
     page.prefix_combo.setCurrentText("SZW")
     page.task_name_edit.setText("自动保存任务")
     page.start_spin.setValue(4321)
-    page.generation_mode_combo.setCurrentText("AI 改图")
+    page.generation_mode_combo.setCurrentIndex(1)
     page.count_spin.setValue(3)
     page.test_mode_check.setChecked(False)
     page._add_reference_image(str(reference))
     page.ai_prompt_edit.setPlainText("save ai prompt")
-    page.generation_mode_combo.setCurrentText("本地生图")
+    page.generation_mode_combo.setCurrentIndex(0)
     page.count_spin.setValue(12)
     page.steps_spin.setValue(33)
     page.seed_spin.setValue(123456)
@@ -575,7 +576,7 @@ def test_product_publish_page_auto_saves_adjustable_config(tmp_path, monkeypatch
     assert restored._reference_images == [reference]
     assert restored.ai_prompt_edit.toPlainText() == "save ai prompt"
 
-    restored.generation_mode_combo.setCurrentText("AI 改图")
+    restored.generation_mode_combo.setCurrentIndex(1)
     assert restored.count_spin.value() == 3
 
     restored.close()

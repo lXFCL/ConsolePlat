@@ -23,6 +23,7 @@ from consoleplat.ui.ai_edit_page import AIEditPage
 from consoleplat.ui.local_image_page import LocalImagePage
 from consoleplat.ui.monitor_page import MonitorPage
 from consoleplat.ui.product_publish_page import ProductPublishPage
+from consoleplat.ui.putaway_page import PutawayPage
 from consoleplat.ui.settings_page import SettingsPage
 from consoleplat.ui.theme import APP_STYLE
 
@@ -145,6 +146,8 @@ class MainWindow(QMainWindow):
             return LocalImagePage()
         if key == "ai_edit":
             return AIEditPage()
+        if key == "putaway":
+            return PutawayPage()
         if key == "settings":
             return SettingsPage()
 

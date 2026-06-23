@@ -5,6 +5,7 @@ from consoleplat.ui.ai_edit_page import AIEditPage
 from consoleplat.ui.local_image_page import LocalImagePage
 from consoleplat.ui.main_window import MainWindow
 from consoleplat.ui.product_publish_page import ProductPublishPage
+from consoleplat.ui.putaway_page import PutawayPage
 
 
 class FakeSettingsStore:
@@ -54,6 +55,19 @@ def test_main_window_sidebar_uses_larger_nav_icons_except_settings(monkeypatch):
     window.close()
 
 
+def test_main_window_uses_readable_nav_labels(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+
+    assert window.nav_buttons["publish"].accessibleName() == "发布"
+    assert window.nav_buttons["putaway"].accessibleName() == "上架"
+    assert window.nav_buttons["apply"].accessibleName() == "合规"
+
+    window.close()
+
+
 def test_main_window_local_image_page_uses_real_page(monkeypatch):
     monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
     app = QApplication.instance() or QApplication([])
@@ -91,5 +105,17 @@ def test_main_window_publish_page_is_before_local_image(monkeypatch):
     window.activate_page("publish")
 
     assert window.findChildren(ProductPublishPage)
+
+    window.close()
+
+
+def test_main_window_putaway_page_uses_real_page(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    window.activate_page("putaway")
+
+    assert window.findChildren(PutawayPage)
 
     window.close()
