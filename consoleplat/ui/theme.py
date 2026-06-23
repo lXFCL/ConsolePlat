@@ -101,6 +101,17 @@ QLabel#panelTitle {
     font-weight: 800;
     color: #162538;
 }
+QLabel#monitorEmptyTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: #142131;
+    padding-top: 2px;
+}
+QLabel#monitorEmptyHint {
+    color: #6e7d8b;
+    font-size: 12px;
+    padding-top: 2px;
+}
 QTableWidget {
     background: #ffffff;
     alternate-background-color: #f8fbff;

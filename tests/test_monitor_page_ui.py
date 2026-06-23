@@ -27,6 +27,8 @@ def test_monitor_page_initial_state_does_not_show_demo_orders():
     assert page.order_table.rowCount() == 0
     assert page.order_table.isHidden()
     assert not page.order_empty_state.isHidden()
+    assert page.order_empty_title.objectName() == "monitorEmptyTitle"
+    assert page.order_empty_hint.objectName() == "monitorEmptyHint"
     assert all(card.value_label.text() == "0" for card in page.metric_cards.values())
     assert "等待刷新" in page.source_label.text()
 
