@@ -25,6 +25,8 @@ def test_monitor_page_initial_state_does_not_show_demo_orders():
     page = MonitorPage()
 
     assert page.order_table.rowCount() == 0
+    assert page.order_table.isHidden()
+    assert not page.order_empty_state.isHidden()
     assert all(card.value_label.text() == "0" for card in page.metric_cards.values())
     assert "等待刷新" in page.source_label.text()
 
@@ -72,6 +74,8 @@ def test_monitor_page_order_table_shows_row_numbers():
     page = MonitorPage()
     page.apply_snapshot(MonitorSnapshot.demo(seed=0), 0)
 
+    assert not page.order_table.isHidden()
+    assert page.order_empty_state.isHidden()
     assert page.order_table.horizontalHeaderItem(0).text() == "序号"
     assert page.order_table.item(0, 0).text() == "1"
 

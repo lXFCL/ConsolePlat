@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from consoleplat.paths import resource_path
@@ -185,6 +186,22 @@ class MonitorPage(QWidget):
         table_layout.setSpacing(10)
         table_title = QLabel("待处理商品")
         table_title.setObjectName("panelTitle")
+        self.order_empty_state = QFrame()
+        self.order_empty_state.setObjectName("subPanel")
+        empty_layout = QVBoxLayout(self.order_empty_state)
+        empty_layout.setContentsMargins(18, 20, 18, 20)
+        empty_layout.setSpacing(6)
+        empty_layout.setAlignment(Qt.AlignCenter)
+        empty_title = QLabel("监控尚未启动")
+        empty_title.setObjectName("sectionTitle")
+        empty_title.setAlignment(Qt.AlignCenter)
+        empty_hint = QLabel("点击上方“开始监控”或“立即刷新”后，这里会显示待处理商品。")
+        empty_hint.setObjectName("cardSubtitle")
+        empty_hint.setAlignment(Qt.AlignCenter)
+        empty_hint.setWordWrap(True)
+        empty_hint.setMaximumWidth(420)
+        empty_layout.addWidget(empty_title)
+        empty_layout.addWidget(empty_hint)
         self.order_table = QTableWidget(0, 8)
         self.order_table.setHorizontalHeaderLabels(["序号", "备货单", "货号", "SKU", "颜色", "尺码", "件数", "状态"])
         self.order_table.horizontalHeader().setStretchLastSection(True)
@@ -192,7 +209,9 @@ class MonitorPage(QWidget):
         self.order_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.order_table.setAlternatingRowColors(True)
         self.order_table.setMinimumHeight(230)
+        self.order_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         table_layout.addWidget(table_title)
+        table_layout.addWidget(self.order_empty_state)
         table_layout.addWidget(self.order_table)
         root.addWidget(table_panel)
 
@@ -408,6 +427,8 @@ class MonitorPage(QWidget):
         self.last_fetch_label.setText(f"最近刷新：{snapshot.fetched_at.strftime('%H:%M:%S')}，新增 {new_count} 条")
 
         self.order_table.setRowCount(len(snapshot.orders))
+        self.order_table.setVisible(bool(snapshot.orders))
+        self.order_empty_state.setVisible(not snapshot.orders)
         for row, order in enumerate(snapshot.orders):
             values = [
                 str(row + 1),
@@ -424,12 +445,23 @@ class MonitorPage(QWidget):
                 if col in {0, 5, 6}:
                     item.setTextAlignment(Qt.AlignCenter)
                 self.order_table.setItem(row, col, item)
-        self.order_table.resizeColumnsToContents()
+        self._apply_order_table_column_sizes(has_rows=bool(snapshot.orders))
 
         self.event_list.clear()
         for event in snapshot.events:
             item = QListWidgetItem(f"{event.time_text}  {event.message}")
             self.event_list.addItem(item)
+
+    def _apply_order_table_column_sizes(self, has_rows: bool) -> None:
+        widths = [58, 170, 120, 150, 90, 90, 76]
+        for index, width in enumerate(widths):
+            self.order_table.setColumnWidth(index, width)
+        if has_rows:
+            self.order_table.resizeColumnsToContents()
+            minimums = {0: 58, 1: 170, 2: 120, 3: 150, 4: 90, 5: 90, 6: 76}
+            for index, width in minimums.items():
+                self.order_table.setColumnWidth(index, max(width, self.order_table.columnWidth(index)))
+        self.order_table.horizontalHeader().setStretchLastSection(True)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override name.
         if self.fetch_process is not None:
