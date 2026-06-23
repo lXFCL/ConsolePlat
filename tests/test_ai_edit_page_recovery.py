@@ -617,3 +617,84 @@ def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path
     assert any("正式模式后处理完成" in line for line in page.current_task.logs)
 
     page.close()
+
+
+def test_ai_edit_page_formal_mode_accepts_non_split_png_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://api.openai.com/v1",
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            szw_product_title="SZW固定产品标题",
+            putaway_data_dir=str(tmp_path / "putaway-data"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    page.current_task = AIEditTaskRecord(
+        task_id="20260623130100",
+        title="AI 改图 SZW-3113",
+        job=AIEditJob(
+            images=[],
+            prompt="保留主体",
+            output_dir=tmp_path / "output",
+            prefix="SZW",
+            start_number=3113,
+            total_return_count=1,
+            split_collage=False,
+            split_count=1,
+            test_mode=False,
+        ),
+        output_dir=str(tmp_path / "output"),
+        final_transparent_dir=str(tmp_path / "final-transparent"),
+        final_product_dir=str(tmp_path / "final-product"),
+        xlsx_path=str(tmp_path / "final-product.xlsx"),
+    )
+
+    called: dict[str, object] = {}
+
+    def fake_formalize(**kwargs):
+        called.update(kwargs)
+        return AIEditFormalizeSummary(
+            ok=True,
+            renamed_outputs=[str(tmp_path / "final-transparent" / "SZW-3113.png")],
+            product_outputs=[str(tmp_path / "final-product" / "SZW-3113_SZW固定产品标题.png")],
+            xlsx_path=str(tmp_path / "final-product.xlsx"),
+            putaway=PutawaySyncSummary(ok=True, message="已同步 1 张图片和 final-product.xlsx"),
+            color_assignments={"SZW-3113": "白"},
+            message="正式模式后处理完成：透明底 1 张，产品图 1 张，XLSX final-product.xlsx",
+        )
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.formalize_ai_edit_outputs", fake_formalize)
+
+    class FakeProcess:
+        def readAllStandardOutput(self):
+            return (
+                b'{"output_dir":"E:/tmp/out","outputs":["E:/tmp/out/transparent_master.png"],"failed":[],"warnings":[],"message":"ok"}'
+            )
+
+        def readAllStandardError(self):
+            return b""
+
+    page.process = FakeProcess()
+    page._stdout_buffer = ""
+    page._stderr_buffer = ""
+
+    page._on_process_finished(0, None)
+
+    assert [Path(item) for item in called["split_paths"]] == [Path("E:/tmp/out/transparent_master.png")]
+    assert page.current_task.status == "完成"
+    assert page.current_task.outputs == [str(tmp_path / "final-product" / "SZW-3113_SZW固定产品标题.png")]
+
+    page.close()

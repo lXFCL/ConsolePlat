@@ -693,7 +693,7 @@ class AIEditPage(QWidget):
             if self.current_task.job.prefix == "BO"
             else settings.szw_product_title.strip()
         )
-        split_paths = [Path(path) for path in self.current_task.outputs if "_part_" in Path(path).stem.lower()]
+        split_paths = self._collect_formalize_input_paths()
         if not split_paths:
             self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
             self.current_task.failed = list(self.current_task.failed) + ["未找到可正式入库的切图产物"]
@@ -729,6 +729,15 @@ class AIEditPage(QWidget):
         if formalize_summary.putaway and formalize_summary.putaway.message:
             self.current_task.warnings = list(self.current_task.warnings) + [formalize_summary.putaway.message]
         self._append_log(formalize_summary.message)
+
+    def _collect_formalize_input_paths(self) -> list[Path]:
+        if self.current_task is None:
+            return []
+        png_paths = [Path(path) for path in self.current_task.outputs if Path(path).suffix.lower() == ".png"]
+        split_paths = [path for path in png_paths if "_part_" in path.stem.lower()]
+        if split_paths:
+            return split_paths
+        return png_paths
 
     def _derive_round_sources_from_outputs(self, outputs: list[str]) -> list[str]:
         non_split = [path for path in outputs if Path(path).suffix.lower() == ".png" and "_part_" not in Path(path).stem.lower()]
