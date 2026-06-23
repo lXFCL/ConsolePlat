@@ -123,8 +123,9 @@ def rename_split_outputs(
     for index, source in enumerate(split_paths):
         sku = f"{prefix}-{start_number + index}"
         target = final_transparent_dir / f"{sku}.png"
-        target.unlink(missing_ok=True)
-        shutil.copy2(source, target)
+        if source.resolve() != target.resolve():
+            target.unlink(missing_ok=True)
+            shutil.copy2(source, target)
         outputs.append(target)
     return outputs
 

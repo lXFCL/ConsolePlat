@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
-from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary
+from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary, rename_split_outputs
 from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary
 from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskRecord
@@ -214,6 +214,23 @@ def test_prepare_ai_edit_print_assets_keeps_existing_final_transparent_files(tmp
     assert len(assets) == 1
     assert assets[0].transparent_path == transparent_source
     assert assets[0].split_paths == [source]
+    assert source.exists() is True
+
+
+def test_rename_split_outputs_keeps_existing_final_transparent_files(tmp_path):
+    final_dir = tmp_path / "final-transparent"
+    final_dir.mkdir(parents=True, exist_ok=True)
+    source = final_dir / "SZW-3288.png"
+    Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(source)
+
+    outputs = rename_split_outputs(
+        split_paths=[source],
+        final_transparent_dir=final_dir,
+        prefix="SZW",
+        start_number=3288,
+    )
+
+    assert outputs == [source]
     assert source.exists() is True
 
 
