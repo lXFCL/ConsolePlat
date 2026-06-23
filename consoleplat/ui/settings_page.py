@@ -111,6 +111,7 @@ class SettingsPage(QWidget):
             ("account", "账号"),
             ("image", "生图 / 改图"),
             ("publish", "发布"),
+            ("putaway", "上架"),
             ("program", "程序"),
         ]
         for index, (key, label) in enumerate(tab_items):
@@ -129,6 +130,7 @@ class SettingsPage(QWidget):
         self.stack.addWidget(self._build_account_panel())
         self.stack.addWidget(self._build_image_panel())
         self.stack.addWidget(self._build_publish_panel())
+        self.stack.addWidget(self._build_putaway_panel())
         self.stack.addWidget(self._build_program_panel())
 
         actions = QHBoxLayout()
@@ -248,8 +250,8 @@ class SettingsPage(QWidget):
         layout.addStretch(1)
         return panel
 
-    def _build_program_panel(self) -> QFrame:
-        panel = self._make_panel("程序模块", "恢复 PutawayAiRobot 对接目录、程序数据目录和窗口大小。", compact=True)
+    def _build_putaway_panel(self) -> QFrame:
+        panel = self._make_panel("上架模块", "PutawayAiRobot 的项目目录、data 目录和日志目录集中放在这里管理。", compact=True)
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)
@@ -258,6 +260,17 @@ class SettingsPage(QWidget):
         form.addRow("上架项目目录", self._browse_row(self.putaway_project_dir_edit, self.choose_putaway_project_dir))
         form.addRow("上架 data 目录", self._browse_row(self.putaway_data_dir_edit, self.choose_putaway_data_dir))
         form.addRow("上架日志目录", self._browse_row(self.putaway_log_dir_edit, self.choose_putaway_log_dir))
+        layout.addLayout(form)
+        layout.addStretch(1)
+        return panel
+
+    def _build_program_panel(self) -> QFrame:
+        panel = self._make_panel("程序模块", "这里仅保留 ConsolePlat 自身的数据目录和启动窗口大小。", compact=True)
+        layout = panel.layout()
+        form = QFormLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        form.setLabelAlignment(Qt.AlignRight)
         form.addRow("程序数据目录", self._browse_row(self.program_data_dir_edit, self.choose_program_data_dir))
         form.addRow("启动宽度", self.startup_width_spin)
         form.addRow("启动高度", self.startup_height_spin)

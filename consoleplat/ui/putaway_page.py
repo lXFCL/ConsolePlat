@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import SettingsStore
@@ -48,14 +48,6 @@ class PutawayPage(QWidget):
         container_layout.setContentsMargins(22, 18, 22, 18)
         container_layout.setSpacing(12)
 
-        meta_label = QLabel(
-            f"项目目录：{self.adapter.project_dir}\n"
-            f"data 目录：{self.adapter.data_dir_path}\n"
-            f"日志目录：{self.adapter.log_dir_path}"
-        )
-        meta_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        container_layout.addWidget(meta_label)
-
         self.status_label = QLabel("正在加载内嵌上架界面…")
         self.status_label.setObjectName("statusPill")
         container_layout.addWidget(self.status_label)
@@ -65,10 +57,6 @@ class PutawayPage(QWidget):
         self.error_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.error_label.hide()
         container_layout.addWidget(self.error_label)
-
-        self.open_settings_button = QPushButton("去设置里检查路径")
-        self.open_settings_button.setObjectName("ghostButton")
-        container_layout.addWidget(self.open_settings_button, alignment=Qt.AlignLeft)
 
         try:
             self.embedded_widget = self.adapter.build_embedded_widget(parent=self.container_panel)

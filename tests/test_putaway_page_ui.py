@@ -38,6 +38,8 @@ def test_putaway_page_mounts_embedded_widget_when_adapter_succeeds(tmp_path, mon
     assert isinstance(page.embedded_widget, FakeEmbeddedWidget)
     assert page.error_label.isHidden()
     assert page.embedded_widget.parent() is not None
+    assert not hasattr(page, "open_settings_button")
+    assert "项目目录：" not in page.container_panel.findChildren(QLabel)[0].text()
 
     page.close()
 

@@ -1,6 +1,6 @@
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.settings_page import SettingsPage
-from PyQt5.QtWidgets import QApplication, QComboBox, QFormLayout, QLineEdit, QPushButton, QSpinBox
+from PyQt5.QtWidgets import QApplication, QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton, QSpinBox
 
 
 def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):
@@ -30,7 +30,7 @@ def test_settings_page_has_module_tabs(tmp_path, monkeypatch):
         for button in page.findChildren(QPushButton)
         if button.objectName() == "settingsTabButton"
     ]
-    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "程序"]
+    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "程序"]
 
     page.close()
 
@@ -74,6 +74,47 @@ def test_settings_page_loads_publish_titles_and_program_paths(tmp_path, monkeypa
     assert edits["putawayProjectDirEdit"] == "E:/1PythonProject/PutawayAiRobot"
     assert edits["putawayDataDirEdit"] == "E:/1PythonProject/PutawayAiRobot/data"
     assert edits["putawayLogDirEdit"] == "E:/1PythonProject/PutawayAiRobot/log"
+
+    page.close()
+
+
+def test_settings_page_program_panel_only_keeps_program_fields(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    program_panel = page.stack.widget(5)
+    program_labels = [label.text() for label in program_panel.findChildren(QLabel)]
+
+    assert "程序模块" in program_labels
+    assert "程序数据目录" in program_labels
+    assert "启动宽度" in program_labels
+    assert "启动高度" in program_labels
+    assert "上架项目目录" not in program_labels
+    assert "上架 data 目录" not in program_labels
+    assert "上架日志目录" not in program_labels
+
+    page.close()
+
+
+def test_settings_page_putaway_panel_contains_putaway_paths(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    putaway_panel = page.stack.widget(4)
+    putaway_labels = [label.text() for label in putaway_panel.findChildren(QLabel)]
+
+    assert "上架模块" in putaway_labels
+    assert "上架项目目录" in putaway_labels
+    assert "上架 data 目录" in putaway_labels
+    assert "上架日志目录" in putaway_labels
 
     page.close()
 
@@ -219,7 +260,7 @@ def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
 
     page = SettingsPage()
 
-    for index in (0, 1, 3, 4):
+    for index in (0, 1, 3, 4, 5):
         panel = page.stack.widget(index)
         layout = panel.layout()
         assert layout.spacing() <= 14
@@ -241,7 +282,7 @@ def test_settings_page_non_image_panels_push_extra_space_below_form(tmp_path, mo
 
     page = SettingsPage()
 
-    for index in (0, 1, 3, 4):
+    for index in (0, 1, 3, 4, 5):
         panel = page.stack.widget(index)
         layout = panel.layout()
         trailing_item = layout.itemAt(layout.count() - 1)
