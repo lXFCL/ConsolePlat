@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from consoleplat.config import AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore, ShopAccount
+from consoleplat.config import AIProviderConfig, AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore, ShopAccount
 
 
 class SettingsPage(QWidget):
@@ -26,6 +26,8 @@ class SettingsPage(QWidget):
         super().__init__(parent)
         self.store = SettingsStore()
         self.tab_buttons: dict[str, QPushButton] = {}
+        self._provider_records: list[AIProviderConfig] = []
+        self._provider_loading = False
         self._build_ui()
         self.load_settings()
 
@@ -50,27 +52,18 @@ class SettingsPage(QWidget):
         self.interval_spin.setRange(2, 120)
         self.interval_spin.setSuffix(" 秒")
 
-        self.purchase_export_dir_edit = self._line_edit(
-            "purchaseExportDirEdit",
-            "E:/1PythonProject/SendGoods/outputs",
-        )
+        self.purchase_export_dir_edit = self._line_edit("purchaseExportDirEdit", "E:/1PythonProject/SendGoods/outputs")
+        self.posai_gallery_root_edit = self._line_edit("posaiGalleryRootEdit", "E:/1PythonProject/PosAiImg/图库")
+        self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "E:/1PythonProject/PosAiImg/批量贴图结果")
+        self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "E:/1PythonProject/PosAiImg/衣物对应的xlsx")
 
-        self.posai_gallery_root_edit = self._line_edit(
-            "posaiGalleryRootEdit",
-            "E:/1PythonProject/PosAiImg/图库",
-        )
-        self.posai_mockup_root_edit = self._line_edit(
-            "posaiMockupRootEdit",
-            "E:/1PythonProject/PosAiImg/批量贴图结果",
-        )
-        self.posai_xlsx_root_edit = self._line_edit(
-            "posaiXlsxRootEdit",
-            "E:/1PythonProject/PosAiImg/衣物对应的xlsx",
-        )
-        self.ai_edit_api_base_edit = self._line_edit(
-            "aiEditApiBaseEdit",
-            "https://api.openai.com/v1",
-        )
+        self.ai_provider_combo = QComboBox()
+        self.ai_provider_combo.setObjectName("aiProviderCombo")
+        self.ai_provider_combo.currentIndexChanged.connect(self._on_provider_changed)
+        self.ai_provider_name_edit = self._line_edit("aiProviderNameEdit", "默认接口")
+        self.ai_edit_api_key_edit = self._line_edit("aiEditApiKeyEdit")
+        self.ai_edit_api_key_edit.setEchoMode(QLineEdit.Password)
+        self.ai_edit_api_base_edit = self._line_edit("aiEditApiBaseEdit", "https://api.openai.com/v1")
         self.ai_edit_model_edit = self._line_edit("aiEditModelEdit", "gpt-image-2")
         self.ai_edit_size_edit = self._line_edit("aiEditSizeEdit", "1024x1024")
         self.ai_edit_prompt_edit = QTextEdit()
@@ -93,18 +86,9 @@ class SettingsPage(QWidget):
         self.publish_ai_count_spin.setRange(1, 500)
         self.publish_ai_count_spin.setSuffix(" 轮")
 
-        self.putaway_project_dir_edit = self._line_edit(
-            "putawayProjectDirEdit",
-            "E:/1PythonProject/PutawayAiRobot",
-        )
-        self.putaway_data_dir_edit = self._line_edit(
-            "putawayDataDirEdit",
-            "E:/1PythonProject/PutawayAiRobot/data",
-        )
-        self.putaway_log_dir_edit = self._line_edit(
-            "putawayLogDirEdit",
-            "E:/1PythonProject/PutawayAiRobot/log",
-        )
+        self.putaway_project_dir_edit = self._line_edit("putawayProjectDirEdit", "E:/1PythonProject/PutawayAiRobot")
+        self.putaway_data_dir_edit = self._line_edit("putawayDataDirEdit", "E:/1PythonProject/PutawayAiRobot/data")
+        self.putaway_log_dir_edit = self._line_edit("putawayLogDirEdit", "E:/1PythonProject/PutawayAiRobot/log")
         self.program_data_dir_edit = self._line_edit("programDataDirEdit")
 
         self.startup_width_spin = QSpinBox()
@@ -185,18 +169,54 @@ class SettingsPage(QWidget):
         return panel
 
     def _build_image_panel(self) -> QFrame:
-        panel = self._make_panel("生图 / 改图", "恢复 PosAiImg、AI 改图接口和默认提示词相关设置。")
+        panel = self._make_panel("生图 / 改图", "恢复多套 AI 接口配置、PosAiImg 路径和默认改图提示词。")
         layout = panel.layout()
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignRight)
-        form.addRow("图库目录", self._browse_row(self.posai_gallery_root_edit, self.choose_posai_gallery_root))
-        form.addRow("产品图目录", self._browse_row(self.posai_mockup_root_edit, self.choose_posai_mockup_root))
-        form.addRow("XLSX 目录", self._browse_row(self.posai_xlsx_root_edit, self.choose_posai_xlsx_root))
-        form.addRow("AI 接口地址", self.ai_edit_api_base_edit)
-        form.addRow("AI 模型", self.ai_edit_model_edit)
-        form.addRow("默认尺寸", self.ai_edit_size_edit)
-        form.addRow("默认改图要求", self.ai_edit_prompt_edit)
-        layout.addLayout(form)
+
+        path_form = QFormLayout()
+        path_form.setLabelAlignment(Qt.AlignRight)
+        path_form.addRow("图库目录", self._browse_row(self.posai_gallery_root_edit, self.choose_posai_gallery_root))
+        path_form.addRow("产品图目录", self._browse_row(self.posai_mockup_root_edit, self.choose_posai_mockup_root))
+        path_form.addRow("XLSX 目录", self._browse_row(self.posai_xlsx_root_edit, self.choose_posai_xlsx_root))
+        layout.addLayout(path_form)
+
+        provider_panel = QFrame()
+        provider_panel.setObjectName("subPanel")
+        provider_layout = QVBoxLayout(provider_panel)
+        provider_layout.setContentsMargins(16, 14, 16, 14)
+        provider_layout.setSpacing(12)
+        provider_layout.addWidget(QLabel("AI 接口配置"))
+
+        provider_toolbar = QHBoxLayout()
+        provider_toolbar.setSpacing(8)
+        self.add_provider_button = QPushButton("新增接口")
+        self.add_provider_button.setObjectName("ghostButton")
+        self.add_provider_button.clicked.connect(self._add_provider)
+        self.duplicate_provider_button = QPushButton("复制当前")
+        self.duplicate_provider_button.setObjectName("ghostButton")
+        self.duplicate_provider_button.clicked.connect(self._duplicate_provider)
+        self.delete_provider_button = QPushButton("删除当前")
+        self.delete_provider_button.setObjectName("ghostButton")
+        self.delete_provider_button.clicked.connect(self._delete_provider)
+        provider_toolbar.addWidget(self.ai_provider_combo, 1)
+        provider_toolbar.addWidget(self.add_provider_button)
+        provider_toolbar.addWidget(self.duplicate_provider_button)
+        provider_toolbar.addWidget(self.delete_provider_button)
+        provider_layout.addLayout(provider_toolbar)
+
+        provider_form = QFormLayout()
+        provider_form.setLabelAlignment(Qt.AlignRight)
+        provider_form.addRow("接口名称", self.ai_provider_name_edit)
+        provider_form.addRow("API Key", self.ai_edit_api_key_edit)
+        provider_form.addRow("接口地址", self.ai_edit_api_base_edit)
+        provider_form.addRow("模型", self.ai_edit_model_edit)
+        provider_form.addRow("默认尺寸", self.ai_edit_size_edit)
+        provider_layout.addLayout(provider_form)
+        layout.addWidget(provider_panel)
+
+        prompt_form = QFormLayout()
+        prompt_form.setLabelAlignment(Qt.AlignRight)
+        prompt_form.addRow("默认改图要求", self.ai_edit_prompt_edit)
+        layout.addLayout(prompt_form)
         return panel
 
     def _build_publish_panel(self) -> QFrame:
@@ -272,6 +292,92 @@ class SettingsPage(QWidget):
             button.style().unpolish(button)
             button.style().polish(button)
 
+    def _provider_from_form(self, provider_id: str) -> AIProviderConfig:
+        return AIProviderConfig(
+            provider_id=provider_id,
+            name=self.ai_provider_name_edit.text().strip() or "未命名接口",
+            api_key=self.ai_edit_api_key_edit.text(),
+            api_base=self.ai_edit_api_base_edit.text().strip() or "https://api.openai.com/v1",
+            model=self.ai_edit_model_edit.text().strip() or "gpt-image-2",
+            size=self.ai_edit_size_edit.text().strip() or "1024x1024",
+        )
+
+    def _sync_provider_form_into_memory(self) -> None:
+        if self._provider_loading:
+            return
+        index = self.ai_provider_combo.currentIndex()
+        if index < 0 or index >= len(self._provider_records):
+            return
+        self._provider_records[index] = self._provider_from_form(self._provider_records[index].provider_id)
+        self.ai_provider_combo.setItemText(index, self._provider_records[index].name)
+
+    def _load_provider_into_form(self, provider: AIProviderConfig) -> None:
+        self._provider_loading = True
+        self.ai_provider_name_edit.setText(provider.name)
+        self.ai_edit_api_key_edit.setText(provider.api_key)
+        self.ai_edit_api_base_edit.setText(provider.api_base)
+        self.ai_edit_model_edit.setText(provider.model)
+        self.ai_edit_size_edit.setText(provider.size)
+        self._provider_loading = False
+
+    def _load_providers(self, settings: AppSettings) -> None:
+        self._provider_records = [AIProviderConfig(**provider.__dict__) for provider in settings.ai_providers]
+        self.ai_provider_combo.blockSignals(True)
+        self.ai_provider_combo.clear()
+        for provider in self._provider_records:
+            self.ai_provider_combo.addItem(provider.name, provider.provider_id)
+        target_index = next(
+            (index for index, provider in enumerate(self._provider_records) if provider.provider_id == settings.default_ai_provider_id),
+            0,
+        )
+        self.ai_provider_combo.setCurrentIndex(target_index)
+        self.ai_provider_combo.blockSignals(False)
+        self._load_provider_into_form(self._provider_records[target_index])
+
+    def _on_provider_changed(self, index: int) -> None:
+        if self._provider_loading:
+            return
+        if index < 0 or index >= len(self._provider_records):
+            return
+        self._load_provider_into_form(self._provider_records[index])
+
+    def _add_provider(self) -> None:
+        self._sync_provider_form_into_memory()
+        next_index = len(self._provider_records) + 1
+        provider = AIProviderConfig(provider_id=f"provider-{next_index}", name=f"接口 {next_index}")
+        self._provider_records.append(provider)
+        self.ai_provider_combo.addItem(provider.name, provider.provider_id)
+        self.ai_provider_combo.setCurrentIndex(len(self._provider_records) - 1)
+
+    def _duplicate_provider(self) -> None:
+        self._sync_provider_form_into_memory()
+        index = self.ai_provider_combo.currentIndex()
+        if index < 0 or index >= len(self._provider_records):
+            return
+        source = self._provider_records[index]
+        duplicate_index = len(self._provider_records) + 1
+        duplicate = AIProviderConfig(
+            provider_id=f"provider-{duplicate_index}",
+            name=f"{source.name} 副本",
+            api_key=source.api_key,
+            api_base=source.api_base,
+            model=source.model,
+            size=source.size,
+        )
+        self._provider_records.append(duplicate)
+        self.ai_provider_combo.addItem(duplicate.name, duplicate.provider_id)
+        self.ai_provider_combo.setCurrentIndex(len(self._provider_records) - 1)
+
+    def _delete_provider(self) -> None:
+        if len(self._provider_records) <= 1:
+            return
+        index = self.ai_provider_combo.currentIndex()
+        if index < 0 or index >= len(self._provider_records):
+            return
+        del self._provider_records[index]
+        self.ai_provider_combo.removeItem(index)
+        self.ai_provider_combo.setCurrentIndex(max(0, min(index, len(self._provider_records) - 1)))
+
     def load_settings(self) -> None:
         settings = self.store.load()
         index = self.shop_combo.findText(settings.active_shop)
@@ -286,9 +392,7 @@ class SettingsPage(QWidget):
         self.posai_gallery_root_edit.setText(settings.posai_gallery_root)
         self.posai_mockup_root_edit.setText(settings.posai_mockup_root)
         self.posai_xlsx_root_edit.setText(settings.posai_xlsx_root)
-        self.ai_edit_api_base_edit.setText(settings.ai_edit_api_base)
-        self.ai_edit_model_edit.setText(settings.ai_edit_model)
-        self.ai_edit_size_edit.setText(settings.ai_edit_size)
+        self._load_providers(settings)
         self.ai_edit_prompt_edit.setPlainText(settings.ai_edit_prompt or DEFAULT_AI_EDIT_PROMPT)
 
         self.bo_product_title_edit.setText(settings.bo_product_title)
@@ -310,6 +414,7 @@ class SettingsPage(QWidget):
 
     def save_settings(self) -> None:
         old_settings = self.store.load()
+        self._sync_provider_form_into_memory()
         shop_name = self.shop_combo.currentText().strip() or "YUHOOBO"
         accounts = dict(old_settings.accounts)
         accounts[shop_name] = ShopAccount(
@@ -317,6 +422,8 @@ class SettingsPage(QWidget):
             phone=self.phone_edit.text().strip(),
             password=self.password_edit.text(),
         )
+        provider_index = self.ai_provider_combo.currentIndex()
+        default_provider = self._provider_records[max(0, provider_index)]
         settings = AppSettings(
             active_shop=shop_name,
             cdp_endpoint=self.cdp_edit.text().strip() or "http://127.0.0.1:9222",
@@ -325,10 +432,12 @@ class SettingsPage(QWidget):
             local_image_auto_start_comfyui=old_settings.local_image_auto_start_comfyui,
             local_image_keep_comfyui=old_settings.local_image_keep_comfyui,
             local_image_test_mode=old_settings.local_image_test_mode,
-            ai_edit_api_key=old_settings.ai_edit_api_key,
-            ai_edit_api_base=self.ai_edit_api_base_edit.text().strip() or "https://api.openai.com/v1",
-            ai_edit_model=self.ai_edit_model_edit.text().strip() or "gpt-image-2",
-            ai_edit_size=self.ai_edit_size_edit.text().strip() or "1024x1024",
+            ai_edit_api_key=default_provider.api_key,
+            ai_edit_api_base=default_provider.api_base,
+            ai_edit_model=default_provider.model,
+            ai_edit_size=default_provider.size,
+            default_ai_provider_id=default_provider.provider_id,
+            ai_providers=[AIProviderConfig(**provider.__dict__) for provider in self._provider_records],
             ai_edit_prompt=self.ai_edit_prompt_edit.toPlainText().strip() or DEFAULT_AI_EDIT_PROMPT,
             ai_edit_split_collage=old_settings.ai_edit_split_collage,
             ai_edit_split_count=old_settings.ai_edit_split_count,

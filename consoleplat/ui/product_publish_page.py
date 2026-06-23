@@ -462,14 +462,15 @@ class ProductPublishPage(QWidget):
         )
 
     def build_ai_edit_job(self) -> AIEditJob:
+        provider = self.settings.default_ai_provider()
         return AIEditJob(
             images=list(self._reference_images),
             prompt=self.ai_prompt_edit.toPlainText().strip(),
-            api_key=self.settings_store.load().ai_edit_api_key,
-            api_base=self.settings.ai_edit_api_base,
-            model=self.settings.ai_edit_model,
+            api_key=provider.api_key,
+            api_base=provider.api_base,
+            model=provider.model,
             output_dir=self._build_ai_output_dir(),
-            size=self.settings.ai_edit_size,
+            size=provider.size,
             split_collage=True,
             split_count=25,
             total_return_count=self.count_spin.value(),

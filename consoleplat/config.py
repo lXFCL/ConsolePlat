@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 DEFAULT_AI_EDIT_PROMPT = "保留主体，整理成适合印花的透明底效果。"
+DEFAULT_AI_PROVIDER_ID = "default-ai-provider"
 
 
 class DATA_BLOB(ctypes.Structure):
@@ -70,6 +71,58 @@ class ShopAccount:
 
 
 @dataclass
+class AIProviderConfig:
+    provider_id: str = DEFAULT_AI_PROVIDER_ID
+    name: str = "默认接口"
+    api_key: str = ""
+    api_base: str = "https://api.openai.com/v1"
+    model: str = "gpt-image-2"
+    size: str = "1024x1024"
+
+
+def _coerce_provider(item: object, fallback_index: int = 1) -> AIProviderConfig | None:
+    if isinstance(item, AIProviderConfig):
+        return item
+    if not isinstance(item, dict):
+        return None
+    provider_id = str(item.get("provider_id") or f"provider-{fallback_index}").strip() or f"provider-{fallback_index}"
+    name = str(item.get("name") or f"接口 {fallback_index}").strip() or f"接口 {fallback_index}"
+    return AIProviderConfig(
+        provider_id=provider_id,
+        name=name,
+        api_key=str(item.get("api_key") or ""),
+        api_base=str(item.get("api_base") or "https://api.openai.com/v1"),
+        model=str(item.get("model") or "gpt-image-2"),
+        size=str(item.get("size") or "1024x1024"),
+    )
+
+
+def _normalize_providers(items: list[object] | None) -> list[AIProviderConfig]:
+    providers: list[AIProviderConfig] = []
+    seen: set[str] = set()
+    for index, item in enumerate(items or [], start=1):
+        provider = _coerce_provider(item, index)
+        if provider is None or provider.provider_id in seen:
+            continue
+        seen.add(provider.provider_id)
+        providers.append(provider)
+    if providers:
+        return providers
+    return [AIProviderConfig()]
+
+
+def _build_legacy_provider(data: dict) -> AIProviderConfig:
+    return AIProviderConfig(
+        provider_id=DEFAULT_AI_PROVIDER_ID,
+        name="默认接口",
+        api_key=decrypt_secret(str(data.get("ai_edit_api_key_dpapi") or "")),
+        api_base=str(data.get("ai_edit_api_base") or "https://api.openai.com/v1"),
+        model=str(data.get("ai_edit_model") or "gpt-image-2"),
+        size=str(data.get("ai_edit_size") or "1024x1024"),
+    )
+
+
+@dataclass
 class AppSettings:
     active_shop: str = "YUHOOBO"
     cdp_endpoint: str = "http://127.0.0.1:9222"
@@ -82,6 +135,8 @@ class AppSettings:
     ai_edit_api_base: str = "https://api.openai.com/v1"
     ai_edit_model: str = "gpt-image-2"
     ai_edit_size: str = "1024x1024"
+    default_ai_provider_id: str = DEFAULT_AI_PROVIDER_ID
+    ai_providers: list[AIProviderConfig] = field(default_factory=lambda: [AIProviderConfig()])
     ai_edit_prompt: str = DEFAULT_AI_EDIT_PROMPT
     ai_edit_split_collage: bool = False
     ai_edit_split_count: int = 10
@@ -114,6 +169,24 @@ class AppSettings:
     startup_height: int = 760
     accounts: dict[str, ShopAccount] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        providers = _normalize_providers(list(self.ai_providers or []))
+        self.ai_providers = providers
+        provider_ids = {provider.provider_id for provider in providers}
+        if self.default_ai_provider_id not in provider_ids:
+            self.default_ai_provider_id = providers[0].provider_id
+        default_provider = self.default_ai_provider()
+        self.ai_edit_api_key = default_provider.api_key
+        self.ai_edit_api_base = default_provider.api_base
+        self.ai_edit_model = default_provider.model
+        self.ai_edit_size = default_provider.size
+
+    def default_ai_provider(self) -> AIProviderConfig:
+        for provider in self.ai_providers:
+            if provider.provider_id == self.default_ai_provider_id:
+                return provider
+        return self.ai_providers[0]
+
 
 def default_settings_path() -> Path:
     base = Path(os.environ.get("APPDATA") or Path.home()) / "ConsolePlat"
@@ -139,6 +212,26 @@ class SettingsStore:
                 phone=str(item.get("phone") or ""),
                 password=decrypt_secret(str(item.get("password_dpapi") or "")),
             )
+
+        provider_payloads = data.get("ai_providers")
+        if isinstance(provider_payloads, list) and provider_payloads:
+            providers: list[AIProviderConfig] = []
+            for index, item in enumerate(provider_payloads, start=1):
+                if not isinstance(item, dict):
+                    continue
+                provider = AIProviderConfig(
+                    provider_id=str(item.get("provider_id") or f"provider-{index}"),
+                    name=str(item.get("name") or f"接口 {index}"),
+                    api_key=decrypt_secret(str(item.get("api_key_dpapi") or "")),
+                    api_base=str(item.get("api_base") or "https://api.openai.com/v1"),
+                    model=str(item.get("model") or "gpt-image-2"),
+                    size=str(item.get("size") or "1024x1024"),
+                )
+                providers.append(provider)
+        else:
+            providers = [_build_legacy_provider(data)]
+
+        default_provider_id = str(data.get("default_ai_provider_id") or providers[0].provider_id)
         return AppSettings(
             active_shop=str(data.get("active_shop") or "YUHOOBO"),
             cdp_endpoint=str(data.get("cdp_endpoint") or "http://127.0.0.1:9222"),
@@ -147,10 +240,12 @@ class SettingsStore:
             local_image_auto_start_comfyui=bool(data.get("local_image_auto_start_comfyui", True)),
             local_image_keep_comfyui=bool(data.get("local_image_keep_comfyui", True)),
             local_image_test_mode=bool(data.get("local_image_test_mode", True)),
-            ai_edit_api_key=decrypt_secret(str(data.get("ai_edit_api_key_dpapi") or "")),
-            ai_edit_api_base=str(data.get("ai_edit_api_base") or "https://api.openai.com/v1"),
-            ai_edit_model=str(data.get("ai_edit_model") or "gpt-image-2"),
-            ai_edit_size=str(data.get("ai_edit_size") or "1024x1024"),
+            ai_edit_api_key=providers[0].api_key,
+            ai_edit_api_base=providers[0].api_base,
+            ai_edit_model=providers[0].model,
+            ai_edit_size=providers[0].size,
+            default_ai_provider_id=default_provider_id,
+            ai_providers=providers,
             ai_edit_prompt=str(data.get("ai_edit_prompt") or DEFAULT_AI_EDIT_PROMPT),
             ai_edit_split_collage=bool(data.get("ai_edit_split_collage", False)),
             ai_edit_split_count=max(1, int(data.get("ai_edit_split_count") or 10)),
@@ -186,6 +281,11 @@ class SettingsStore:
 
     def save(self, settings: AppSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        providers = _normalize_providers(list(settings.ai_providers or []))
+        default_provider_id = settings.default_ai_provider_id or providers[0].provider_id
+        if default_provider_id not in {provider.provider_id for provider in providers}:
+            default_provider_id = providers[0].provider_id
+
         data = {
             "active_shop": settings.active_shop,
             "cdp_endpoint": settings.cdp_endpoint,
@@ -198,6 +298,18 @@ class SettingsStore:
             "ai_edit_api_base": settings.ai_edit_api_base or "https://api.openai.com/v1",
             "ai_edit_model": settings.ai_edit_model or "gpt-image-2",
             "ai_edit_size": settings.ai_edit_size or "1024x1024",
+            "default_ai_provider_id": default_provider_id,
+            "ai_providers": [
+                {
+                    "provider_id": provider.provider_id,
+                    "name": provider.name,
+                    "api_key_dpapi": encrypt_secret(provider.api_key),
+                    "api_base": provider.api_base or "https://api.openai.com/v1",
+                    "model": provider.model or "gpt-image-2",
+                    "size": provider.size or "1024x1024",
+                }
+                for provider in providers
+            ],
             "ai_edit_prompt": settings.ai_edit_prompt or DEFAULT_AI_EDIT_PROMPT,
             "ai_edit_split_collage": bool(settings.ai_edit_split_collage),
             "ai_edit_split_count": max(1, int(settings.ai_edit_split_count or 10)),

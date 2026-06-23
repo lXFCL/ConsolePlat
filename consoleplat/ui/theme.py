@@ -20,15 +20,15 @@ QPushButton#navButton {
 }
 QPushButton#navButton:hover {
     background: #eef6ff;
-    color: #fb6faa;
+    color: #2f6fb4;
 }
 QPushButton#navButton:pressed {
-    background: #ffe5f1;
+    background: #dcecff;
 }
 QPushButton#navButton[active="true"] {
     background: #ffffff;
-    color: #fb6faa;
-    border-left: 4px solid #fb78b7;
+    color: #2f6fb4;
+    border-left: 4px solid #5d96d8;
 }
 QLabel#appTitle {
     font-size: 13px;
@@ -59,8 +59,8 @@ QFrame#taskCard {
     border-radius: 8px;
 }
 QFrame#taskCard:hover {
-    border-color: #ffabd0;
-    background: #fffafd;
+    border-color: #b8d5f4;
+    background: #fafdff;
 }
 QLabel#cardTitle {
     font-size: 15px;
@@ -74,8 +74,8 @@ QLabel#cardSubtitle {
 QLabel#statusPill {
     border-radius: 8px;
     padding: 3px 8px;
-    background: #f1f6fb;
-    color: #68798b;
+    background: #eef5fc;
+    color: #5f7390;
 }
 QFrame#panel {
     background: #ffffff;
@@ -107,7 +107,7 @@ QTableWidget {
     border: 1px solid #e4edf6;
     border-radius: 6px;
     gridline-color: #edf3f8;
-    selection-background-color: #ffe1ef;
+    selection-background-color: #dcecff;
     selection-color: #1b2733;
 }
 QHeaderView::section {
@@ -153,7 +153,7 @@ QScrollBar::sub-line:vertical {
     height: 0;
 }
 QPushButton#primaryButton {
-    background: #fb78b7;
+    background: #5d96d8;
     color: white;
     border: none;
     border-radius: 6px;
@@ -161,14 +161,14 @@ QPushButton#primaryButton {
     font-weight: 700;
 }
 QPushButton#primaryButton:hover {
-    background: #ff8cc5;
+    background: #70a5e3;
 }
 QPushButton#primaryButton:pressed {
-    background: #df579b;
+    background: #457dbd;
 }
 QPushButton#primaryButton:disabled {
-    background: #f4bfd8;
-    color: #fff7fb;
+    background: #bcd3ed;
+    color: #f8fbff;
 }
 QPushButton#ghostButton {
     background: #ffffff;
@@ -178,13 +178,13 @@ QPushButton#ghostButton {
     padding: 8px 14px;
 }
 QPushButton#ghostButton:hover {
-    background: #fff5fa;
-    border-color: #ffabd0;
-    color: #ba3579;
+    background: #eef6ff;
+    border-color: #b8d5f4;
+    color: #2f6fb4;
 }
 QPushButton#ghostButton:pressed {
-    background: #ffe1ef;
-    border-color: #fb78b7;
+    background: #dcecff;
+    border-color: #5d96d8;
 }
 QPushButton#ghostButton:disabled {
     background: #f5f8fb;
@@ -199,16 +199,16 @@ QPushButton#settingsTabButton {
     font-weight: 700;
 }
 QPushButton#settingsTabButton:hover {
-    background: #fff5fa;
-    border-color: #ffabd0;
-    color: #ba3579;
+    background: #eef6ff;
+    border-color: #b8d5f4;
+    color: #2f6fb4;
 }
 QPushButton#settingsTabButton:pressed {
-    background: #ffe1ef;
+    background: #dcecff;
 }
 QPushButton#settingsTabButton[active="true"] {
-    background: #fb78b7;
-    border-color: #fb78b7;
+    background: #5d96d8;
+    border-color: #5d96d8;
     color: #ffffff;
 }
 """

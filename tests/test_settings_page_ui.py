@@ -1,6 +1,6 @@
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.settings_page import SettingsPage
-from PyQt5.QtWidgets import QApplication, QLineEdit, QPushButton, QSpinBox
+from PyQt5.QtWidgets import QApplication, QComboBox, QLineEdit, QPushButton, QSpinBox
 
 
 def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):
@@ -101,5 +101,92 @@ def test_settings_page_save_persists_publish_and_ai_fields(tmp_path, monkeypatch
     assert saved.ai_edit_api_base == "https://example.invalid/v1"
     assert saved.ai_edit_model == "gpt-image-test"
     assert saved.ai_edit_size == "1536x1024"
+
+    page.close()
+
+
+def test_settings_page_exposes_ai_provider_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            default_ai_provider_id="provider-2",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "key-1",
+                    "api_base": "https://one.example/v1",
+                    "model": "gpt-image-a",
+                    "size": "1024x1024",
+                },
+                {
+                    "provider_id": "provider-2",
+                    "name": "备用接口",
+                    "api_key": "key-2",
+                    "api_base": "https://two.example/v1",
+                    "model": "gpt-image-b",
+                    "size": "1536x1024",
+                },
+            ],
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    provider_combo = page.findChild(QComboBox, "aiProviderCombo")
+    assert provider_combo is not None
+    assert provider_combo.count() == 2
+    assert provider_combo.currentText() == "备用接口"
+    assert page.findChild(QLineEdit, "aiEditApiKeyEdit") is not None
+
+    page.close()
+
+
+def test_settings_page_save_persists_default_ai_provider(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "key-1",
+                    "api_base": "https://one.example/v1",
+                    "model": "gpt-image-a",
+                    "size": "1024x1024",
+                },
+                {
+                    "provider_id": "provider-2",
+                    "name": "备用接口",
+                    "api_key": "key-2",
+                    "api_base": "https://two.example/v1",
+                    "model": "gpt-image-b",
+                    "size": "1536x1024",
+                },
+            ],
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page.findChild(QComboBox, "aiProviderCombo").setCurrentText("备用接口")
+    page.findChild(QLineEdit, "aiEditApiKeyEdit").setText("new-key-2")
+    page.findChild(QLineEdit, "aiEditApiBaseEdit").setText("https://two-new.example/v1")
+    page.findChild(QLineEdit, "aiEditModelEdit").setText("gpt-image-c")
+    page.findChild(QLineEdit, "aiEditSizeEdit").setText("2048x2048")
+    page.save_settings()
+
+    saved = SettingsStore(path).load()
+    assert saved.default_ai_provider_id == "provider-2"
+    assert [provider.name for provider in saved.ai_providers] == ["主接口", "备用接口"]
+    assert saved.ai_providers[1].api_key == "new-key-2"
+    assert saved.ai_providers[1].api_base == "https://two-new.example/v1"
+    assert saved.ai_providers[1].model == "gpt-image-c"
+    assert saved.ai_providers[1].size == "2048x2048"
 
     page.close()

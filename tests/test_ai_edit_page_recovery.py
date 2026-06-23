@@ -30,6 +30,25 @@ def test_ai_edit_page_builds_job_and_persists_preferences(tmp_path, monkeypatch)
             ai_edit_api_base="https://example.test/v1",
             ai_edit_model="demo-image-edit",
             ai_edit_size="1536x1024",
+            default_ai_provider_id="provider-2",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "old-key",
+                    "api_base": "https://old.example/v1",
+                    "model": "old-model",
+                    "size": "1024x1024",
+                },
+                {
+                    "provider_id": "provider-2",
+                    "name": "备用接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://example.test/v1",
+                    "model": "demo-image-edit",
+                    "size": "1536x1024",
+                },
+            ],
             posai_gallery_root=str(tmp_path / "gallery-root"),
             program_data_dir=str(tmp_path / "ConsolePlatData"),
         ),
@@ -158,7 +177,21 @@ def test_ai_edit_page_process_env_exports_key_and_user_site(tmp_path, monkeypatc
     page, _path = _page_with_temp_store(
         tmp_path,
         monkeypatch,
-        AppSettings(ai_edit_api_key="stored-key", posai_gallery_root=str(tmp_path / "gallery-root")),
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://api.openai.com/v1",
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            posai_gallery_root=str(tmp_path / "gallery-root"),
+        ),
     )
     page._add_image_item(str(image))
     page.prompt_edit.setPlainText("go")

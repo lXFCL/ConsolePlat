@@ -487,14 +487,15 @@ class AIEditPage(QWidget):
 
     def build_job(self) -> AIEditJob:
         settings = self.settings_store.load()
+        provider = settings.default_ai_provider()
         return AIEditJob(
             images=self._selected_images(),
             prompt=self.prompt_edit.toPlainText().strip(),
-            api_key=settings.ai_edit_api_key,
-            api_base=settings.ai_edit_api_base,
-            model=settings.ai_edit_model,
+            api_key=provider.api_key,
+            api_base=provider.api_base,
+            model=provider.model,
             output_dir=self._build_output_dir(settings),
-            size=settings.ai_edit_size,
+            size=provider.size,
             split_collage=self.split_collage_check.isChecked(),
             split_count=self.split_count_spin.value(),
             total_return_count=self.total_return_count_spin.value(),

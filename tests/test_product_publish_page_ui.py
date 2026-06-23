@@ -125,6 +125,25 @@ def test_product_publish_page_builds_local_and_ai_jobs(tmp_path, monkeypatch):
         monkeypatch,
         AppSettings(
             ai_edit_api_key="stored-key",
+            default_ai_provider_id="provider-2",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "old-key",
+                    "api_base": "https://old.example/v1",
+                    "model": "old-model",
+                    "size": "1024x1024",
+                },
+                {
+                    "provider_id": "provider-2",
+                    "name": "备用接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://provider-two.example/v1",
+                    "model": "provider-two-model",
+                    "size": "1536x1024",
+                },
+            ],
             posai_gallery_root=str(tmp_path / "gallery"),
             posai_mockup_root=str(tmp_path / "mockup"),
             posai_xlsx_root=str(tmp_path / "xlsx"),
@@ -156,6 +175,9 @@ def test_product_publish_page_builds_local_and_ai_jobs(tmp_path, monkeypatch):
     assert ai_job.images == [image]
     assert ai_job.prompt == "keep subject and generate print"
     assert ai_job.api_key == "stored-key"
+    assert ai_job.api_base == "https://provider-two.example/v1"
+    assert ai_job.model == "provider-two-model"
+    assert ai_job.size == "1536x1024"
     assert ai_job.prefix == "SZW"
     assert ai_job.start_number == 3113
     assert ai_job.total_return_count == 2
