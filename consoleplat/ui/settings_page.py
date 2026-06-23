@@ -149,7 +149,7 @@ class SettingsPage(QWidget):
         self.activate_module(0)
 
     def _build_monitor_panel(self) -> QFrame:
-        panel = self._make_panel("监控模块", "这里集中放 Temu 监控、浏览器连接和拿货表导出目录。")
+        panel = self._make_panel("监控模块", "这里集中放 Temu 监控、浏览器连接和拿货表导出目录。", compact=True)
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)
@@ -160,10 +160,11 @@ class SettingsPage(QWidget):
         form.addRow("刷新间隔", self.interval_spin)
         form.addRow("拿货表导出目录", self._browse_row(self.purchase_export_dir_edit, self.choose_export_dir))
         layout.addLayout(form)
+        layout.addStretch(1)
         return panel
 
     def _build_account_panel(self) -> QFrame:
-        panel = self._make_panel("账号模块", "账号密码仅保存在当前机器，密码继续走 Windows DPAPI。")
+        panel = self._make_panel("账号模块", "账号密码仅保存在当前机器，密码继续走 Windows DPAPI。", compact=True)
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)
@@ -172,6 +173,7 @@ class SettingsPage(QWidget):
         form.addRow("账号", self.phone_edit)
         form.addRow("密码", self.password_edit)
         layout.addLayout(form)
+        layout.addStretch(1)
         return panel
 
     def _build_image_panel(self) -> QFrame:
@@ -229,7 +231,7 @@ class SettingsPage(QWidget):
         return panel
 
     def _build_publish_panel(self) -> QFrame:
-        panel = self._make_panel("发布模块", "固定产品标题和发布页默认模板都放回这里。")
+        panel = self._make_panel("发布模块", "固定产品标题和发布页默认模板都放回这里。", compact=True)
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)
@@ -243,10 +245,11 @@ class SettingsPage(QWidget):
         form.addRow("本地生图默认张数", self.publish_local_count_spin)
         form.addRow("AI 改图默认轮数", self.publish_ai_count_spin)
         layout.addLayout(form)
+        layout.addStretch(1)
         return panel
 
     def _build_program_panel(self) -> QFrame:
-        panel = self._make_panel("程序模块", "恢复 PutawayAiRobot 对接目录、程序数据目录和窗口大小。")
+        panel = self._make_panel("程序模块", "恢复 PutawayAiRobot 对接目录、程序数据目录和窗口大小。", compact=True)
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)
@@ -259,6 +262,7 @@ class SettingsPage(QWidget):
         form.addRow("启动宽度", self.startup_width_spin)
         form.addRow("启动高度", self.startup_height_spin)
         layout.addLayout(form)
+        layout.addStretch(1)
         return panel
 
     def _line_edit(self, object_name: str, placeholder: str = "") -> QLineEdit:
@@ -281,12 +285,16 @@ class SettingsPage(QWidget):
         layout.addWidget(button)
         return row
 
-    def _make_panel(self, title: str, hint: str) -> QFrame:
+    def _make_panel(self, title: str, hint: str, compact: bool = False) -> QFrame:
         panel = QFrame()
         panel.setObjectName("panel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(12)
+        if compact:
+            layout.setContentsMargins(18, 16, 18, 16)
+            layout.setSpacing(8)
+        else:
+            layout.setContentsMargins(20, 18, 20, 18)
+            layout.setSpacing(12)
         title_label = QLabel(title)
         title_label.setObjectName("sectionTitle")
         hint_label = QLabel(hint)

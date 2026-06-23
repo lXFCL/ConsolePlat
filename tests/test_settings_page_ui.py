@@ -233,6 +233,24 @@ def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
     page.close()
 
 
+def test_settings_page_non_image_panels_push_extra_space_below_form(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    for index in (0, 1, 3, 4):
+        panel = page.stack.widget(index)
+        layout = panel.layout()
+        trailing_item = layout.itemAt(layout.count() - 1)
+        assert trailing_item is not None
+        assert trailing_item.spacerItem() is not None
+
+    page.close()
+
+
 def test_settings_page_loads_posai_model_root(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
     SettingsStore(path).save(AppSettings(posai_model_root="E:/1PythonProject/PosAiImg/模特图-干净"))
