@@ -1,5 +1,9 @@
 from pathlib import Path
 import site
+import base64
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from PyQt5.QtWidgets import QApplication
 from openpyxl import Workbook, load_workbook
@@ -566,6 +570,82 @@ def test_ai_edit_page_reads_remaining_stdout_on_finish(tmp_path, monkeypatch):
     assert page.current_task.outputs == ["E:/tmp/out/a.png"]
 
     page.close()
+
+
+def test_ai_edit_page_start_job_runs_cli_and_finishes_success(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "input.png"
+    Image.new("RGBA", (32, 32), (255, 0, 0, 255)).save(image)
+
+    output_image = tmp_path / "edited.png"
+    Image.new("RGBA", (32, 32), (0, 0, 0, 255)).save(output_image)
+    image_b64 = base64.b64encode(output_image.read_bytes()).decode("ascii")
+
+    class EditHandler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            length = int(self.headers.get("Content-Length", "0"))
+            if length:
+                self.rfile.read(length)
+            body = {
+                "data": [
+                    {
+                        "b64_json": image_b64,
+                        "revised_prompt": "done",
+                    }
+                ]
+            }
+            payload = json.dumps(body).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, format, *args):  # noqa: A003
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), EditHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    api_base = f"http://127.0.0.1:{server.server_port}/v1"
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": api_base,
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            posai_gallery_root=str(tmp_path / "gallery-root"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    page._add_image_item(str(image))
+    page.prompt_edit.setPlainText("keep subject")
+    try:
+        page.start_job()
+
+        assert page.process is not None
+        finished = page.process.waitForFinished(15000)
+
+        assert finished is True
+        assert page.current_task is not None
+        assert page.current_task.status == "完成"
+        assert page.current_task.outputs
+        assert Path(page.current_task.outputs[0]).exists()
+    finally:
+        page.close()
+        server.shutdown()
+        server.server_close()
 
 
 def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path, monkeypatch):
