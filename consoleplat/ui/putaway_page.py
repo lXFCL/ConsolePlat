@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QFormLayout, QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import SettingsStore
@@ -24,6 +24,7 @@ class PutawayPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
+        self.embedded_widget: QWidget | None = None
 
         header = QFrame()
         header.setObjectName("panel")
@@ -33,7 +34,7 @@ class PutawayPage(QWidget):
 
         title = QLabel("自动上架")
         title.setObjectName("sectionTitle")
-        hint = QLabel("当前版本先接回 PutawayAiRobot 的目录信息和启动入口，不会在这里直接点击真实发布。")
+        hint = QLabel("当前页面直接内嵌 PutawayAiRobot 界面；真实发布流程仍由上架程序内部控制，请谨慎操作。")
         hint.setObjectName("cardSubtitle")
         hint.setWordWrap(True)
 
@@ -41,39 +42,47 @@ class PutawayPage(QWidget):
         header_layout.addWidget(hint)
         root.addWidget(header)
 
-        info_panel = QFrame()
-        info_panel.setObjectName("panel")
-        info_layout = QVBoxLayout(info_panel)
-        info_layout.setContentsMargins(22, 18, 22, 18)
-        info_layout.setSpacing(12)
+        self.container_panel = QFrame()
+        self.container_panel.setObjectName("panel")
+        container_layout = QVBoxLayout(self.container_panel)
+        container_layout.setContentsMargins(22, 18, 22, 18)
+        container_layout.setSpacing(12)
 
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignRight)
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(8)
-        form.addRow("项目目录", QLabel(str(self.adapter.project_dir)))
-        form.addRow("data 目录", QLabel(str(self.adapter.data_dir_path)))
-        form.addRow("日志目录", QLabel(str(self.adapter.log_dir_path)))
-        info_layout.addLayout(form)
+        meta_label = QLabel(
+            f"项目目录：{self.adapter.project_dir}\n"
+            f"data 目录：{self.adapter.data_dir_path}\n"
+            f"日志目录：{self.adapter.log_dir_path}"
+        )
+        meta_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        container_layout.addWidget(meta_label)
 
-        program, args, cwd = self.adapter.launch_command()
-        command_preview = QLabel(f"启动入口：{program} {' '.join(args)}")
-        command_preview.setWordWrap(True)
-        command_preview.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        info_layout.addWidget(command_preview)
-
-        cwd_label = QLabel(f"工作目录：{cwd}")
-        cwd_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        info_layout.addWidget(cwd_label)
-
-        status_text = "已检测到上架入口脚本" if (self.adapter.project_dir / "browser_dom_automation.py").exists() else "未检测到上架入口脚本"
-        self.status_label = QLabel(status_text)
+        self.status_label = QLabel("正在加载内嵌上架界面…")
         self.status_label.setObjectName("statusPill")
-        info_layout.addWidget(self.status_label)
+        container_layout.addWidget(self.status_label)
+
+        self.error_label = QLabel("")
+        self.error_label.setWordWrap(True)
+        self.error_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.error_label.hide()
+        container_layout.addWidget(self.error_label)
 
         self.open_settings_button = QPushButton("去设置里检查路径")
         self.open_settings_button.setObjectName("ghostButton")
-        info_layout.addWidget(self.open_settings_button, alignment=Qt.AlignLeft)
+        container_layout.addWidget(self.open_settings_button, alignment=Qt.AlignLeft)
 
-        root.addWidget(info_panel)
-        root.addStretch(1)
+        try:
+            self.embedded_widget = self.adapter.build_embedded_widget(parent=self.container_panel)
+        except Exception as exc:
+            self.embedded_widget = None
+            self.status_label.setText("内嵌上架界面加载失败")
+            self.error_label.setText(
+                "无法加载 PutawayAiRobot 内嵌界面。\n"
+                f"错误类型：{type(exc).__name__}\n"
+                f"错误信息：{exc}"
+            )
+            self.error_label.show()
+        else:
+            self.status_label.setText("已加载 PutawayAiRobot 内嵌界面")
+            container_layout.addWidget(self.embedded_widget, stretch=1)
+
+        root.addWidget(self.container_panel, stretch=1)

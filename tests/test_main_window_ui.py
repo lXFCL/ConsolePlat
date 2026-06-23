@@ -119,3 +119,28 @@ def test_main_window_putaway_page_uses_real_page(monkeypatch):
     assert window.findChildren(PutawayPage)
 
     window.close()
+
+
+def test_main_window_putaway_page_contains_embedded_widget(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    class FakeEmbeddedWidget(QLabel):
+        def __init__(self, parent=None):
+            super().__init__("embedded", parent)
+            self.setObjectName("fakePutawayEmbeddedWidget")
+
+    def fake_build(self, parent=None):
+        return FakeEmbeddedWidget(parent)
+
+    monkeypatch.setattr("consoleplat.ui.putaway_page.PutawayAdapter.build_embedded_widget", fake_build, raising=False)
+
+    window = MainWindow()
+    window.activate_page("putaway")
+    page = window.findChildren(PutawayPage)[0]
+
+    assert page.embedded_widget is not None
+    assert page.embedded_widget.objectName() == "fakePutawayEmbeddedWidget"
+    assert page.error_label.isHidden()
+
+    window.close()
