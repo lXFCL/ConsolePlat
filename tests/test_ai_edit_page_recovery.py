@@ -171,6 +171,59 @@ def test_ai_edit_page_copy_split_outputs_and_detail_dialog(tmp_path, monkeypatch
     page.close()
 
 
+def test_ai_edit_task_detail_dialog_shows_failed_and_warning_messages(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    record = AIEditTaskRecord(
+        task_id="20260623123100",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="prompt", prefix="BO", start_number=1661),
+        status="失败",
+        stage_text="后处理失败",
+        progress_percent=0,
+        logs=["12:00:00  运行结束"],
+        failed=["未找到可正式入库的改图产物"],
+        warnings=["已同步 0 张图片"],
+    )
+
+    dialog = AIEditTaskDetailDialog(record)
+    text = dialog.log.toPlainText()
+
+    assert "未找到可正式入库的改图产物" in text
+    assert "已同步 0 张图片" in text
+    assert "运行结束" in text
+
+    dialog.close()
+
+
+def test_ai_edit_page_refreshes_open_task_detail_dialog(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = AIEditTaskRecord(
+        task_id="20260623123200",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="prompt", prefix="BO", start_number=1661),
+        status="运行中",
+        stage_text="准备启动",
+        progress_percent=5,
+        logs=["12:00:00  启动任务"],
+    )
+    page.current_task = record
+    dialog = AIEditTaskDetailDialog(record, page)
+    page.task_detail_dialog = dialog
+
+    page._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
+    page.current_task.failed = ["未找到可正式入库的改图产物"]
+    page._append_log("正式模式后处理失败：未找到可正式入库的改图产物")
+
+    assert "后处理失败" in dialog.meta_label.text()
+    assert "未找到可正式入库的改图产物" in dialog.log.toPlainText()
+
+    dialog.close()
+    page.close()
+
+
 def test_ai_edit_page_process_env_exports_key_and_user_site(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

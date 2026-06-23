@@ -154,9 +154,16 @@ class AIEditTaskDetailDialog(QDialog):
     def refresh(self, record: AIEditTaskRecord) -> None:
         self.record = record
         self.meta_label.setText(
-            f"状态: {record.status}    前缀: {record.job.prefix}    起始: {record.job.start_number}    轮数: {record.job.total_return_count}"
+            f"状态: {record.status}    阶段: {record.stage_text}    前缀: {record.job.prefix}    起始: {record.job.start_number}    轮数: {record.job.total_return_count}"
         )
-        self.log.setPlainText("\n".join(record.logs))
+        sections: list[str] = []
+        if record.failed:
+            sections.append("失败项:\n" + "\n".join(str(item) for item in record.failed))
+        if record.warnings:
+            sections.append("警告:\n" + "\n".join(str(item) for item in record.warnings))
+        if record.logs:
+            sections.append("日志:\n" + "\n".join(record.logs))
+        self.log.setPlainText("\n\n".join(sections))
         self._refresh_round_view()
 
     def _derive_round_sources(self, record: AIEditTaskRecord) -> list[str]:
@@ -576,6 +583,7 @@ class AIEditPage(QWidget):
         self.tasks.append(record)
         self._rebuild_task_list()
         self._save_task_history()
+        self._refresh_task_detail_dialog()
         return record
 
     def start_job(self) -> None:
@@ -755,6 +763,7 @@ class AIEditPage(QWidget):
                 if progress is not None:
                     self.current_task.progress_percent = progress
         self._save_task_history()
+        self._refresh_task_detail_dialog()
 
     def _update_current_task(
         self,
@@ -773,6 +782,7 @@ class AIEditPage(QWidget):
             self.current_task.output_dir = output_dir
         self._rebuild_task_list()
         self._save_task_history()
+        self._refresh_task_detail_dialog()
 
     def _build_output_path_for_source(self, source_path: str) -> Path:
         source = Path(source_path)
@@ -885,6 +895,10 @@ class AIEditPage(QWidget):
 
     def _on_task_sort_changed(self, _text: str) -> None:
         self._rebuild_task_list()
+
+    def _refresh_task_detail_dialog(self) -> None:
+        if self.task_detail_dialog is not None and self.current_task is not None:
+            self.task_detail_dialog.refresh(self.current_task)
 
     def _task_to_dict(self, record: AIEditTaskRecord) -> dict:
         return {
