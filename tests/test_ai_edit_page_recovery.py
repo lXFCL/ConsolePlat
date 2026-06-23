@@ -5,7 +5,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QWidget
 from openpyxl import Workbook, load_workbook
 from PIL import Image
 
@@ -441,6 +441,110 @@ def test_ai_edit_task_detail_prefers_transparent_source_for_split(tmp_path):
     dialog = AIEditTaskDetailDialog(record)
 
     assert dialog._find_split_source(record) == str(transparent_image)
+
+    dialog.close()
+
+
+def test_ai_edit_task_detail_round_index_uses_transparent_round_sources_only(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    transparent_a = tmp_path / "edited_round_01_transparent.png"
+    transparent_b = tmp_path / "edited_round_02_transparent.png"
+    split_a = tmp_path / "edited_round_01_transparent_part_01.png"
+    split_b = tmp_path / "edited_round_02_transparent_part_01.png"
+    for path in (transparent_a, transparent_b, split_a, split_b):
+        path.write_bytes(b"fake")
+    record = AIEditTaskRecord(
+        task_id="20260620123456",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="保留主体",
+            split_collage=True,
+            split_count=25,
+            total_return_count=2,
+            prefix="BO",
+            start_number=1661,
+        ),
+        output_dir=str(tmp_path),
+        round_sources=[str(transparent_a), str(transparent_b)],
+        outputs=[str(transparent_a), str(split_a), str(transparent_b), str(split_b)],
+    )
+
+    dialog = AIEditTaskDetailDialog(record)
+
+    assert dialog.round_index_label.text() == "1/2"
+    assert dialog.source_path_label.text() == str(transparent_a)
+    dialog.show_next_round()
+    assert dialog.round_index_label.text() == "2/2"
+    assert dialog.source_path_label.text() == str(transparent_b)
+
+    dialog.close()
+
+
+def test_split_profile_editor_dialog_parses_guides(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    record = AIEditTaskRecord(
+        task_id="20260620123456",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体"),
+        split_profile={"x_guides": [200], "y_guides": [100]},
+    )
+
+    from consoleplat.ui.ai_edit_page import SplitProfileEditorDialog
+
+    dialog = SplitProfileEditorDialog(record, str(tmp_path / "edited_round_01_transparent.png"))
+    dialog.x_guides_edit.setText("120, 360, 120")
+    dialog.y_guides_edit.setText("80，240")
+
+    assert dialog.parsed_guides() == ([120, 360], [80, 240])
+
+    dialog.close()
+
+
+def test_ai_edit_task_detail_manual_split_button_uses_current_round_source(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    transparent_a = tmp_path / "edited_round_01_transparent.png"
+    transparent_b = tmp_path / "edited_round_02_transparent.png"
+    for path in (transparent_a, transparent_b):
+        path.write_bytes(b"fake")
+
+    record = AIEditTaskRecord(
+        task_id="20260620123456",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="保留主体",
+            split_collage=True,
+            split_count=25,
+            total_return_count=2,
+            prefix="BO",
+            start_number=1661,
+        ),
+        output_dir=str(tmp_path),
+        round_sources=[str(transparent_a), str(transparent_b)],
+        outputs=[str(transparent_a), str(transparent_b)],
+    )
+
+    class _PageStub(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[tuple[AIEditTaskRecord, str]] = []
+
+        def edit_split_profile(self, current_record, source_path) -> None:
+            self.calls.append((current_record, source_path))
+
+    page = _PageStub()
+    dialog = AIEditTaskDetailDialog(record, parent=page)
+
+    dialog.show_next_round()
+    dialog.edit_split_profile()
+
+    assert len(page.calls) == 1
+    assert page.calls[0][0] is record
+    assert page.calls[0][1] == str(transparent_b)
 
     dialog.close()
 

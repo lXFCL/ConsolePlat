@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
@@ -166,12 +167,15 @@ class AIEditTaskDetailDialog(QDialog):
         self.convert_transparent_button.clicked.connect(self.convert_current_round)
         self.start_split_button = QPushButton("直接切割")
         self.start_split_button.clicked.connect(self.split_current_round)
+        self.edit_split_profile_button = QPushButton("手动切线")
+        self.edit_split_profile_button.clicked.connect(self.edit_split_profile)
         self.open_output_dir_button = QPushButton("打开印花文件夹")
         self.open_output_dir_button.clicked.connect(self.open_output_dir)
         nav.addWidget(self.prev_round_button)
         nav.addWidget(self.next_round_button)
         nav.addWidget(self.convert_transparent_button)
         nav.addWidget(self.start_split_button)
+        nav.addWidget(self.edit_split_profile_button)
         nav.addWidget(self.open_output_dir_button)
         layout.addLayout(nav)
 
@@ -230,6 +234,7 @@ class AIEditTaskDetailDialog(QDialog):
             self.next_round_button.setEnabled(False)
             self.convert_transparent_button.setEnabled(False)
             self.start_split_button.setEnabled(False)
+            self.edit_split_profile_button.setEnabled(False)
             return
         self._active_source_index = max(0, min(self._active_source_index, len(sources) - 1))
         self.round_index_label.setText(f"{self._active_source_index + 1}/{len(sources)}")
@@ -238,6 +243,7 @@ class AIEditTaskDetailDialog(QDialog):
         self.next_round_button.setEnabled(self._active_source_index < len(sources) - 1)
         self.convert_transparent_button.setEnabled(True)
         self.start_split_button.setEnabled(True)
+        self.edit_split_profile_button.setEnabled(True)
 
     def show_previous_round(self) -> None:
         if self._active_source_index > 0:
@@ -283,6 +289,57 @@ class AIEditTaskDetailDialog(QDialog):
     def split_current_round(self) -> None:
         if self._page is not None:
             self._page.split_current_round(self.record, self._find_split_source(self.record))
+
+    def edit_split_profile(self) -> None:
+        if self._page is not None:
+            self._page.edit_split_profile(self.record, self._find_split_source(self.record))
+
+
+class SplitProfileEditorDialog(QDialog):
+    def __init__(self, record: AIEditTaskRecord, source_path: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.record = record
+        self.source_path = source_path
+        self.setWindowTitle("手动切割线")
+        self.resize(760, 220)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(source_path))
+
+        x_guides = ",".join(str(value) for value in (record.split_profile.get("x_guides") or []))
+        y_guides = ",".join(str(value) for value in (record.split_profile.get("y_guides") or []))
+
+        form = QFormLayout()
+        self.x_guides_edit = QLineEdit(x_guides)
+        self.y_guides_edit = QLineEdit(y_guides)
+        form.addRow("纵向分割线", self.x_guides_edit)
+        form.addRow("横向分割线", self.y_guides_edit)
+        layout.addLayout(form)
+
+        hint = QLabel("输入像素位置，多个值用半角逗号分隔，例如：240,480,720")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        actions = QHBoxLayout()
+        self.save_button = QPushButton("保存并重切")
+        self.cancel_button = QPushButton("取消")
+        self.save_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        actions.addStretch(1)
+        actions.addWidget(self.save_button)
+        actions.addWidget(self.cancel_button)
+        layout.addLayout(actions)
+
+    def parsed_guides(self) -> tuple[list[int], list[int]]:
+        def parse(text: str) -> list[int]:
+            values: list[int] = []
+            for token in str(text or "").replace("，", ",").split(","):
+                stripped = token.strip()
+                if stripped.isdigit():
+                    values.append(int(stripped))
+            return sorted(set(values))
+
+        return parse(self.x_guides_edit.text()), parse(self.y_guides_edit.text())
 
 
 class AIEditPage(QWidget):
@@ -778,7 +835,9 @@ class AIEditPage(QWidget):
         if not prepared_paths:
             return
         self.current_task.outputs = [str(path) for path in prepared_paths]
-        self.current_task.round_sources = [str(path) for path in prepared_paths]
+        transparent_rounds = [str(asset.transparent_path) for asset in prepared_assets if asset.transparent_path]
+        if transparent_rounds:
+            self.current_task.round_sources = transparent_rounds
         self.current_task.final_transparent_dir = str(Path(prepared_paths[0]).parent)
 
     def _run_formalize_post_process(self) -> None:
@@ -969,13 +1028,19 @@ class AIEditPage(QWidget):
         if self.split_profile_store is None or not source_path:
             return
         columns, rows = _best_grid_for_count(record.job.split_count)
+        current_x_guides = list(record.split_profile.get("x_guides") or [])
+        current_y_guides = list(record.split_profile.get("y_guides") or [])
+        dialog = SplitProfileEditorDialog(record, source_path, self)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        x_guides, y_guides = dialog.parsed_guides()
         profile = SplitProfile(
             source_image=source_path,
             split_count=record.job.split_count,
             columns=columns,
             rows=rows,
-            x_guides=[],
-            y_guides=[],
+            x_guides=x_guides or current_x_guides,
+            y_guides=y_guides or current_y_guides,
             updated_at=datetime.now().isoformat(timespec="seconds"),
         )
         self.split_profile_store.save(profile)

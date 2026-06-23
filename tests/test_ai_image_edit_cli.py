@@ -24,6 +24,21 @@ def _make_collage_png(path: Path) -> None:
     image.save(path)
 
 
+def _make_collage_with_tiny_fragment(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.new("RGBA", (240, 120), (255, 255, 255, 255))
+    for x in range(20, 90):
+        for y in range(20, 100):
+            image.putpixel((x, y), (220, 40, 40, 255))
+    for x in range(140, 220):
+        for y in range(18, 104):
+            image.putpixel((x, y), (40, 40, 220, 255))
+    for x in range(112, 118):
+        for y in range(10, 16):
+            image.putpixel((x, y), (255, 210, 60, 255))
+    image.save(path)
+
+
 def test_ai_image_edit_cli_emits_json_and_writes_outputs(tmp_path, monkeypatch, capsys):
     source = tmp_path / "source.png"
     _make_png(source)
@@ -293,6 +308,27 @@ def test_split_collage_image_with_guides_exports_individual_prints(tmp_path):
     assert second.width < Image.open(transparent).width
     assert first.getpixel((first.width // 2, first.height // 2))[0] > 150
     assert second.getpixel((second.width // 2, second.height // 2))[2] > 150
+
+
+def test_split_collage_image_ignores_tiny_fragment_components(tmp_path):
+    source = tmp_path / "collage.png"
+    _make_collage_with_tiny_fragment(source)
+    transparent = Path(ai_image_edit_cli.convert_image_to_transparent_background(source))
+
+    outputs = [
+        Path(path)
+        for path in ai_image_edit_cli.split_collage_image_with_guides(
+            transparent,
+            tmp_path / "split",
+            3,
+        )
+    ]
+
+    assert len(outputs) == 2
+    assert [path.name for path in outputs] == [
+        "collage_transparent_part_01.png",
+        "collage_transparent_part_02.png",
+    ]
 
 
 def base64_bytes(text: str) -> str:

@@ -183,6 +183,41 @@ def _extract_component_boxes(image: Image.Image) -> list[tuple[int, int, int, in
     return boxes
 
 
+def _filter_component_boxes(
+    boxes: list[tuple[int, int, int, int]],
+    *,
+    image_width: int,
+    image_height: int,
+    requested_count: int,
+) -> list[tuple[int, int, int, int]]:
+    if not boxes:
+        return []
+    original_count = len(boxes)
+    scored: list[tuple[tuple[int, int, int, int], int, int, int]] = []
+    min_width = max(12, int(image_width * 0.08))
+    min_height = max(12, int(image_height * 0.08))
+    min_area = max(256, int(image_width * image_height * 0.015))
+    for box in boxes:
+        left, top, right, bottom = box
+        width = right - left
+        height = bottom - top
+        area = width * height
+        if width < min_width or height < min_height or area < min_area:
+            continue
+        scored.append((box, area, width, height))
+    if scored:
+        scored.sort(key=lambda item: (-item[1], item[0][1], item[0][0]))
+        kept = [item[0] for item in scored]
+        kept.sort(key=lambda item: (item[1], item[0]))
+        if len(kept) == 1 and original_count == 1 and requested_count > 1:
+            return []
+        return kept[: max(1, int(requested_count or 1))]
+    boxes.sort(key=lambda item: ((item[2] - item[0]) * (item[3] - item[1]), item[1], item[0]), reverse=True)
+    fallback = boxes[: max(1, int(requested_count or 1))]
+    fallback.sort(key=lambda item: (item[1], item[0]))
+    return fallback
+
+
 def _crop_and_save_part(image: Image.Image, box: tuple[int, int, int, int], target: Path) -> str | None:
     cropped = image.crop(box)
     alpha_box = cropped.getchannel("A").getbbox()
@@ -209,9 +244,12 @@ def split_collage_image_with_guides(
     outputs: list[str] = []
     boxes = _guide_boxes(width, height, x_guides, y_guides) if (x_guides or y_guides) else []
     if not boxes:
-        boxes = _extract_component_boxes(image)
-    if boxes and len(boxes) < max(1, int(split_count or 1)) and not (x_guides or y_guides):
-        boxes = _grid_boxes(width, height, split_count)
+        boxes = _filter_component_boxes(
+            _extract_component_boxes(image),
+            image_width=width,
+            image_height=height,
+            requested_count=max(1, int(split_count or 1)),
+        )
     if not boxes:
         boxes = _grid_boxes(width, height, split_count)
     for index, box in enumerate(boxes[: max(1, int(split_count or 1))], start=1):
