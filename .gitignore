@@ -17,6 +17,7 @@ dist/
 .env.*
 settings.json
 outputs/
+data/
 .git_broken_recovery_20260623/
 _rebuild_v110/
 _recovered_from_session/
