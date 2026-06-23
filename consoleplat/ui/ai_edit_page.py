@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QProcess, Qt
+from PyQt5.QtCore import QProcess, Qt, pyqtSignal
+from PyQt5.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -19,14 +20,17 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QSizePolicy,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSplitter,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
+from PIL import Image
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, PosAiImgAdapter
 from consoleplat.config import AppSettings, SettingsStore
@@ -300,46 +304,234 @@ class SplitProfileEditorDialog(QDialog):
         super().__init__(parent)
         self.record = record
         self.source_path = source_path
+        self._image_size = self._load_image_size(source_path)
+        self._syncing_fields = False
         self.setWindowTitle("手动切割线")
-        self.resize(760, 220)
+        self.resize(980, 720)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(source_path))
 
-        x_guides = ",".join(str(value) for value in (record.split_profile.get("x_guides") or []))
-        y_guides = ",".join(str(value) for value in (record.split_profile.get("y_guides") or []))
+        default_x_guides, default_y_guides = self._default_guides()
+        x_guides = list(record.split_profile.get("x_guides") or default_x_guides)
+        y_guides = list(record.split_profile.get("y_guides") or default_y_guides)
+
+        splitter = QSplitter(Qt.Horizontal)
+        self.preview = SplitGuidePreviewWidget(source_path, x_guides, y_guides, self)
+        splitter.addWidget(self.preview)
+
+        side_panel = QWidget(self)
+        side_layout = QVBoxLayout(side_panel)
+        side_layout.setContentsMargins(0, 0, 0, 0)
+        side_layout.setSpacing(10)
+
+        self.stats_label = QLabel(self._stats_text(x_guides, y_guides))
+        self.stats_label.setWordWrap(True)
+        side_layout.addWidget(self.stats_label)
 
         form = QFormLayout()
-        self.x_guides_edit = QLineEdit(x_guides)
-        self.y_guides_edit = QLineEdit(y_guides)
+        self.x_guides_edit = QLineEdit(",".join(str(value) for value in x_guides))
+        self.y_guides_edit = QLineEdit(",".join(str(value) for value in y_guides))
         form.addRow("纵向分割线", self.x_guides_edit)
         form.addRow("横向分割线", self.y_guides_edit)
-        layout.addLayout(form)
+        side_layout.addLayout(form)
 
         hint = QLabel("输入像素位置，多个值用半角逗号分隔，例如：240,480,720")
         hint.setWordWrap(True)
-        layout.addWidget(hint)
+        side_layout.addWidget(hint)
+        side_layout.addStretch(1)
+        splitter.addWidget(side_panel)
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 2)
+        layout.addWidget(splitter, stretch=1)
+
+        self.preview.guidesChanged.connect(self._sync_guide_fields)
+        self.x_guides_edit.editingFinished.connect(self._apply_text_guides_to_preview)
+        self.y_guides_edit.editingFinished.connect(self._apply_text_guides_to_preview)
 
         actions = QHBoxLayout()
+        self.reset_button = QPushButton("恢复默认 5x5")
         self.save_button = QPushButton("保存并重切")
         self.cancel_button = QPushButton("取消")
+        self.reset_button.clicked.connect(self.reset_guides)
         self.save_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         actions.addStretch(1)
+        actions.addWidget(self.reset_button)
         actions.addWidget(self.save_button)
         actions.addWidget(self.cancel_button)
         layout.addLayout(actions)
 
-    def parsed_guides(self) -> tuple[list[int], list[int]]:
-        def parse(text: str) -> list[int]:
-            values: list[int] = []
-            for token in str(text or "").replace("，", ",").split(","):
-                stripped = token.strip()
-                if stripped.isdigit():
-                    values.append(int(stripped))
-            return sorted(set(values))
+    def _load_image_size(self, source_path: str) -> tuple[int, int]:
+        try:
+            with Image.open(source_path) as image:
+                return image.size
+        except Exception:
+            return (1000, 1000)
 
-        return parse(self.x_guides_edit.text()), parse(self.y_guides_edit.text())
+    def _default_guides(self) -> tuple[list[int], list[int]]:
+        width, height = self._image_size
+        columns = rows = 5
+        x_guides = [round(width * index / columns) for index in range(1, columns)]
+        y_guides = [round(height * index / rows) for index in range(1, rows)]
+        return x_guides, y_guides
+
+    def _stats_text(self, x_guides: list[int], y_guides: list[int]) -> str:
+        width, height = self._image_size
+        return f"图片尺寸: {width} x {height}\n当前列数: {len(x_guides) + 1}\n当前行数: {len(y_guides) + 1}"
+
+    def _parse_guide_text(self, text: str) -> list[int]:
+        values: list[int] = []
+        for token in str(text or "").replace("，", ",").split(","):
+            stripped = token.strip()
+            if stripped.isdigit():
+                values.append(int(stripped))
+        return sorted(set(values))
+
+    def _sync_guide_fields(self, x_guides: list[int], y_guides: list[int]) -> None:
+        self._syncing_fields = True
+        self.x_guides_edit.setText(",".join(str(value) for value in x_guides))
+        self.y_guides_edit.setText(",".join(str(value) for value in y_guides))
+        self.stats_label.setText(self._stats_text(x_guides, y_guides))
+        self._syncing_fields = False
+
+    def _apply_text_guides_to_preview(self) -> None:
+        if self._syncing_fields:
+            return
+        self.preview.set_guides(
+            self._parse_guide_text(self.x_guides_edit.text()),
+            self._parse_guide_text(self.y_guides_edit.text()),
+        )
+
+    def reset_guides(self) -> None:
+        x_guides, y_guides = self._default_guides()
+        self.preview.set_guides(x_guides, y_guides)
+
+    def parsed_guides(self) -> tuple[list[int], list[int]]:
+        self._apply_text_guides_to_preview()
+        return self.preview.guides()
+
+
+class SplitGuidePreviewWidget(QWidget):
+    guidesChanged = pyqtSignal(list, list)
+
+    def __init__(self, source_path: str, x_guides: list[int], y_guides: list[int], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._pixmap = QPixmap(source_path)
+        self._x_guides: list[int] = []
+        self._y_guides: list[int] = []
+        self._selected_axis: str | None = None
+        self._selected_index: int = -1
+        self._dragging = False
+        self.setMinimumSize(480, 480)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.set_guides(x_guides, y_guides)
+
+    def set_guides(self, x_guides: list[int], y_guides: list[int]) -> None:
+        self._x_guides = sorted(set(int(value) for value in x_guides))
+        self._y_guides = sorted(set(int(value) for value in y_guides))
+        self.guidesChanged.emit(list(self._x_guides), list(self._y_guides))
+        self.update()
+
+    def guides(self) -> tuple[list[int], list[int]]:
+        return list(self._x_guides), list(self._y_guides)
+
+    def move_guide(self, axis: str, index: int, value: int) -> None:
+        guides = self._x_guides if axis == "x" else self._y_guides
+        limit = max(1, self._pixmap.width() - 1) if axis == "x" else max(1, self._pixmap.height() - 1)
+        if index < 0 or index >= len(guides):
+            return
+        guides[index] = max(1, min(limit, int(value)))
+        guides.sort()
+        self.guidesChanged.emit(list(self._x_guides), list(self._y_guides))
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#101723"))
+        if self._pixmap.isNull():
+            painter.setPen(QColor("#d8e1ea"))
+            painter.drawText(self.rect(), Qt.AlignCenter, "预览不可用")
+            return
+
+        target_rect = self._target_rect()
+        painter.drawPixmap(target_rect, self._pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        x_scale, y_scale = self._scale_factors(target_rect)
+        vertical_pen = QPen(QColor("#5bb6ff"), 2)
+        horizontal_pen = QPen(QColor("#ff8a5b"), 2)
+
+        for index, x in enumerate(self._x_guides):
+            painter.setPen(self._guide_pen("x", index, vertical_pen))
+            draw_x = round(target_rect.left() + x * x_scale)
+            painter.drawLine(draw_x, target_rect.top(), draw_x, target_rect.bottom())
+        for index, y in enumerate(self._y_guides):
+            painter.setPen(self._guide_pen("y", index, horizontal_pen))
+            draw_y = round(target_rect.top() + y * y_scale)
+            painter.drawLine(target_rect.left(), draw_y, target_rect.right(), draw_y)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        axis, index = self._hit_test(event.pos())
+        self._selected_axis = axis
+        self._selected_index = index
+        self._dragging = axis is not None and index >= 0
+        self.update()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if not self._dragging or self._selected_axis is None or self._selected_index < 0:
+            return
+        image_x, image_y = self._widget_to_image(event.pos())
+        if self._selected_axis == "x":
+            self.move_guide("x", self._selected_index, image_x)
+        else:
+            self.move_guide("y", self._selected_index, image_y)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        self._dragging = False
+
+    def _target_rect(self):
+        margin = 16
+        area = self.rect().adjusted(margin, margin, -margin, -margin)
+        if self._pixmap.isNull():
+            return area
+        scaled = self._pixmap.scaled(area.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        x = area.left() + (area.width() - scaled.width()) // 2
+        y = area.top() + (area.height() - scaled.height()) // 2
+        return scaled.rect().translated(x, y)
+
+    def _scale_factors(self, target_rect) -> tuple[float, float]:
+        width = max(1, self._pixmap.width())
+        height = max(1, self._pixmap.height())
+        return target_rect.width() / width, target_rect.height() / height
+
+    def _guide_pen(self, axis: str, index: int, default_pen: QPen) -> QPen:
+        if self._selected_axis == axis and self._selected_index == index:
+            return QPen(QColor("#f8f871"), 3)
+        return default_pen
+
+    def _hit_test(self, pos) -> tuple[str | None, int]:
+        target_rect = self._target_rect()
+        if self._pixmap.isNull() or not target_rect.contains(pos):
+            return None, -1
+        x_scale, y_scale = self._scale_factors(target_rect)
+        tolerance = 8
+        for index, x in enumerate(self._x_guides):
+            draw_x = round(target_rect.left() + x * x_scale)
+            if abs(pos.x() - draw_x) <= tolerance:
+                return "x", index
+        for index, y in enumerate(self._y_guides):
+            draw_y = round(target_rect.top() + y * y_scale)
+            if abs(pos.y() - draw_y) <= tolerance:
+                return "y", index
+        return None, -1
+
+    def _widget_to_image(self, pos) -> tuple[int, int]:
+        target_rect = self._target_rect()
+        x_scale, y_scale = self._scale_factors(target_rect)
+        image_x = round((pos.x() - target_rect.left()) / max(x_scale, 1e-6))
+        image_y = round((pos.y() - target_rect.top()) / max(y_scale, 1e-6))
+        return image_x, image_y
 
 
 class AIEditPage(QWidget):
@@ -1028,8 +1220,6 @@ class AIEditPage(QWidget):
         if self.split_profile_store is None or not source_path:
             return
         columns, rows = _best_grid_for_count(record.job.split_count)
-        current_x_guides = list(record.split_profile.get("x_guides") or [])
-        current_y_guides = list(record.split_profile.get("y_guides") or [])
         dialog = SplitProfileEditorDialog(record, source_path, self)
         if dialog.exec_() != QDialog.Accepted:
             return
@@ -1039,11 +1229,20 @@ class AIEditPage(QWidget):
             split_count=record.job.split_count,
             columns=columns,
             rows=rows,
-            x_guides=x_guides or current_x_guides,
-            y_guides=y_guides or current_y_guides,
+            x_guides=x_guides,
+            y_guides=y_guides,
             updated_at=datetime.now().isoformat(timespec="seconds"),
         )
         self.split_profile_store.save(profile)
+        record.split_profile = {
+            "x_guides": list(profile.x_guides or []),
+            "y_guides": list(profile.y_guides or []),
+            "split_count": profile.split_count,
+            "columns": profile.columns,
+            "rows": profile.rows,
+            "updated_at": profile.updated_at,
+        }
+        self.split_current_round(record, source_path)
         record.split_profile = {
             "source_image": profile.source_image,
             "split_count": profile.split_count,

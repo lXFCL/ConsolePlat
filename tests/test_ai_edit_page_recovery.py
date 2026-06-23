@@ -5,7 +5,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QDialog, QWidget
 from openpyxl import Workbook, load_workbook
 from PIL import Image
 
@@ -503,6 +503,87 @@ def test_split_profile_editor_dialog_parses_guides(tmp_path):
     dialog.close()
 
 
+def test_split_profile_editor_dialog_builds_default_5x5_guides_from_image_size(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(image_path)
+    record = AIEditTaskRecord(
+        task_id="20260623170000",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25),
+        split_profile={},
+    )
+
+    from consoleplat.ui.ai_edit_page import SplitProfileEditorDialog
+
+    dialog = SplitProfileEditorDialog(record, str(image_path))
+
+    assert dialog.parsed_guides() == ([200, 400, 600, 800], [200, 400, 600, 800])
+
+    dialog.close()
+
+
+def test_split_profile_editor_dialog_can_reset_guides_to_default_grid(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (500, 1000), (0, 0, 0, 0)).save(image_path)
+    record = AIEditTaskRecord(
+        task_id="20260623170100",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25),
+        split_profile={"x_guides": [111], "y_guides": [222]},
+    )
+
+    from consoleplat.ui.ai_edit_page import SplitProfileEditorDialog
+
+    dialog = SplitProfileEditorDialog(record, str(image_path))
+    dialog.reset_guides()
+
+    assert dialog.parsed_guides() == ([100, 200, 300, 400], [200, 400, 600, 800])
+
+    dialog.close()
+
+
+def test_split_profile_editor_dialog_updates_text_fields_when_guides_change(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(image_path)
+    record = AIEditTaskRecord(
+        task_id="20260623170200",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25),
+        split_profile={},
+    )
+
+    from consoleplat.ui.ai_edit_page import SplitProfileEditorDialog
+
+    dialog = SplitProfileEditorDialog(record, str(image_path))
+    dialog.preview.set_guides([210, 420, 620, 810], [190, 390, 610, 805])
+
+    assert dialog.x_guides_edit.text() == "210,420,620,810"
+    assert dialog.y_guides_edit.text() == "190,390,610,805"
+
+    dialog.close()
+
+
+def test_split_guide_preview_widget_move_guide_clamps_and_sorts(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(image_path)
+
+    from consoleplat.ui.ai_edit_page import SplitGuidePreviewWidget
+
+    widget = SplitGuidePreviewWidget(str(image_path), [200, 400, 600, 800], [200, 400, 600, 800])
+    widget.move_guide("x", 2, 50)
+    widget.move_guide("y", 1, 1200)
+
+    assert widget.guides() == ([50, 200, 400, 800], [200, 600, 800, 999])
+
+
 def test_ai_edit_task_detail_manual_split_button_uses_current_round_source(tmp_path):
     app = QApplication.instance() or QApplication([])
 
@@ -547,6 +628,59 @@ def test_ai_edit_task_detail_manual_split_button_uses_current_round_source(tmp_p
     assert page.calls[0][1] == str(transparent_b)
 
     dialog.close()
+
+
+def test_ai_edit_page_edit_split_profile_saves_preview_guides_and_replaces_split_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(image_path)
+    page, _ = _page_with_temp_store(tmp_path, monkeypatch)
+    record = AIEditTaskRecord(
+        task_id="20260623170300",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25),
+        output_dir=str(tmp_path),
+        outputs=[str(image_path)],
+    )
+    page.tasks = [record]
+    page.split_profile_store = None
+
+    class _ProfileStoreStub:
+        def __init__(self) -> None:
+            self.saved = None
+
+        def save(self, profile) -> None:
+            self.saved = profile
+
+    page.split_profile_store = _ProfileStoreStub()
+
+    class _FakeDialog:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def exec_(self):
+            return QDialog.Accepted
+
+        def parsed_guides(self):
+            return [210, 420, 630, 840], [205, 405, 615, 825]
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.SplitProfileEditorDialog", _FakeDialog)
+    captured = {}
+
+    def fake_split(source_path, output_dir, split_count, x_guides, y_guides):
+        captured["source_path"] = source_path
+        captured["x_guides"] = x_guides
+        captured["y_guides"] = y_guides
+        return []
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)
+
+    page.edit_split_profile(record, str(image_path))
+
+    assert captured["source_path"] == str(image_path)
+    assert captured["x_guides"] == [210, 420, 630, 840]
+    assert captured["y_guides"] == [205, 405, 615, 825]
 
 
 def test_ai_edit_page_restores_legacy_collage_transparent_sources(tmp_path, monkeypatch):
