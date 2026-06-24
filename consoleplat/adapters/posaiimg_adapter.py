@@ -213,7 +213,8 @@ class PosAiImgAdapter:
         elif ok:
             message = f"AI 改图完成：成功 {len(outputs)} 张，失败 {len(failed)} 张"
         else:
-            message = "AI 改图未生成有效图片"
+            detail = failed[0] if failed else ""
+            message = f"AI 改图失败：{detail}" if detail else "AI 改图未生成有效图片"
         return AIEditSummary(
             ok=ok,
             output_dir=str(payload.get("output_dir") or ""),

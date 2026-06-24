@@ -330,6 +330,74 @@ def _extract_response_items(data: dict) -> list[dict]:
     return []
 
 
+def _truncate_preview(text: str, limit: int = 280) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3] + "..."
+
+
+def _response_preview(response: httpx.Response | None) -> str:
+    if response is None:
+        return ""
+    try:
+        preview = response.text
+    except Exception:
+        try:
+            preview = response.content.decode("utf-8", errors="replace")
+        except Exception:
+            preview = ""
+    return _truncate_preview(preview)
+
+
+def _extract_error_detail(response: httpx.Response | None) -> str:
+    if response is None:
+        return ""
+    try:
+        error_payload = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(error_payload, dict):
+        return ""
+    error = error_payload.get("error")
+    if isinstance(error, dict):
+        return str(error.get("message") or "").strip()
+    message = error_payload.get("message")
+    return str(message or "").strip()
+
+
+def _format_http_status_error(exc: httpx.HTTPStatusError, *, url: str) -> str:
+    response = exc.response
+    detail = _extract_error_detail(response)
+    status = response.status_code if response is not None else "unknown"
+    content_type = ""
+    if response is not None:
+        content_type = str(response.headers.get("content-type") or "").strip()
+    preview = _response_preview(response)
+
+    parts = [
+        f"AI 改图请求失败",
+        f"url={url}",
+        f"status={status}",
+    ]
+    if content_type:
+        parts.append(f"content-type={content_type}")
+    if detail:
+        parts.append(f"detail={detail}")
+    if preview:
+        parts.append(f"body={preview}")
+    if not detail and not preview:
+        fallback = str(exc).strip()
+        if fallback:
+            parts.append(f"error={fallback}")
+    return "; ".join(parts)
+
+
+def _format_request_exception(exc: Exception, *, url: str) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    return f"AI 改图请求异常; url={url}; error={message}"
+
+
 def request_image_edit_batch(
     *,
     api_key: str,
@@ -361,7 +429,7 @@ def request_image_edit_batch(
         "n": str(max(1, int(batch_count or 1))),
     }
 
-    last_error: Exception | None = None
+    last_error_message = ""
     payload: dict | None = None
     with httpx.Client(timeout=300.0) as client:
         for index, url in enumerate(candidate_urls):
@@ -376,26 +444,15 @@ def request_image_edit_batch(
                     and exc.response.status_code == 404
                     and index < len(candidate_urls) - 1
                 ):
-                    last_error = exc
+                    last_error_message = _format_http_status_error(exc, url=url)
                     continue
-                detail = ""
-                response = exc.response
-                if response is not None:
-                    try:
-                        error_payload = response.json()
-                    except ValueError:
-                        error_payload = {}
-                    if isinstance(error_payload, dict):
-                        error = error_payload.get("error")
-                        if isinstance(error, dict):
-                            detail = str(error.get("message") or "").strip()
-                raise ValueError(detail or str(exc)) from exc
+                raise ValueError(_format_http_status_error(exc, url=url)) from exc
             except Exception as exc:
-                last_error = exc
+                last_error_message = _format_request_exception(exc, url=url)
                 break
 
     if payload is None:
-        raise ValueError(str(last_error) if last_error else "image edit request failed")
+        raise ValueError(last_error_message or "image edit request failed")
 
     results: list[GeneratedImageResult] = []
     for item in _extract_response_items(payload):

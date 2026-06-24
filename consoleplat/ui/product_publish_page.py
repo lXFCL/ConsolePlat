@@ -479,7 +479,9 @@ class ProductPublishPage(QWidget):
         )
 
     def build_ai_edit_job(self) -> AIEditJob:
-        provider = self.settings.default_ai_provider()
+        settings = self.settings_store.load()
+        self.settings = settings
+        provider = settings.default_ai_provider()
         return AIEditJob(
             images=list(self._reference_images),
             prompt=self.ai_prompt_edit.toPlainText().strip(),
@@ -488,15 +490,15 @@ class ProductPublishPage(QWidget):
             model=provider.model,
             output_dir=self._build_ai_output_dir(),
             size=provider.size,
-            split_collage=True,
-            split_count=25,
-            total_return_count=self.count_spin.value(),
+            split_collage=bool(settings.ai_edit_split_collage),
+            split_count=max(1, int(settings.ai_edit_split_count or 10)),
+            total_return_count=max(1, int(settings.ai_edit_total_return_count or self.count_spin.value() or 1)),
             prefix=self.prefix_combo.currentText(),
             start_number=self.start_spin.value(),
             test_mode=self.test_mode_check.isChecked(),
-            gallery_root=self.settings.posai_gallery_root,
-            mockup_root=self.settings.posai_mockup_root,
-            xlsx_root=self.settings.posai_xlsx_root,
+            gallery_root=settings.posai_gallery_root,
+            mockup_root=settings.posai_mockup_root,
+            xlsx_root=settings.posai_xlsx_root,
         )
 
     def _build_ai_output_dir(self) -> Path:
@@ -842,7 +844,8 @@ class ProductPublishPage(QWidget):
     def _finish_ai_generation(self, record: ProductTaskRecord, exit_code: int) -> None:
         summary = self.adapter.parse_ai_edit_result(self._stdout_buffer)
         if exit_code != 0 or not summary.ok:
-            reason = summary.message or f"AI 改图失败，退出码 {exit_code}"
+            failed_items = list(summary.failed or [])
+            reason = failed_items[0] if failed_items else (summary.message or f"AI 改图失败，退出码 {exit_code}")
             self._mark_record_failed(record, reason)
             return
         record.status = "generated"
@@ -983,10 +986,19 @@ class ProductPublishPage(QWidget):
         waited_seconds = max(0, int(time.time() - self._task_started_at)) if self._task_started_at else 0
         state = getattr(self.process, "state", lambda: None)()
         state_text = "运行中" if state == QProcess.Running else ("启动中" if state == QProcess.Starting else "未知")
+        if self.current_task.generation_mode == "AI 改图":
+            hint = (
+                f"暂时还没有收到脚本输出，已等待 {waited_seconds} 秒。当前进程状态：{state_text}。"
+                "常见原因是 AI 改图接口响应较慢、网络请求尚未返回，或脚本仍在初始化。"
+            )
+        else:
+            hint = (
+                f"暂时还没有收到脚本输出，已等待 {waited_seconds} 秒。当前进程状态：{state_text}。"
+                "常见原因是 ComfyUI 尚未启动、conda 环境启动较慢，或脚本仍在初始化。"
+            )
         self._append_record_log(
             self.current_task,
-            f"暂时还没有收到脚本输出，已等待 {waited_seconds} 秒。当前进程状态：{state_text}。"
-            "常见原因是 ComfyUI 尚未启动、conda 环境启动较慢，或脚本仍在初始化。",
+            hint,
         )
         self._save_and_refresh(self.current_task)
 

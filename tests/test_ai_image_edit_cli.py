@@ -222,6 +222,52 @@ def test_ai_image_edit_cli_emits_api_error_details(tmp_path, monkeypatch, capsys
     assert "invalid image payload" in payload["failed"][0]
 
 
+def test_request_image_edit_batch_http_status_error_includes_response_diagnostics(tmp_path, monkeypatch):
+    source = tmp_path / "source.png"
+    source.write_bytes(b"png")
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, headers=None, data=None, files=None):
+            request = httpx.Request("POST", url)
+            response = httpx.Response(
+                502,
+                request=request,
+                headers={"content-type": "text/plain; charset=utf-8"},
+                text="Upstream request failed",
+            )
+            raise httpx.HTTPStatusError("bad gateway", request=request, response=response)
+
+    monkeypatch.setattr(ai_image_edit_cli.httpx, "Client", FakeClient)
+
+    try:
+        ai_image_edit_cli.request_image_edit_batch(
+            api_key="test-key",
+            api_base="https://api.geek2api.com/v1",
+            model="gpt-image-2",
+            prompt="keep subject",
+            size="1024x1024",
+            image_paths=[source],
+            batch_count=1,
+        )
+    except ValueError as exc:
+        text = str(exc)
+        assert "https://api.geek2api.com/v1/images/edits" in text
+        assert "502" in text
+        assert "text/plain; charset=utf-8" in text
+        assert "Upstream request failed" in text
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_request_image_edit_batch_retries_v1_endpoint_after_404(tmp_path, monkeypatch):
     source = tmp_path / "source.png"
     source.write_bytes(b"png")
@@ -301,7 +347,9 @@ def test_request_image_edit_batch_raises_original_error_when_request_breaks_befo
             batch_count=1,
         )
     except ValueError as exc:
-        assert "socket dropped" in str(exc)
+        text = str(exc)
+        assert "https://api.example.test/v1/images/edits" in text
+        assert "socket dropped" in text
     else:
         raise AssertionError("expected ValueError")
 

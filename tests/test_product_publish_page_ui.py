@@ -146,6 +146,9 @@ def test_product_publish_page_builds_local_and_ai_jobs(tmp_path, monkeypatch):
                     "size": "1536x1024",
                 },
             ],
+            ai_edit_split_collage=True,
+            ai_edit_split_count=25,
+            ai_edit_total_return_count=10,
             posai_gallery_root=str(tmp_path / "gallery"),
             posai_mockup_root=str(tmp_path / "mockup"),
             posai_xlsx_root=str(tmp_path / "xlsx"),
@@ -182,12 +185,60 @@ def test_product_publish_page_builds_local_and_ai_jobs(tmp_path, monkeypatch):
     assert ai_job.size == "1536x1024"
     assert ai_job.prefix == "SZW"
     assert ai_job.start_number == 3113
-    assert ai_job.total_return_count == 2
+    assert ai_job.total_return_count == 10
     assert ai_job.split_collage is True
     assert ai_job.split_count == 25
     assert ai_job.test_mode is False
     assert not hasattr(page, "split_collage_check")
     assert not hasattr(page, "split_count_spin")
+
+    page.close()
+
+
+def test_product_publish_page_ai_job_reuses_ai_edit_settings_shape(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "reference.png"
+    image.write_bytes(b"fake")
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": "https://api.example.test/v1",
+                    "model": "gpt-image-2",
+                    "size": "2048x2048",
+                }
+            ],
+            ai_edit_split_collage=False,
+            ai_edit_split_count=10,
+            ai_edit_total_return_count=7,
+            posai_gallery_root=str(tmp_path / "gallery"),
+            posai_mockup_root=str(tmp_path / "mockup"),
+            posai_xlsx_root=str(tmp_path / "xlsx"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    page.generation_mode_combo.setCurrentText("AI 改图")
+    page.prefix_combo.setCurrentText("SZW")
+    page.start_spin.setValue(3363)
+    page.count_spin.setValue(2)
+    page._add_reference_image(str(image))
+    page.ai_prompt_edit.setPlainText("keep subject")
+
+    ai_job = page.build_ai_edit_job()
+
+    assert ai_job.api_base == "https://api.example.test/v1"
+    assert ai_job.model == "gpt-image-2"
+    assert ai_job.size == "2048x2048"
+    assert ai_job.split_collage is False
+    assert ai_job.split_count == 10
+    assert ai_job.total_return_count == 7
 
     page.close()
 
@@ -854,6 +905,41 @@ def test_product_publish_page_warns_when_generation_has_no_output(tmp_path, monk
     page.close()
 
 
+def test_product_publish_page_warns_ai_edit_with_ai_specific_hint(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624130600",
+        task_name="ai publish",
+        prefix="BO",
+        start_number=1661,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+    )
+
+    class FakeStateProcess:
+        Running = 2
+
+        def state(self):
+            return FakeStateProcess.Running
+
+    page.current_task = record
+    page.process = FakeStateProcess()
+    page._stdout_buffer = ""
+    page._stderr_buffer = ""
+    page._task_started_at = 1
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.time.time", lambda: 21)
+
+    page._warn_if_no_output_yet()
+
+    assert any("AI 改图接口" in line or "图片接口" in line for line in record.logs)
+    assert not any("ComfyUI 尚未启动" in line for line in record.logs)
+
+    page.close()
+
+
 def test_product_publish_page_auto_continue_uses_orchestrator_delay_and_pause(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -951,5 +1037,50 @@ def test_product_publish_page_stop_button_aborts_waiting_handoff(tmp_path, monke
     assert page.orchestrator.stage == PublishStage.ABORTED
     assert record.stage_text == "已中止"
     assert record.status == "failed"
+
+    page.close()
+
+
+def test_product_publish_page_surfaces_ai_edit_failed_reason_from_payload(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624132000",
+        task_name="ai publish",
+        prefix="SZW",
+        start_number=3363,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+        test_mode=False,
+    )
+    record.job_payload = {
+        "images": [str(tmp_path / "ref.png")],
+        "prompt": "keep subject",
+        "api_base": "https://api.openai.com/v1",
+        "model": "gpt-image-2",
+        "output_dir": str(tmp_path / "gallery" / "output"),
+        "size": "1024x1024",
+        "split_collage": True,
+        "split_count": 25,
+        "total_return_count": 2,
+    }
+
+    class AISummary:
+        ok = False
+        output_dir = str(tmp_path / "gallery" / "output")
+        outputs = []
+        failed = ["Expecting value: line 1 column 8 (char 7)"]
+        warnings = []
+        message = "AI 改图未生成有效图片"
+
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.PosAiImgAdapter.parse_ai_edit_result", lambda *_args, **_kwargs: AISummary())
+
+    page._finish_ai_generation(record, 0)
+
+    assert record.status == "failed"
+    assert "Expecting value: line 1 column 8 (char 7)" in record.failure_reason
+    assert any("Expecting value: line 1 column 8 (char 7)" in line for line in record.logs)
 
     page.close()
