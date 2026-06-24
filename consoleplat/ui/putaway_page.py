@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PyQt5.QtCore import QEvent, Qt, QTimer
+from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import SettingsStore
@@ -18,6 +18,8 @@ class PutawayPage(QWidget):
             data_dir_path=Path(self.settings.putaway_data_dir or r"E:\1PythonProject\PutawayAiRobot\data"),
             log_dir_path=Path(self.settings.putaway_log_dir or r"E:\1PythonProject\PutawayAiRobot\log"),
         )
+        self._embed_loaded = False
+        self._parent_stack: QStackedWidget | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -48,7 +50,7 @@ class PutawayPage(QWidget):
         container_layout.setContentsMargins(22, 18, 22, 18)
         container_layout.setSpacing(12)
 
-        self.status_label = QLabel("正在加载内嵌上架界面…")
+        self.status_label = QLabel("准备加载内嵌上架界面…")
         self.status_label.setObjectName("statusPill")
         container_layout.addWidget(self.status_label)
 
@@ -57,6 +59,45 @@ class PutawayPage(QWidget):
         self.error_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.error_label.hide()
         container_layout.addWidget(self.error_label)
+
+        root.addWidget(self.container_panel, stretch=1)
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        self._schedule_embedded_load()
+
+    def event(self, event) -> bool:  # noqa: N802 - Qt override
+        handled = super().event(event)
+        if event.type() == QEvent.ParentChange:
+            self._connect_parent_stack()
+        return handled
+
+    def _connect_parent_stack(self) -> None:
+        parent = self.parentWidget()
+        if not isinstance(parent, QStackedWidget) or parent is self._parent_stack:
+            return
+        self._parent_stack = parent
+        parent.currentChanged.connect(self._on_parent_stack_current_changed)
+
+    def _on_parent_stack_current_changed(self, index: int) -> None:
+        if self._embed_loaded or self._parent_stack is None or self._parent_stack.widget(index) is not self:
+            return
+        if self._parent_stack.isVisible():
+            self._schedule_embedded_load()
+        else:
+            self._load_embedded()
+
+    def _schedule_embedded_load(self) -> None:
+        if self._embed_loaded:
+            return
+        QTimer.singleShot(0, self._load_embedded)
+
+    def _load_embedded(self) -> None:
+        if self._embed_loaded:
+            return
+        self._embed_loaded = True
+        self.status_label.setText("正在加载内嵌上架界面…")
+        QApplication.processEvents()
 
         try:
             self.embedded_widget = self.adapter.build_embedded_widget(parent=self.container_panel)
@@ -71,6 +112,5 @@ class PutawayPage(QWidget):
             self.error_label.show()
         else:
             self.status_label.setText("已加载 PutawayAiRobot 内嵌界面")
-            container_layout.addWidget(self.embedded_widget, stretch=1)
-
-        root.addWidget(self.container_panel, stretch=1)
+            self.error_label.hide()
+            self.container_panel.layout().addWidget(self.embedded_widget, stretch=1)

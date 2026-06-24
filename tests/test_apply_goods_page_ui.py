@@ -21,13 +21,35 @@ def _page_with_temp_store(tmp_path, monkeypatch):
     return ApplyGoodsPage()
 
 
-def test_apply_goods_page_mounts_embedded_widget_when_adapter_succeeds(tmp_path, monkeypatch):
+def test_apply_goods_page_does_not_build_embedded_widget_until_requested(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
+    calls = []
+
+    def fake_build(self, parent=None):
+        calls.append(parent)
+        return QWidget(parent)
+
+    monkeypatch.setattr("consoleplat.ui.apply_goods_page.ApplyGoodsAdapter.build_embedded_widget", fake_build, raising=False)
+
+    page = _page_with_temp_store(tmp_path, monkeypatch)
+
+    assert calls == []
+    assert page.embedded_widget is None
+    assert page._embed_loaded is False
+    assert page.error_label.isHidden()
+
+    page.close()
+
+
+def test_apply_goods_page_mounts_embedded_widget_once_when_loaded(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    calls = []
 
     class FakeEmbeddedWidget(QWidget):
         pass
 
     def fake_build(self, parent=None):
+        calls.append(parent)
         widget = FakeEmbeddedWidget(parent)
         widget.setObjectName("fakeApplyGoodsEmbeddedWidget")
         return widget
@@ -35,9 +57,13 @@ def test_apply_goods_page_mounts_embedded_widget_when_adapter_succeeds(tmp_path,
     monkeypatch.setattr("consoleplat.ui.apply_goods_page.ApplyGoodsAdapter.build_embedded_widget", fake_build, raising=False)
 
     page = _page_with_temp_store(tmp_path, monkeypatch)
+    page._load_embedded()
+    page._load_embedded()
     scroll_areas = page.findChildren(QScrollArea)
 
+    assert len(calls) == 1
     assert isinstance(page.embedded_widget, FakeEmbeddedWidget)
+    assert page._embed_loaded is True
     assert scroll_areas
     assert scroll_areas[0].objectName() == "applyGoodsScroll"
     assert scroll_areas[0].widgetResizable()
@@ -53,15 +79,26 @@ def test_apply_goods_page_mounts_embedded_widget_when_adapter_succeeds(tmp_path,
 
 def test_apply_goods_page_shows_import_error_when_embed_load_fails(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
+    calls = []
 
     def fake_build(self, parent=None):
+        calls.append(parent)
         raise ModuleNotFoundError("missing applygoods dependency")
 
     monkeypatch.setattr("consoleplat.ui.apply_goods_page.ApplyGoodsAdapter.build_embedded_widget", fake_build, raising=False)
 
     page = _page_with_temp_store(tmp_path, monkeypatch)
 
+    assert calls == []
     assert page.embedded_widget is None
+    assert page.error_label.isHidden()
+
+    page._load_embedded()
+    page._load_embedded()
+
+    assert len(calls) == 1
+    assert page.embedded_widget is None
+    assert page._embed_loaded is True
     assert not page.error_label.isHidden()
     assert "missing applygoods dependency" in page.error_label.text()
 

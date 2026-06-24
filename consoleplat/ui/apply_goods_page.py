@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QFrame, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PyQt5.QtCore import QEvent, Qt, QTimer
+from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QScrollArea, QStackedWidget, QVBoxLayout, QWidget
 
 from consoleplat.adapters.applygoods_adapter import ApplyGoodsAdapter
 from consoleplat.config import SettingsStore
@@ -16,6 +16,8 @@ class ApplyGoodsPage(QWidget):
         self.adapter = ApplyGoodsAdapter(
             project_dir=Path(self.settings.applygoods_project_dir or r"E:\1PythonProject\ApplyGoods"),
         )
+        self._embed_loaded = False
+        self._parent_stack: QStackedWidget | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -64,7 +66,7 @@ class ApplyGoodsPage(QWidget):
         container_layout.setContentsMargins(24, 20, 24, 24)
         container_layout.setSpacing(14)
 
-        self.status_label = QLabel("正在加载内嵌合规界面…")
+        self.status_label = QLabel("准备加载内嵌合规界面…")
         self.status_label.setObjectName("applyStatusBanner")
         self.status_label.setWordWrap(True)
         container_layout.addWidget(self.status_label)
@@ -82,6 +84,47 @@ class ApplyGoodsPage(QWidget):
         embed_layout.setContentsMargins(18, 18, 18, 18)
         embed_layout.setSpacing(0)
 
+        container_layout.addWidget(self.embed_shell, stretch=1)
+        root.addWidget(self.container_panel)
+        root.addStretch(1)
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        self._schedule_embedded_load()
+
+    def event(self, event) -> bool:  # noqa: N802 - Qt override
+        handled = super().event(event)
+        if event.type() == QEvent.ParentChange:
+            self._connect_parent_stack()
+        return handled
+
+    def _connect_parent_stack(self) -> None:
+        parent = self.parentWidget()
+        if not isinstance(parent, QStackedWidget) or parent is self._parent_stack:
+            return
+        self._parent_stack = parent
+        parent.currentChanged.connect(self._on_parent_stack_current_changed)
+
+    def _on_parent_stack_current_changed(self, index: int) -> None:
+        if self._embed_loaded or self._parent_stack is None or self._parent_stack.widget(index) is not self:
+            return
+        if self._parent_stack.isVisible():
+            self._schedule_embedded_load()
+        else:
+            self._load_embedded()
+
+    def _schedule_embedded_load(self) -> None:
+        if self._embed_loaded:
+            return
+        QTimer.singleShot(0, self._load_embedded)
+
+    def _load_embedded(self) -> None:
+        if self._embed_loaded:
+            return
+        self._embed_loaded = True
+        self.status_label.setText("正在加载内嵌合规界面…")
+        QApplication.processEvents()
+
         try:
             self.embedded_widget = self.adapter.build_embedded_widget(parent=self.embed_shell)
         except Exception as exc:
@@ -95,8 +138,5 @@ class ApplyGoodsPage(QWidget):
             self.error_label.show()
         else:
             self.status_label.setText("已加载 ApplyGoods 内嵌界面")
-            embed_layout.addWidget(self.embedded_widget)
-
-        container_layout.addWidget(self.embed_shell, stretch=1)
-        root.addWidget(self.container_panel)
-        root.addStretch(1)
+            self.error_label.hide()
+            self.embed_shell.layout().addWidget(self.embedded_widget)
