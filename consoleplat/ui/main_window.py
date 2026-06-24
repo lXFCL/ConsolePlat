@@ -59,10 +59,15 @@ class NavButton(QPushButton):
         title_label = QLabel(title)
         title_label.setObjectName("navTitle")
         title_label.setAlignment(Qt.AlignCenter)
+        self.badge_label = QLabel("运行")
+        self.badge_label.setObjectName("navBadge")
+        self.badge_label.setAlignment(Qt.AlignCenter)
+        self.badge_label.hide()
 
         layout.addStretch(1)
         layout.addWidget(icon_label)
         layout.addWidget(title_label)
+        layout.addWidget(self.badge_label)
         layout.addStretch(1)
 
 
@@ -146,11 +151,15 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(24, 24, 24, 24)
-        label = QLabel(f"正在加载{PAGE_TITLES.get(key, key)}…")
+        label = QLabel(f"正在加载{PAGE_TITLES.get(key, key)}界面…")
         label.setObjectName("sectionTitle")
         label.setAlignment(Qt.AlignCenter)
+        hint = QLabel("首次打开会准备对应模块，请稍候。")
+        hint.setObjectName("cardSubtitle")
+        hint.setAlignment(Qt.AlignCenter)
         layout.addStretch(1)
         layout.addWidget(label)
+        layout.addWidget(hint)
         layout.addStretch(1)
         return page
 
@@ -190,6 +199,28 @@ class MainWindow(QMainWindow):
             button.setProperty("active", "true" if is_active else "false")
             button.style().unpolish(button)
             button.style().polish(button)
+        self.refresh_task_badges()
+
+    def refresh_task_badges(self) -> None:
+        for key, button in self.nav_buttons.items():
+            badge = getattr(button, "badge_label", None)
+            if badge is None:
+                continue
+            page = self.pages.get(key)
+            running = bool(page and self._page_has_running_task(page))
+            badge.setVisible(running)
+
+    def _page_has_running_task(self, page: QWidget) -> bool:
+        process = getattr(page, "process", None)
+        if process is not None:
+            return True
+        processes = getattr(page, "processes", None)
+        if processes:
+            return True
+        current_task = getattr(page, "current_task", None)
+        if current_task is not None:
+            return True
+        return False
 
     def _ensure_page_built(self, key: str) -> None:
         if key in self._built:

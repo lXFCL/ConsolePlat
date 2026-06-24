@@ -166,3 +166,24 @@ def test_main_window_putaway_page_contains_embedded_widget(monkeypatch):
     assert page.error_label.isHidden()
 
     window.close()
+
+
+def test_main_window_nav_badge_reflects_running_page(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    window.activate_page("publish")
+    publish_page = window.pages["publish"]
+    publish_page.process = object()
+    window.refresh_task_badges()
+
+    badge = window.nav_buttons["publish"].badge_label
+    assert not badge.isHidden()
+    assert badge.text() == "运行"
+
+    publish_page.process = None
+    window.refresh_task_badges()
+    assert badge.isHidden()
+
+    window.close()

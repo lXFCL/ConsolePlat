@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget
 
 from consoleplat.config import AppSettings
 from consoleplat.ui.main_window import MainWindow
@@ -50,5 +50,18 @@ def test_main_window_builds_page_once_when_activated(monkeypatch):
 
     assert create_calls == ["monitor", "putaway", "publish"]
     assert window._built == {"monitor", "putaway", "publish"}
+
+    window.close()
+
+
+def test_main_window_loading_placeholders_are_visible_before_page_build(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    placeholder = window._page_placeholders["putaway"]
+
+    labels = [label.text() for label in placeholder.findChildren(QLabel)]
+    assert any("正在加载" in text and "上架" in text for text in labels)
 
     window.close()
