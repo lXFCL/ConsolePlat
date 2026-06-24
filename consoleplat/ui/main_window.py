@@ -156,7 +156,9 @@ class MainWindow(QMainWindow):
 
     def _create_page(self, key: str) -> QWidget:
         if key == "monitor":
-            return MonitorPage()
+            page = MonitorPage()
+            page.request_open_publish.connect(self._open_publish_from_monitor)
+            return page
         if key == "publish":
             return ProductPublishPage()
         if key == "local_image":
@@ -214,6 +216,12 @@ class MainWindow(QMainWindow):
                 if item_key not in self._built and widget is item_placeholder:
                     self.page_indexes[item_key] = index
                     break
+
+    def _open_publish_from_monitor(self, context: dict) -> None:
+        self.activate_page("publish")
+        page = self.pages.get("publish")
+        if isinstance(page, ProductPublishPage):
+            page.prefill_from_monitor(context)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         for monitor_page in self.findChildren(MonitorPage):

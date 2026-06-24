@@ -98,6 +98,36 @@ def test_monitor_page_has_open_export_folder_button():
     page.close()
 
 
+def test_monitor_page_export_success_exposes_publish_handoff():
+    app = QApplication.instance() or QApplication([])
+
+    page = MonitorPage()
+    emitted = []
+    page.request_open_publish.connect(lambda context: emitted.append(context))
+    payload = {
+        "ok": True,
+        "summary": {
+            "output_path": "E:/exports/purchase.xlsx",
+            "total_records": 12,
+            "skipped_records": 1,
+        },
+    }
+
+    page._show_publish_handoff(payload)
+    page.open_publish_button.click()
+
+    assert emitted == [
+        {
+            "shop_name": page.shop_combo.currentText(),
+            "output_path": "E:/exports/purchase.xlsx",
+            "total_records": 12,
+        }
+    ]
+    assert not page.open_publish_button.isHidden()
+
+    page.close()
+
+
 def test_monitor_page_starts_cleanup_process_on_close(monkeypatch):
     calls = []
 

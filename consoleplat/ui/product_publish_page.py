@@ -241,6 +241,11 @@ class ProductPublishPage(QWidget):
         title = QLabel("任务模板")
         title.setObjectName("panelTitle")
         layout.addWidget(title)
+        self.monitor_prefill_label = QLabel("")
+        self.monitor_prefill_label.setObjectName("cardSubtitle")
+        self.monitor_prefill_label.setWordWrap(True)
+        self.monitor_prefill_label.hide()
+        layout.addWidget(self.monitor_prefill_label)
 
         self.prefix_combo = QComboBox()
         self.prefix_combo.addItems(["BO", "SZW"])
@@ -471,6 +476,18 @@ class ProductPublishPage(QWidget):
             self._reference_images.append(path)
         self.reference_count_label.setText(f"参考图 {len(self._reference_images)} 张")
         self._save_preferences()
+
+    def prefill_from_monitor(self, context: dict) -> None:
+        shop_name = str(context.get("shop_name") or "").strip() or self.prefix_combo.currentText()
+        output_path = str(context.get("output_path") or "").strip()
+        total_records = max(0, int(context.get("total_records") or 0))
+        self.task_name_edit.setText(f"{shop_name} 备货单发布")
+        if total_records:
+            self.count_spin.setValue(total_records)
+        self.monitor_prefill_label.setText(
+            f"已从监控导出结果带入：{Path(output_path).name if output_path else '--'}，请确认后开始。"
+        )
+        self.monitor_prefill_label.show()
 
     def build_local_image_job(self) -> LocalImageJob:
         return LocalImageJob(

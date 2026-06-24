@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from PyQt5.QtCore import QProcess, QTimer, Qt
+from PyQt5.QtCore import QProcess, QTimer, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -62,6 +62,8 @@ class MetricCard(QFrame):
 
 
 class MonitorPage(QWidget):
+    request_open_publish = pyqtSignal(dict)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.settings_store = SettingsStore()
@@ -165,6 +167,10 @@ class MonitorPage(QWidget):
         self.open_export_folder_button = QPushButton("打开文件夹")
         self.open_export_folder_button.setObjectName("ghostButton")
         self.open_export_folder_button.clicked.connect(self.open_export_folder)
+        self.open_publish_button = QPushButton("去发布")
+        self.open_publish_button.setObjectName("ghostButton")
+        self.open_publish_button.hide()
+        self.open_publish_button.clicked.connect(self._emit_open_publish_request)
         self.last_fetch_label = QLabel("最近刷新：--")
         self.last_fetch_label.setObjectName("cardSubtitle")
         control_layout.addWidget(control_title)
@@ -175,6 +181,7 @@ class MonitorPage(QWidget):
         control_layout.addWidget(self.manual_button)
         control_layout.addWidget(self.export_button)
         control_layout.addWidget(self.open_export_folder_button)
+        control_layout.addWidget(self.open_publish_button)
         control_layout.addStretch(1)
         control_layout.addWidget(self.last_fetch_label)
         root.addWidget(control_panel)
@@ -358,6 +365,7 @@ class MonitorPage(QWidget):
         snapshot = self.sendgoods_adapter.apply_export_result(base, payload)
         self.previous_snapshot = snapshot
         self.apply_snapshot(snapshot, 0)
+        self._show_publish_handoff(payload)
 
     def _on_export_process_error(self, error) -> None:
         self.export_process = None
@@ -372,6 +380,27 @@ class MonitorPage(QWidget):
         )
         self.previous_snapshot = snapshot
         self.apply_snapshot(snapshot, 0)
+
+    def _show_publish_handoff(self, payload: dict) -> None:
+        if not payload.get("ok"):
+            self.open_publish_button.hide()
+            return
+        self._publish_handoff_context = self._build_publish_handoff_context(payload)
+        self.open_publish_button.show()
+        self.open_publish_button.setToolTip("备货单已导出，带入线索到发布页")
+
+    def _build_publish_handoff_context(self, payload: dict) -> dict:
+        summary = payload.get("summary") or {}
+        return {
+            "shop_name": self._active_shop_name(),
+            "output_path": str(summary.get("output_path") or ""),
+            "total_records": int(summary.get("total_records") or 0),
+        }
+
+    def _emit_open_publish_request(self) -> None:
+        context = getattr(self, "_publish_handoff_context", {})
+        if context:
+            self.request_open_publish.emit(dict(context))
 
     def on_snapshot_ready(self, snapshot: MonitorSnapshot) -> None:
         try:

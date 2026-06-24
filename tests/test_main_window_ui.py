@@ -109,6 +109,28 @@ def test_main_window_publish_page_is_before_local_image(monkeypatch):
     window.close()
 
 
+def test_main_window_opens_publish_page_from_monitor_handoff(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    monitor_page = window.pages["monitor"]
+    monitor_page.request_open_publish.emit(
+        {
+            "shop_name": "YUHOOBO",
+            "output_path": "E:/exports/purchase.xlsx",
+            "total_records": 5,
+        }
+    )
+    publish_page = window.pages["publish"]
+
+    assert window.state.active_page == "publish"
+    assert publish_page.task_name_edit.text() == "YUHOOBO 备货单发布"
+    assert publish_page.count_spin.value() == 5
+
+    window.close()
+
+
 def test_main_window_putaway_page_uses_real_page(monkeypatch):
     monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
     app = QApplication.instance() or QApplication([])

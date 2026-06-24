@@ -937,6 +937,29 @@ def test_product_publish_page_debounces_text_preference_saves(tmp_path, monkeypa
     page.close()
 
 
+def test_product_publish_page_prefills_from_monitor_context(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+
+    page.prefill_from_monitor(
+        {
+            "shop_name": "YUHAOBO",
+            "output_path": "E:/exports/purchase.xlsx",
+            "total_records": 12,
+        }
+    )
+
+    assert page.task_name_edit.text() == "YUHAOBO 备货单发布"
+    assert page.count_spin.value() == 12
+    assert "purchase.xlsx" in page.monitor_prefill_label.text()
+    assert not page.monitor_prefill_label.isHidden()
+    assert page.process is None
+    assert page.current_task is None
+
+    page.close()
+
+
 def test_product_publish_page_warns_when_generation_has_no_output(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
