@@ -5,7 +5,7 @@ import os
 import site
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -48,7 +48,7 @@ from consoleplat.services.putaway_sync_service import IMAGE_SUFFIXES, sync_putaw
 from consoleplat.services.split_profile_store import SplitProfile, SplitProfileStore
 from consoleplat.services.task_store import TaskStore
 
-DEFAULT_SPLIT_X_GUIDES = [458, 805, 1229, 1638]
+DEFAULT_SPLIT_X_GUIDES = [428, 805, 1229, 1638]
 DEFAULT_SPLIT_Y_GUIDES = [482, 852, 1229, 1587]
 
 
@@ -269,6 +269,67 @@ def _default_split_profile(split_count: int) -> dict[str, object]:
 def _format_split_count_hint(count: int) -> str:
     columns, rows = _best_grid_for_count(count)
     return f"{max(1, int(count or 1))} 张 ({columns} x {rows})"
+
+
+def _legacy_round_sources_from_batch_dirs(
+    *,
+    output_dir: str,
+    final_transparent_dir: str,
+) -> list[str]:
+    candidates: list[Path] = []
+    output_path = Path(output_dir) if output_dir else None
+    final_transparent_path = Path(final_transparent_dir) if final_transparent_dir else None
+    if output_path:
+        candidates.append(output_path)
+    if final_transparent_path and final_transparent_path.parent not in candidates:
+        candidates.append(final_transparent_path.parent)
+
+    round_paths: list[Path] = []
+    seen: set[str] = set()
+    for base in candidates:
+        if not base.exists():
+            continue
+        transparent_rounds: list[Path] = []
+        fallback_rounds: list[Path] = []
+        for path in sorted(base.glob("edited_round_*.png"), key=lambda item: item.name.lower()):
+            stem = path.stem.lower()
+            if "_part_" in stem or stem.endswith(".prompt"):
+                continue
+            if stem.endswith("_transparent"):
+                transparent_rounds.append(path)
+            else:
+                fallback_rounds.append(path)
+        selected = transparent_rounds or fallback_rounds
+        for path in selected:
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            round_paths.append(path)
+    return [str(path) for path in round_paths]
+
+
+def _looks_like_final_transparent_round_sources(round_sources: list[str], final_transparent_dir: str) -> bool:
+    if not round_sources or not final_transparent_dir:
+        return False
+    final_dir = Path(final_transparent_dir)
+    if not final_dir.exists():
+        return False
+    normalized_final_dir = str(final_dir.resolve(strict=False)).lower()
+    for path_text in round_sources:
+        path = Path(path_text)
+        if path.suffix.lower() != ".png":
+            return False
+        try:
+            parent_text = str(path.parent.resolve(strict=False)).lower()
+        except OSError:
+            parent_text = str(path.parent).lower()
+        if parent_text != normalized_final_dir:
+            return False
+        stem = path.stem.lower()
+        if stem.startswith("edited_round_"):
+            return False
+    return True
 
 
 def _format_task_timestamp(value: str) -> str:
@@ -1346,6 +1407,7 @@ class AIEditPage(QWidget):
             return
         self.current_task = self._create_task_record(job)
         self._append_log(f"启动任务：{self.current_task.title}")
+        self._append_log(f"当前 AI 接口：{job.api_base}")
         program, args, cwd = self.adapter.ai_edit_command(job)
         process = QProcess(self)
         process.setProgram(program)
@@ -1481,7 +1543,7 @@ class AIEditPage(QWidget):
             return
         if result.outputs:
             record.outputs = list(result.outputs)
-        if result.round_sources:
+        if result.round_sources and result.action != "split_current_round":
             record.round_sources = list(result.round_sources)
         if result.final_transparent_dir:
             record.final_transparent_dir = result.final_transparent_dir
@@ -1495,6 +1557,15 @@ class AIEditPage(QWidget):
             record.stage_text = "失败"
         if result.warnings:
             record.warnings = list(record.warnings) + list(result.warnings)
+        if result.action == "split_current_round":
+            source_path = result.round_sources[0] if result.round_sources else ""
+            final_outputs = self._copy_split_outputs_to_final_gallery(
+                record,
+                [Path(path) for path in result.outputs or record.outputs],
+                start_number=self._start_number_for_round_source(record, source_path),
+            )
+            if final_outputs:
+                record.outputs = [str(path) for path in final_outputs]
         for line in result.logs:
             self._append_log(line)
         self.status_label.setText(record.status)
@@ -1670,14 +1741,20 @@ class AIEditPage(QWidget):
         source = Path(source_path)
         return source.parent / f"{source.stem}_split"
 
-    def _copy_split_outputs_to_final_gallery(self, record: AIEditTaskRecord, split_paths: list[Path]) -> list[Path]:
+    def _copy_split_outputs_to_final_gallery(
+        self,
+        record: AIEditTaskRecord,
+        split_paths: list[Path],
+        *,
+        start_number: int | None = None,
+    ) -> list[Path]:
         split_paths = [path for path in split_paths if "_part_" in path.stem.lower()]
         if not split_paths:
             return []
         target_root = Path(record.final_transparent_dir) if record.final_transparent_dir else Path(record.output_dir)
         target_root.mkdir(parents=True, exist_ok=True)
         outputs: list[Path] = []
-        current_number = record.job.start_number
+        current_number = int(start_number if start_number is not None else record.job.start_number)
         for source in split_paths:
             target = target_root / f"{record.job.prefix}-{current_number}.png"
             target.write_bytes(source.read_bytes())
@@ -1706,7 +1783,7 @@ class AIEditPage(QWidget):
         if not images:
             self._append_log(f"导出产品图失败：最终产品图目录没有图片 {source_dir}")
             return
-        target_dir = Path(record.output_dir) / "导出产品图"
+        target_dir = source_dir / "导出产品图"
         target_dir.mkdir(parents=True, exist_ok=True)
         replaced = 0
         for image in images:
@@ -1715,6 +1792,7 @@ class AIEditPage(QWidget):
                 replaced += 1
             shutil.copy2(image, target)
         self._append_log(f"已导出产品图 {len(images)} 张到 {target_dir}，覆盖 {replaced} 张")
+        self.sync_task_to_putaway_data(record)
         self._refresh_task_detail_dialog()
 
     def export_task_xlsx(self, record: AIEditTaskRecord) -> None:
@@ -1773,19 +1851,47 @@ class AIEditPage(QWidget):
         existing = [path for path in record.outputs if path not in new_split_paths]
         record.outputs = existing[: index + 1] + list(new_split_paths) + existing[index + 1 :]
 
+    def _round_source_index(self, record: AIEditTaskRecord, source_path: str) -> int:
+        if not source_path:
+            return 0
+        try:
+            source_key = str(Path(source_path).resolve(strict=False)).lower()
+        except OSError:
+            source_key = str(Path(source_path)).lower()
+        for index, candidate in enumerate(record.round_sources):
+            try:
+                candidate_key = str(Path(candidate).resolve(strict=False)).lower()
+            except OSError:
+                candidate_key = str(Path(candidate)).lower()
+            if candidate_key == source_key:
+                return index
+        return 0
+
+    def _start_number_for_round_source(self, record: AIEditTaskRecord, source_path: str) -> int:
+        split_count = max(1, int(record.job.split_count or 1))
+        return int(record.job.start_number) + self._round_source_index(record, source_path) * split_count
+
+    def _background_record_for_current_round(self, record: AIEditTaskRecord, source_path: str) -> AIEditTaskRecord:
+        current_record = copy.deepcopy(record)
+        current_record.round_sources = [source_path]
+        current_record.active_round_index = 0
+        current_record.job = replace(
+            current_record.job,
+            start_number=self._start_number_for_round_source(record, source_path),
+        )
+        return current_record
+
     def convert_current_round(self, record: AIEditTaskRecord, source_path: str) -> None:
         if not source_path:
             return
-        record.round_sources = [source_path]
         self._append_log("开始后台转透明底...")
-        self._start_background_job("convert_current_round", record)
+        self._start_background_job("convert_current_round", self._background_record_for_current_round(record, source_path))
 
     def split_current_round(self, record: AIEditTaskRecord, source_path: str) -> None:
         if not source_path:
             return
-        record.round_sources = [source_path]
         self._append_log("开始后台切割当前轮...")
-        self._start_background_job("split_current_round", record)
+        self._start_background_job("split_current_round", self._background_record_for_current_round(record, source_path))
 
     def _find_original_round_source(self, record: AIEditTaskRecord, source_path: str) -> str | None:
         source = Path(source_path)
@@ -1958,6 +2064,14 @@ class AIEditPage(QWidget):
         )
         if record.collage_transparent_sources and not record.round_sources:
             record.round_sources = list(record.collage_transparent_sources)
+        recovered_round_sources = _legacy_round_sources_from_batch_dirs(
+            output_dir=record.output_dir,
+            final_transparent_dir=record.final_transparent_dir,
+        )
+        if not record.round_sources:
+            record.round_sources = recovered_round_sources
+        elif _looks_like_final_transparent_round_sources(record.round_sources, record.final_transparent_dir):
+            record.round_sources = recovered_round_sources or record.round_sources
         return record
 
     def _save_task_history(self) -> None:

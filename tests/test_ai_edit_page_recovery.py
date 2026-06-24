@@ -5,6 +5,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from PyQt5.QtCore import QProcessEnvironment
 from PyQt5.QtGui import QShowEvent
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget
 from openpyxl import Workbook, load_workbook
@@ -15,6 +16,14 @@ from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary
 from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskDetailDialog, AIEditTaskRecord, BackgroundTaskResult
+
+
+class _FakeSignal:
+    def __init__(self):
+        self.callbacks = []
+
+    def connect(self, callback):
+        self.callbacks.append(callback)
 
 
 def _page_with_temp_store(tmp_path, monkeypatch, settings=None):
@@ -384,6 +393,55 @@ def test_ai_edit_page_split_current_round_schedules_background_job(tmp_path, mon
     page.close()
 
 
+def test_ai_edit_page_split_current_round_keeps_full_round_list_for_detail_view(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    first_round = tmp_path / "edited_round_01_transparent.png"
+    second_round = tmp_path / "edited_round_02_transparent.png"
+    first_round.write_bytes(b"round1")
+    second_round.write_bytes(b"round2")
+    record = AIEditTaskRecord(
+        task_id="20260623192101",
+        title="AI 改图 SZW-3438",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=25,
+            prefix="SZW",
+            start_number=3438,
+        ),
+        output_dir=str(tmp_path),
+        round_sources=[str(first_round), str(second_round)],
+    )
+
+    scheduled = {}
+
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["round_sources"] = list(current_record.round_sources)
+        scheduled["start_number"] = current_record.job.start_number
+
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
+
+    page.split_current_round(record, str(second_round))
+
+    assert record.round_sources == [str(first_round), str(second_round)]
+    assert record.job.start_number == 3438
+    assert scheduled == {
+        "action": "split_current_round",
+        "round_sources": [str(second_round)],
+        "start_number": 3463,
+    }
+
+    page.close()
+
+
 def test_ai_edit_page_start_background_job_retains_worker_reference(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -456,6 +514,107 @@ def test_ai_edit_page_background_post_process_result_updates_formal_outputs(tmp_
     assert page.current_task.xlsx_path == str(tmp_path / "batch.xlsx")
     assert "synced" in page.current_task.warnings
     assert any("formalize done" in line for line in page.current_task.logs)
+
+    page.close()
+
+
+def test_ai_edit_page_background_split_result_updates_final_transparent_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    final_transparent_dir = tmp_path / "final-transparent"
+    final_transparent_dir.mkdir(parents=True, exist_ok=True)
+    split_dir = tmp_path / "output" / "edited_round_01_transparent_split"
+    split_dir.mkdir(parents=True, exist_ok=True)
+    split_a = split_dir / "edited_round_01_transparent_part_01.png"
+    split_b = split_dir / "edited_round_01_transparent_part_02.png"
+    split_a.write_bytes(b"a")
+    split_b.write_bytes(b"b")
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623192350",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661, test_mode=False),
+        output_dir=str(tmp_path / "output"),
+        final_transparent_dir=str(final_transparent_dir),
+    )
+    page.tasks = [record]
+    page.current_task = record
+
+    result = BackgroundTaskResult(
+        action="split_current_round",
+        task_id="20260623192350",
+        outputs=[str(split_a), str(split_b)],
+        round_sources=[str(tmp_path / "output" / "edited_round_01_transparent.png")],
+        final_transparent_dir=str(final_transparent_dir),
+    )
+
+    page._on_background_job_finished(result)
+
+    assert record.outputs == [str(final_transparent_dir / "BO-1661.png"), str(final_transparent_dir / "BO-1662.png")]
+
+    page.close()
+
+
+def test_ai_edit_page_background_split_result_preserves_rounds_and_updates_second_range(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    final_transparent_dir = tmp_path / "final-transparent"
+    final_transparent_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = tmp_path / "output"
+    split_dir = output_dir / "edited_round_02_transparent_split"
+    split_dir.mkdir(parents=True, exist_ok=True)
+    split_a = split_dir / "edited_round_02_transparent_part_01.png"
+    split_b = split_dir / "edited_round_02_transparent_part_02.png"
+    split_a.write_bytes(b"new-second-a")
+    split_b.write_bytes(b"new-second-b")
+    first_round = output_dir / "edited_round_01_transparent.png"
+    second_round = output_dir / "edited_round_02_transparent.png"
+    first_round.write_bytes(b"round1")
+    second_round.write_bytes(b"round2")
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623192351",
+        title="AI 改图 SZW-3438",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=2,
+            prefix="SZW",
+            start_number=3438,
+            test_mode=False,
+        ),
+        output_dir=str(output_dir),
+        round_sources=[str(first_round), str(second_round)],
+        final_transparent_dir=str(final_transparent_dir),
+    )
+    page.tasks = [record]
+    page.current_task = record
+
+    result = BackgroundTaskResult(
+        action="split_current_round",
+        task_id="20260623192351",
+        outputs=[str(split_a), str(split_b)],
+        round_sources=[str(second_round)],
+        final_transparent_dir=str(final_transparent_dir),
+    )
+
+    page._on_background_job_finished(result)
+
+    assert record.round_sources == [str(first_round), str(second_round)]
+    assert record.outputs == [str(final_transparent_dir / "SZW-3440.png"), str(final_transparent_dir / "SZW-3441.png")]
+    assert (final_transparent_dir / "SZW-3440.png").read_bytes() == b"new-second-a"
+    assert (final_transparent_dir / "SZW-3441.png").read_bytes() == b"new-second-b"
 
     page.close()
 
@@ -740,7 +899,7 @@ def test_split_profile_editor_dialog_uses_fixed_default_guides(tmp_path):
 
     dialog = SplitProfileEditorDialog(record, str(image_path))
 
-    assert dialog.parsed_guides() == ([458, 805, 1229, 1638], [482, 852, 1229, 1587])
+    assert dialog.parsed_guides() == ([428, 805, 1229, 1638], [482, 852, 1229, 1587])
 
     dialog.close()
 
@@ -762,7 +921,7 @@ def test_split_profile_editor_dialog_can_reset_guides_to_fixed_defaults(tmp_path
     dialog = SplitProfileEditorDialog(record, str(image_path))
     dialog.reset_guides()
 
-    assert dialog.parsed_guides() == ([458, 805, 1229, 1638], [482, 852, 1229, 1587])
+    assert dialog.parsed_guides() == ([428, 805, 1229, 1638], [482, 852, 1229, 1587])
 
     dialog.close()
 
@@ -799,7 +958,7 @@ def test_ai_edit_page_load_split_profile_uses_fixed_default_guides_without_saved
 
     profile = page._load_split_profile_for_job(job)
 
-    assert profile["x_guides"] == [458, 805, 1229, 1638]
+    assert profile["x_guides"] == [428, 805, 1229, 1638]
     assert profile["y_guides"] == [482, 852, 1229, 1587]
     assert profile["split_count"] == 25
     assert profile["columns"] == 5
@@ -981,6 +1140,232 @@ def test_ai_edit_page_restores_legacy_collage_transparent_sources(tmp_path, monk
 
     assert len(page.tasks[0].round_sources) == 1
     assert Path(page.tasks[0].round_sources[0]) == transparent_image
+
+    page.close()
+
+
+def test_ai_edit_page_restores_round_sources_from_legacy_publish_outputs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    settings_path = tmp_path / "settings.json"
+    program_data_dir = tmp_path / "ConsolePlatData"
+    batch_dir = tmp_path / "AI改图_SZW-3438-SZW-3439_2026.0624.2041.49"
+    output_dir = batch_dir / "临时输出"
+    final_transparent_dir = batch_dir / "最终透明底"
+    output_dir.mkdir(parents=True)
+    final_transparent_dir.mkdir(parents=True)
+
+    round_one = output_dir / "edited_round_01.png"
+    round_two = output_dir / "edited_round_02.png"
+    round_one.write_bytes(b"fake1")
+    round_two.write_bytes(b"fake2")
+    (final_transparent_dir / "SZW-3438.png").write_bytes(b"a")
+    (final_transparent_dir / "SZW-3439.png").write_bytes(b"b")
+
+    SettingsStore(settings_path).save(AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(program_data_dir)))
+    tasks_dir = program_data_dir / "tasks"
+    tasks_dir.mkdir(parents=True)
+    (tasks_dir / "ai_edit_tasks.json").write_text(
+        (
+            "[{"
+            "\"task_id\":\"20260624204149\","
+            "\"title\":\"AI 改图 SZW-3438\\n2 轮 · 正式模式\","
+            "\"status\":\"完成\","
+            "\"stage_text\":\"已完成\","
+            "\"progress_percent\":100,"
+            "\"logs\":[],"
+            f"\"output_dir\":\"{output_dir.as_posix()}\","
+            f"\"outputs\":[\"{(final_transparent_dir / 'SZW-3438.png').as_posix()}\",\"{(final_transparent_dir / 'SZW-3439.png').as_posix()}\"] ,"
+            "\"failed\":[],"
+            "\"warnings\":[],"
+            "\"round_sources\":[],"
+            "\"collage_transparent_sources\":[],"
+            "\"active_round_index\":0,"
+            f"\"final_transparent_dir\":\"{final_transparent_dir.as_posix()}\","
+            "\"final_product_dir\":\"\","
+            "\"xlsx_path\":\"\","
+            "\"split_profile\":{},"
+            "\"job\":{"
+            "\"images\":[],"
+            "\"prompt\":\"保留主体\","
+            "\"api_key\":\"\","
+            "\"api_base\":\"https://api.openai.com/v1\","
+            "\"model\":\"gpt-image-2\","
+            f"\"output_dir\":\"{output_dir.as_posix()}\","
+            "\"size\":\"1024x1024\","
+            "\"split_collage\":true,"
+            "\"split_count\":25,"
+            "\"total_return_count\":2,"
+            "\"prefix\":\"SZW\","
+            "\"start_number\":3438,"
+            "\"test_mode\":false,"
+            "\"gallery_root\":\"\","
+            "\"mockup_root\":\"\","
+            "\"xlsx_root\":\"\""
+            "}"
+            "}]"
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.SettingsStore", lambda: SettingsStore(settings_path))
+
+    page = AIEditPage()
+
+    assert len(page.tasks[0].round_sources) == 2
+    assert Path(page.tasks[0].round_sources[0]) == round_one
+    assert Path(page.tasks[0].round_sources[1]) == round_two
+
+    page.close()
+
+
+def test_ai_edit_page_rewrites_legacy_round_sources_when_saved_as_final_transparents(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    settings_path = tmp_path / "settings.json"
+    program_data_dir = tmp_path / "ConsolePlatData"
+    batch_dir = tmp_path / "AI改图_SZW-3438-SZW-3439_2026.0624.2041.49"
+    output_dir = batch_dir / "临时输出"
+    final_transparent_dir = batch_dir / "最终透明底"
+    output_dir.mkdir(parents=True)
+    final_transparent_dir.mkdir(parents=True)
+
+    round_one = output_dir / "edited_round_01.png"
+    round_two = output_dir / "edited_round_02.png"
+    round_one.write_bytes(b"fake1")
+    round_two.write_bytes(b"fake2")
+    final_one = final_transparent_dir / "SZW-3438.png"
+    final_two = final_transparent_dir / "SZW-3439.png"
+    final_one.write_bytes(b"a")
+    final_two.write_bytes(b"b")
+
+    SettingsStore(settings_path).save(AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(program_data_dir)))
+    tasks_dir = program_data_dir / "tasks"
+    tasks_dir.mkdir(parents=True)
+    (tasks_dir / "ai_edit_tasks.json").write_text(
+        (
+            "[{"
+            "\"task_id\":\"20260624204149\","
+            "\"title\":\"AI 改图 SZW-3438\\n2 轮 · 正式模式\","
+            "\"status\":\"完成\","
+            "\"stage_text\":\"已完成\","
+            "\"progress_percent\":100,"
+            "\"logs\":[],"
+            f"\"output_dir\":\"{output_dir.as_posix()}\","
+            f"\"outputs\":[\"{final_one.as_posix()}\",\"{final_two.as_posix()}\"] ,"
+            "\"failed\":[],"
+            "\"warnings\":[],"
+            f"\"round_sources\":[\"{final_one.as_posix()}\",\"{final_two.as_posix()}\"],"
+            "\"collage_transparent_sources\":[],"
+            "\"active_round_index\":0,"
+            f"\"final_transparent_dir\":\"{final_transparent_dir.as_posix()}\","
+            "\"final_product_dir\":\"\","
+            "\"xlsx_path\":\"\","
+            "\"split_profile\":{},"
+            "\"job\":{"
+            "\"images\":[],"
+            "\"prompt\":\"保留主体\","
+            "\"api_key\":\"\","
+            "\"api_base\":\"https://api.openai.com/v1\","
+            "\"model\":\"gpt-image-2\","
+            f"\"output_dir\":\"{output_dir.as_posix()}\","
+            "\"size\":\"1024x1024\","
+            "\"split_collage\":true,"
+            "\"split_count\":25,"
+            "\"total_return_count\":2,"
+            "\"prefix\":\"SZW\","
+            "\"start_number\":3438,"
+            "\"test_mode\":false,"
+            "\"gallery_root\":\"\","
+            "\"mockup_root\":\"\","
+            "\"xlsx_root\":\"\""
+            "}"
+            "}]"
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.SettingsStore", lambda: SettingsStore(settings_path))
+
+    page = AIEditPage()
+
+    assert len(page.tasks[0].round_sources) == 2
+    assert Path(page.tasks[0].round_sources[0]) == round_one
+    assert Path(page.tasks[0].round_sources[1]) == round_two
+
+    page.close()
+
+
+def test_ai_edit_page_legacy_round_restore_prefers_transparent_rounds_only(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    settings_path = tmp_path / "settings.json"
+    program_data_dir = tmp_path / "ConsolePlatData"
+    batch_dir = tmp_path / "AI改图_SZW-3438-SZW-3439_2026.0624.2041.49"
+    output_dir = batch_dir / "临时输出"
+    final_transparent_dir = batch_dir / "最终透明底"
+    output_dir.mkdir(parents=True)
+    final_transparent_dir.mkdir(parents=True)
+
+    (output_dir / "edited_round_01.png").write_bytes(b"orig1")
+    (output_dir / "edited_round_02.png").write_bytes(b"orig2")
+    round_one = output_dir / "edited_round_01_transparent.png"
+    round_two = output_dir / "edited_round_02_transparent.png"
+    round_one.write_bytes(b"transparent1")
+    round_two.write_bytes(b"transparent2")
+    final_one = final_transparent_dir / "SZW-3438.png"
+    final_two = final_transparent_dir / "SZW-3439.png"
+    final_one.write_bytes(b"a")
+    final_two.write_bytes(b"b")
+
+    SettingsStore(settings_path).save(AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(program_data_dir)))
+    tasks_dir = program_data_dir / "tasks"
+    tasks_dir.mkdir(parents=True)
+    (tasks_dir / "ai_edit_tasks.json").write_text(
+        (
+            "[{"
+            "\"task_id\":\"20260624204149\","
+            "\"title\":\"AI 改图 SZW-3438\\n2 轮 · 正式模式\","
+            "\"status\":\"完成\","
+            "\"stage_text\":\"已完成\","
+            "\"progress_percent\":100,"
+            "\"logs\":[],"
+            f"\"output_dir\":\"{output_dir.as_posix()}\","
+            f"\"outputs\":[\"{final_one.as_posix()}\",\"{final_two.as_posix()}\"] ,"
+            "\"failed\":[],"
+            "\"warnings\":[],"
+            f"\"round_sources\":[\"{final_one.as_posix()}\",\"{final_two.as_posix()}\"],"
+            "\"collage_transparent_sources\":[],"
+            "\"active_round_index\":0,"
+            f"\"final_transparent_dir\":\"{final_transparent_dir.as_posix()}\","
+            "\"final_product_dir\":\"\","
+            "\"xlsx_path\":\"\","
+            "\"split_profile\":{},"
+            "\"job\":{"
+            "\"images\":[],"
+            "\"prompt\":\"保留主体\","
+            "\"api_key\":\"\","
+            "\"api_base\":\"https://api.openai.com/v1\","
+            "\"model\":\"gpt-image-2\","
+            f"\"output_dir\":\"{output_dir.as_posix()}\","
+            "\"size\":\"1024x1024\","
+            "\"split_collage\":true,"
+            "\"split_count\":25,"
+            "\"total_return_count\":2,"
+            "\"prefix\":\"SZW\","
+            "\"start_number\":3438,"
+            "\"test_mode\":false,"
+            "\"gallery_root\":\"\","
+            "\"mockup_root\":\"\","
+            "\"xlsx_root\":\"\""
+            "}"
+            "}]"
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.SettingsStore", lambda: SettingsStore(settings_path))
+
+    page = AIEditPage()
+
+    assert page.tasks[0].round_sources == [str(round_one), str(round_two)]
 
     page.close()
 
@@ -1326,6 +1711,74 @@ def test_ai_edit_page_start_job_runs_cli_and_finishes_success(tmp_path, monkeypa
         server.server_close()
 
 
+def test_ai_edit_page_start_job_logs_current_api_base(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "input.png"
+    image.write_bytes(b"fake")
+    api_base = "https://api.example.test/v1"
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            default_ai_provider_id="provider-1",
+            ai_providers=[
+                {
+                    "provider_id": "provider-1",
+                    "name": "主接口",
+                    "api_key": "stored-key",
+                    "api_base": api_base,
+                    "model": "gpt-image-2",
+                    "size": "1024x1024",
+                }
+            ],
+            posai_gallery_root=str(tmp_path / "gallery-root"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    page._add_image_item(str(image))
+    page.prompt_edit.setPlainText("keep subject")
+
+    class FakeProcess:
+        def __init__(self, *_args, **_kwargs):
+            self.program = ""
+            self.arguments = []
+            self.cwd = ""
+            self.env = None
+            self.readyReadStandardOutput = _FakeSignal()
+            self.readyReadStandardError = _FakeSignal()
+            self.finished = _FakeSignal()
+            self.errorOccurred = _FakeSignal()
+
+        def setProgram(self, program):
+            self.program = program
+
+        def setArguments(self, arguments):
+            self.arguments = list(arguments)
+
+        def setWorkingDirectory(self, cwd):
+            self.cwd = cwd
+
+        def processEnvironment(self):
+            return QProcessEnvironment.systemEnvironment()
+
+        def setProcessEnvironment(self, env):
+            self.env = env
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.QProcess", FakeProcess)
+    try:
+        page.start_job()
+
+        assert page.current_task is not None
+        assert any(f"当前 AI 接口：{api_base}" in line for line in page.current_task.logs)
+    finally:
+        page.close()
+
+
 def test_ai_edit_page_start_job_validates_required_inputs(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -1521,5 +1974,51 @@ def test_ai_edit_page_formal_mode_accepts_non_split_png_outputs(tmp_path, monkey
     assert scheduled["outputs"] == ["E:/tmp/out/transparent_master.png"]
     assert page.current_task.status == "完成"
     assert page.current_task.outputs == ["E:/tmp/out/transparent_master.png"]
+
+    page.close()
+
+
+def test_ai_edit_page_export_product_images_uses_task_target_and_syncs_putaway(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    final_product_dir = tmp_path / "final-product"
+    final_product_dir.mkdir(parents=True, exist_ok=True)
+    image = final_product_dir / "BO-1661_title.png"
+    image.write_bytes(b"image")
+    putaway_data_dir = tmp_path / "putaway-data"
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            putaway_data_dir=str(putaway_data_dir),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623130200",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661),
+        output_dir=str(tmp_path / "output"),
+        final_product_dir=str(final_product_dir),
+        xlsx_path=str(tmp_path / "batch.xlsx"),
+    )
+    Path(record.xlsx_path).write_bytes(b"xlsx")
+    page.current_task = record
+
+    sync_calls = {}
+
+    def fake_sync(current_record):
+        sync_calls["task_id"] = current_record.task_id
+
+    monkeypatch.setattr(page, "sync_task_to_putaway_data", fake_sync)
+
+    page.export_task_product_images(record)
+
+    expected_export_dir = final_product_dir / "导出产品图"
+    assert (expected_export_dir / image.name).exists()
+    assert sync_calls["task_id"] == "20260623130200"
+    assert any(str(expected_export_dir) in line for line in page.current_task.logs)
 
     page.close()
