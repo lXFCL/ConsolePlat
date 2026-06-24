@@ -40,6 +40,7 @@ from consoleplat.adapters.posaiimg_adapter import AIEditJob, PosAiImgAdapter
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import (
     backfill_xlsx_colors_from_transparent_dir,
+    build_product_images,
     formalize_ai_edit_outputs,
 )
 from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
@@ -102,6 +103,7 @@ class BackgroundTaskResult:
 class AIEditBackgroundWorker(QObject):
     finished = pyqtSignal(object)
     failed = pyqtSignal(str, str, str)
+    log_message = pyqtSignal(str, str)
 
     def __init__(self, action: str, record: AIEditTaskRecord, settings: AppSettings) -> None:
         super().__init__()
@@ -117,12 +119,17 @@ class AIEditBackgroundWorker(QObject):
                 result = self._run_split_current_round()
             elif self.action == "convert_current_round":
                 result = self._run_convert_current_round()
+            elif self.action == "export_product_images":
+                result = self._run_export_product_images()
             else:
                 raise ValueError(f"unsupported background action: {self.action}")
         except Exception as exc:
             self.failed.emit(self.action, self.record.task_id, str(exc))
             return
         self.finished.emit(result)
+
+    def _emit_log(self, text: str) -> None:
+        self.log_message.emit(self.record.task_id, text)
 
     def _run_post_process(self) -> BackgroundTaskResult:
         result = BackgroundTaskResult(action=self.action, task_id=self.record.task_id)
@@ -211,6 +218,58 @@ class AIEditBackgroundWorker(QObject):
             task_id=self.record.task_id,
             outputs=outputs,
             round_sources=self._derive_round_sources_from_outputs(outputs),
+        )
+
+    def _run_export_product_images(self) -> BackgroundTaskResult:
+        final_transparent_dir = Path(self.record.final_transparent_dir) if self.record.final_transparent_dir else None
+        final_product_dir = Path(self.record.final_product_dir) if self.record.final_product_dir else None
+        xlsx_path = Path(self.record.xlsx_path) if self.record.xlsx_path else None
+        if final_transparent_dir is None or not final_transparent_dir.exists():
+            raise ValueError(f"最终透明底目录不存在：{self.record.final_transparent_dir or '--'}")
+        if final_product_dir is None:
+            raise ValueError(f"最终产品图目录不存在：{self.record.final_product_dir or '--'}")
+        if xlsx_path is None or not xlsx_path.exists():
+            raise ValueError(f"XLSX 不存在：{self.record.xlsx_path or '--'}")
+        print_paths = sorted(
+            [path for path in final_transparent_dir.iterdir() if path.is_file() and path.suffix.lower() == ".png"],
+            key=lambda path: path.name.lower(),
+        )
+        if not print_paths:
+            raise ValueError(f"最终透明底目录为空：{final_transparent_dir}")
+        product_title = (
+            self.settings.bo_product_title.strip()
+            if self.record.job.prefix == "BO"
+            else self.settings.szw_product_title.strip()
+        )
+        self._emit_log(f"开始重贴产品图：{len(print_paths)} 张透明底")
+        self._emit_log(f"透明底目录：{final_transparent_dir}")
+        product_outputs, _color_assignments = build_product_images(
+            print_paths=print_paths,
+            final_product_dir=final_product_dir,
+            product_title=product_title,
+            model_dir=Path(self.settings.posai_model_root),
+        )
+        if not product_outputs:
+            raise ValueError("产品图生成失败：未生成有效产品图")
+        self._emit_log(f"已重贴产品图 {len(product_outputs)} 张到 {final_product_dir}")
+        sync_summary = sync_putaway_assets(
+            source_images_dir=final_product_dir,
+            source_xlsx_path=xlsx_path,
+            target_data_dir=Path(self.settings.putaway_data_dir),
+            force_replace=True,
+        )
+        if not sync_summary.ok:
+            raise ValueError(f"同步到上架 data 失败：{sync_summary.message}")
+        self._emit_log(
+            f"已同步到上架 data：图片目录 {sync_summary.images_target_dir}，XLSX {sync_summary.xlsx_target_path}"
+        )
+        return BackgroundTaskResult(
+            action=self.action,
+            task_id=self.record.task_id,
+            outputs=[str(path) for path in product_outputs],
+            final_product_dir=str(final_product_dir),
+            xlsx_path=str(xlsx_path),
+            logs=[f"导出产品图完成：重贴 {len(product_outputs)} 张"],
         )
 
     def _derive_round_sources_from_outputs(self, outputs: list[str]) -> list[str]:
@@ -1541,6 +1600,7 @@ class AIEditPage(QWidget):
         worker = AIEditBackgroundWorker(action, record, self.settings_store.load())
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
+        worker.log_message.connect(self._append_task_log)
         worker.finished.connect(self._on_background_job_finished)
         worker.failed.connect(self._on_background_job_failed)
         worker.finished.connect(thread.quit)
@@ -1562,6 +1622,15 @@ class AIEditPage(QWidget):
             if record.task_id == task_id:
                 return record
         return None
+
+    def _append_task_log(self, task_id: str, text: str) -> None:
+        record = self._find_task_by_id(task_id)
+        if record is None and self.current_task is not None and self.current_task.task_id == task_id:
+            record = self.current_task
+        if record is None:
+            return
+        self._append_log_to_record(record, text)
+        self.status_label.setText(record.status)
 
     def _on_background_job_finished(self, result: BackgroundTaskResult) -> None:
         record = self._find_task_by_id(result.task_id)
@@ -1733,14 +1802,20 @@ class AIEditPage(QWidget):
     def _append_log(self, text: str) -> None:
         if not text or self.current_task is None:
             return
+        self._append_log_to_record(self.current_task, text)
+
+    def _append_log_to_record(self, record: AIEditTaskRecord, text: str) -> None:
+        if not text:
+            return
         time_text = datetime.now().strftime("%H:%M:%S")
         for line in text.splitlines():
             stripped = line.strip()
             if stripped:
-                self.current_task.logs.append(f"{time_text}  {stripped}")
+                record.logs.append(f"{time_text}  {stripped}")
                 progress = _progress_from_text(stripped)
                 if progress is not None:
-                    self.current_task.progress_percent = progress
+                    record.progress_percent = progress
+        self._rebuild_task_list()
         self._save_task_history()
         self._refresh_task_detail_dialog()
 
@@ -1801,22 +1876,22 @@ class AIEditPage(QWidget):
         )
 
     def export_task_product_images(self, record: AIEditTaskRecord) -> None:
-        source_dir = Path(record.final_product_dir) if record.final_product_dir else None
-        if source_dir is None or not source_dir.exists():
-            self._append_log(f"导出产品图失败：最终产品图目录不存在 {record.final_product_dir or '--'}")
+        final_transparent_dir = Path(record.final_transparent_dir) if record.final_transparent_dir else None
+        if final_transparent_dir is None or not final_transparent_dir.exists():
+            self._append_task_log(record.task_id, f"导出产品图失败：最终透明底目录不存在 {record.final_transparent_dir or '--'}")
             return
-        images = self._image_files_in_dir(source_dir)
-        if not images:
-            self._append_log(f"导出产品图失败：最终产品图目录没有图片 {source_dir}")
+        if not any(path.is_file() and path.suffix.lower() == ".png" for path in final_transparent_dir.iterdir()):
+            self._append_task_log(record.task_id, f"导出产品图失败：最终透明底目录为空 {final_transparent_dir}")
             return
-        replaced = len(images)
-        for image in images:
-            target = source_dir / image.name
-            if _path_key(str(image)) != _path_key(str(target)):
-                shutil.copy2(image, target)
-        self._append_log(f"已覆盖最终产品图 {len(images)} 张到 {source_dir}，覆盖 {replaced} 张")
-        self.sync_task_to_putaway_data(record)
-        self._refresh_task_detail_dialog()
+        final_product_dir = Path(record.final_product_dir) if record.final_product_dir else None
+        if final_product_dir is None:
+            self._append_task_log(record.task_id, f"导出产品图失败：最终产品图目录不存在 {record.final_product_dir or '--'}")
+            return
+        if not record.xlsx_path or not Path(record.xlsx_path).exists():
+            self._append_task_log(record.task_id, f"导出产品图失败：XLSX 不存在 {record.xlsx_path or '--'}")
+            return
+        self._append_task_log(record.task_id, f"开始后台重贴产品图：目标目录 {final_product_dir}")
+        self._start_background_job("export_product_images", record)
 
     def export_task_xlsx(self, record: AIEditTaskRecord) -> None:
         source_path = Path(record.xlsx_path) if record.xlsx_path else None
@@ -2007,8 +2082,16 @@ class AIEditPage(QWidget):
         self._rebuild_task_list()
 
     def _refresh_task_detail_dialog(self) -> None:
-        if self.task_detail_dialog is not None and self.current_task is not None:
-            self.task_detail_dialog.refresh(self.current_task)
+        if self.task_detail_dialog is not None:
+            record = self._find_task_by_id(self.task_detail_dialog.record.task_id)
+            if (
+                record is None
+                and self.current_task is not None
+                and self.current_task.task_id == self.task_detail_dialog.record.task_id
+            ):
+                record = self.current_task
+            if record is not None:
+                self.task_detail_dialog.refresh(record)
 
     def _task_to_dict(self, record: AIEditTaskRecord) -> dict:
         return {

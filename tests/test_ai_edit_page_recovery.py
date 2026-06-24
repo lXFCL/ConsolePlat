@@ -15,7 +15,13 @@ from consoleplat.adapters.posaiimg_adapter import AIEditJob
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import AIEditFormalizeSummary
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary
-from consoleplat.ui.ai_edit_page import AIEditPage, AIEditTaskDetailDialog, AIEditTaskRecord, BackgroundTaskResult
+from consoleplat.ui.ai_edit_page import (
+    AIEditBackgroundWorker,
+    AIEditPage,
+    AIEditTaskDetailDialog,
+    AIEditTaskRecord,
+    BackgroundTaskResult,
+)
 
 
 class _FakeSignal:
@@ -2102,6 +2108,9 @@ def test_ai_edit_page_formal_mode_accepts_non_split_png_outputs(tmp_path, monkey
 def test_ai_edit_page_export_product_images_uses_task_target_and_syncs_putaway(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
+    final_transparent_dir = tmp_path / "final-transparent"
+    final_transparent_dir.mkdir(parents=True, exist_ok=True)
+    (final_transparent_dir / "BO-1661.png").write_bytes(b"print")
     final_product_dir = tmp_path / "final-product"
     final_product_dir.mkdir(parents=True, exist_ok=True)
     image = final_product_dir / "BO-1661_title.png"
@@ -2122,24 +2131,153 @@ def test_ai_edit_page_export_product_images_uses_task_target_and_syncs_putaway(t
         title="AI 改图 BO-1661",
         job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661),
         output_dir=str(tmp_path / "output"),
+        final_transparent_dir=str(final_transparent_dir),
         final_product_dir=str(final_product_dir),
         xlsx_path=str(tmp_path / "batch.xlsx"),
     )
     Path(record.xlsx_path).write_bytes(b"xlsx")
     page.current_task = record
 
-    sync_calls = {}
+    scheduled = {}
 
-    def fake_sync(current_record):
-        sync_calls["task_id"] = current_record.task_id
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["task_id"] = current_record.task_id
 
-    monkeypatch.setattr(page, "sync_task_to_putaway_data", fake_sync)
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
 
     page.export_task_product_images(record)
 
     assert not (final_product_dir / "导出产品图").exists()
     assert image.read_bytes() == b"image"
-    assert sync_calls["task_id"] == "20260623130200"
+    assert scheduled == {"action": "export_product_images", "task_id": "20260623130200"}
     assert any(str(final_product_dir) in line for line in page.current_task.logs)
 
     page.close()
+
+
+def test_ai_edit_page_export_product_images_schedules_background_job_and_logs(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    transparent_dir = tmp_path / "final-transparent"
+    product_dir = tmp_path / "final-product"
+    transparent_dir.mkdir(parents=True)
+    product_dir.mkdir(parents=True)
+    (transparent_dir / "BO-1661.png").write_bytes(b"print")
+    (product_dir / "BO-1661_title.png").write_bytes(b"old")
+    xlsx_path = tmp_path / "batch.xlsx"
+    xlsx_path.write_bytes(b"xlsx")
+    record = AIEditTaskRecord(
+        task_id="20260623130201",
+        title="AI edit BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661),
+        final_transparent_dir=str(transparent_dir),
+        final_product_dir=str(product_dir),
+        xlsx_path=str(xlsx_path),
+    )
+    page.current_task = record
+    page.tasks = [record]
+    scheduled = {}
+
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["task_id"] = current_record.task_id
+
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
+
+    page.export_task_product_images(record)
+
+    assert scheduled == {"action": "export_product_images", "task_id": "20260623130201"}
+    assert any("开始后台重贴产品图" in line for line in record.logs)
+
+    page.close()
+
+
+def test_ai_edit_background_export_product_images_rebuilds_from_transparent_and_syncs(tmp_path, monkeypatch):
+    transparent_dir = tmp_path / "final-transparent"
+    product_dir = tmp_path / "final-product"
+    putaway_data_dir = tmp_path / "putaway-data"
+    model_dir = tmp_path / "models"
+    transparent_dir.mkdir(parents=True)
+    product_dir.mkdir(parents=True)
+    model_dir.mkdir(parents=True)
+    print_one = transparent_dir / "BO-1661.png"
+    print_two = transparent_dir / "BO-1662.png"
+    print_one.write_bytes(b"print1")
+    print_two.write_bytes(b"print2")
+    old_product = product_dir / "BO-1661_title.png"
+    old_product.write_bytes(b"old-product")
+    xlsx_path = tmp_path / "batch.xlsx"
+    xlsx_path.write_bytes(b"original-xlsx")
+    record = AIEditTaskRecord(
+        task_id="20260623130202",
+        title="AI edit BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661),
+        final_transparent_dir=str(transparent_dir),
+        final_product_dir=str(product_dir),
+        xlsx_path=str(xlsx_path),
+    )
+    settings = AppSettings(
+        ai_edit_api_key="stored-key",
+        bo_product_title="title",
+        putaway_data_dir=str(putaway_data_dir),
+        posai_model_root=str(model_dir),
+    )
+    captured = {}
+
+    def fake_build_product_images(*, print_paths, final_product_dir, product_title, model_dir):
+        captured["print_paths"] = [path.name for path in print_paths]
+        captured["final_product_dir"] = final_product_dir
+        captured["product_title"] = product_title
+        captured["model_dir"] = model_dir
+        outputs = []
+        for print_path in print_paths:
+            output = final_product_dir / f"{print_path.stem}_title.png"
+            output.write_bytes(f"rebuilt:{print_path.name}".encode("utf-8"))
+            outputs.append(output)
+        return outputs, {path.stem: "白" for path in print_paths}
+
+    def fake_sync_putaway_assets(**kwargs):
+        captured["sync_source_images_dir"] = kwargs["source_images_dir"]
+        captured["sync_source_xlsx_path"] = kwargs["source_xlsx_path"]
+        captured["sync_target_data_dir"] = kwargs["target_data_dir"]
+        captured["sync_force_replace"] = kwargs["force_replace"]
+        return PutawaySyncSummary(
+            ok=True,
+            copied_images=2,
+            copied_xlsx=True,
+            images_target_dir=str(putaway_data_dir / "pic" / "1"),
+            xlsx_target_path=str(putaway_data_dir / xlsx_path.name),
+            message="synced",
+        )
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.build_product_images", fake_build_product_images)
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.sync_putaway_assets", fake_sync_putaway_assets)
+    worker = AIEditBackgroundWorker("export_product_images", record, settings)
+    emitted_logs = []
+    worker.log_message.connect(lambda task_id, line: emitted_logs.append((task_id, line)))
+
+    result = worker._run_export_product_images()
+
+    assert captured["print_paths"] == ["BO-1661.png", "BO-1662.png"]
+    assert captured["final_product_dir"] == product_dir
+    assert captured["product_title"] == "title"
+    assert captured["model_dir"] == model_dir
+    assert old_product.read_bytes() == b"rebuilt:BO-1661.png"
+    assert not (product_dir / "导出产品图").exists()
+    assert xlsx_path.read_bytes() == b"original-xlsx"
+    assert captured["sync_source_images_dir"] == product_dir
+    assert captured["sync_source_xlsx_path"] == xlsx_path
+    assert captured["sync_target_data_dir"] == putaway_data_dir
+    assert captured["sync_force_replace"] is True
+    assert result.action == "export_product_images"
+    assert result.outputs == [str(product_dir / "BO-1661_title.png"), str(product_dir / "BO-1662_title.png")]
+    assert result.final_product_dir == str(product_dir)
+    assert result.xlsx_path == str(xlsx_path)
+    assert any(line == "开始重贴产品图：2 张透明底" for _task_id, line in emitted_logs)
+    assert any("已重贴产品图 2 张" in line for _task_id, line in emitted_logs)
