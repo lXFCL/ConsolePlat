@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import copy
 import json
 import os
 from ctypes import wintypes
@@ -201,10 +202,21 @@ def default_settings_path() -> Path:
 class SettingsStore:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path else default_settings_path()
+        self._cache: AppSettings | None = None
+        self._cache_mtime: float | None = None
+        self._cache_path: Path | None = None
 
     def load(self) -> AppSettings:
         if not self.path.exists():
             return AppSettings()
+        current_path = self.path.resolve()
+        current_mtime = self.path.stat().st_mtime
+        if (
+            self._cache is not None
+            and self._cache_mtime == current_mtime
+            and self._cache_path == current_path
+        ):
+            return copy.deepcopy(self._cache)
         data = json.loads(self.path.read_text(encoding="utf-8") or "{}")
         accounts: dict[str, ShopAccount] = {}
         for key, item in (data.get("accounts") or {}).items():
@@ -236,7 +248,7 @@ class SettingsStore:
             providers = [_build_legacy_provider(data)]
 
         default_provider_id = str(data.get("default_ai_provider_id") or providers[0].provider_id)
-        return AppSettings(
+        settings = AppSettings(
             active_shop=str(data.get("active_shop") or "YUHOOBO"),
             cdp_endpoint=str(data.get("cdp_endpoint") or "http://127.0.0.1:9222"),
             refresh_interval_seconds=int(data.get("refresh_interval_seconds") or 5),
@@ -286,6 +298,10 @@ class SettingsStore:
             startup_height=int(data.get("startup_height") or 760),
             accounts=accounts,
         )
+        self._cache = copy.deepcopy(settings)
+        self._cache_mtime = current_mtime
+        self._cache_path = current_path
+        return settings
 
     def save(self, settings: AppSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -361,3 +377,6 @@ class SettingsStore:
                 "password_dpapi": encrypt_secret(account.password),
             }
         self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._cache = copy.deepcopy(settings)
+        self._cache_mtime = self.path.stat().st_mtime
+        self._cache_path = self.path.resolve()
