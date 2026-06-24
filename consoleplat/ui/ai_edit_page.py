@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+import re
 import site
 import shutil
 import subprocess
@@ -307,6 +308,31 @@ def _legacy_round_sources_from_batch_dirs(
             seen.add(key)
             round_paths.append(path)
     return [str(path) for path in round_paths]
+
+
+def _expected_round_count(record: AIEditTaskRecord) -> int:
+    try:
+        return max(1, int(record.job.total_return_count or 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _path_key(path_text: str) -> str:
+    path = Path(path_text)
+    try:
+        return str(path.resolve(strict=False)).lower()
+    except (OSError, RuntimeError):
+        return str(path).lower()
+
+
+def _round_index_from_source_name(source_path: str) -> int | None:
+    match = re.search(r"edited_round_(\d+)", Path(source_path).stem, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return max(0, int(match.group(1)) - 1)
+    except ValueError:
+        return None
 
 
 def _looks_like_final_transparent_round_sources(round_sources: list[str], final_transparent_dir: str) -> bool:
@@ -1783,15 +1809,12 @@ class AIEditPage(QWidget):
         if not images:
             self._append_log(f"导出产品图失败：最终产品图目录没有图片 {source_dir}")
             return
-        target_dir = source_dir / "导出产品图"
-        target_dir.mkdir(parents=True, exist_ok=True)
-        replaced = 0
+        replaced = len(images)
         for image in images:
-            target = target_dir / image.name
-            if target.exists():
-                replaced += 1
-            shutil.copy2(image, target)
-        self._append_log(f"已导出产品图 {len(images)} 张到 {target_dir}，覆盖 {replaced} 张")
+            target = source_dir / image.name
+            if _path_key(str(image)) != _path_key(str(target)):
+                shutil.copy2(image, target)
+        self._append_log(f"已覆盖最终产品图 {len(images)} 张到 {source_dir}，覆盖 {replaced} 张")
         self.sync_task_to_putaway_data(record)
         self._refresh_task_detail_dialog()
 
@@ -1854,17 +1877,22 @@ class AIEditPage(QWidget):
     def _round_source_index(self, record: AIEditTaskRecord, source_path: str) -> int:
         if not source_path:
             return 0
-        try:
-            source_key = str(Path(source_path).resolve(strict=False)).lower()
-        except OSError:
-            source_key = str(Path(source_path)).lower()
-        for index, candidate in enumerate(record.round_sources):
-            try:
-                candidate_key = str(Path(candidate).resolve(strict=False)).lower()
-            except OSError:
-                candidate_key = str(Path(candidate)).lower()
-            if candidate_key == source_key:
-                return index
+        source_key = _path_key(source_path)
+        recovered_round_sources = _legacy_round_sources_from_batch_dirs(
+            output_dir=record.output_dir,
+            final_transparent_dir=record.final_transparent_dir,
+        )
+        source_groups = []
+        if len(recovered_round_sources) >= _expected_round_count(record):
+            source_groups.append(recovered_round_sources)
+        source_groups.append(record.round_sources)
+        for sources in source_groups:
+            for index, candidate in enumerate(sources):
+                if _path_key(candidate) == source_key:
+                    return index
+        inferred_index = _round_index_from_source_name(source_path)
+        if inferred_index is not None:
+            return inferred_index
         return 0
 
     def _start_number_for_round_source(self, record: AIEditTaskRecord, source_path: str) -> int:
@@ -2068,7 +2096,10 @@ class AIEditPage(QWidget):
             output_dir=record.output_dir,
             final_transparent_dir=record.final_transparent_dir,
         )
+        expected_round_count = _expected_round_count(record)
         if not record.round_sources:
+            record.round_sources = recovered_round_sources
+        elif len(record.round_sources) < expected_round_count and len(recovered_round_sources) >= expected_round_count:
             record.round_sources = recovered_round_sources
         elif _looks_like_final_transparent_round_sources(record.round_sources, record.final_transparent_dir):
             record.round_sources = recovered_round_sources or record.round_sources
