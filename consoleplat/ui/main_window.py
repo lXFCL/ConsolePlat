@@ -20,6 +20,7 @@ from consoleplat.config import SettingsStore
 from consoleplat.models import DEFAULT_NAV_ITEMS, PAGE_TITLES, ShellState
 from consoleplat.paths import resource_path
 from consoleplat.ui.ai_edit_page import AIEditPage
+from consoleplat.ui.apply_goods_page import ApplyGoodsPage
 from consoleplat.ui.local_image_page import LocalImagePage
 from consoleplat.ui.monitor_page import MonitorPage
 from consoleplat.ui.product_publish_page import ProductPublishPage
@@ -148,6 +149,8 @@ class MainWindow(QMainWindow):
             return AIEditPage()
         if key == "putaway":
             return PutawayPage()
+        if key == "apply":
+            return ApplyGoodsPage()
         if key == "settings":
             return SettingsPage()
 

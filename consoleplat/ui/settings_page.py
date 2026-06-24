@@ -91,6 +91,7 @@ class SettingsPage(QWidget):
         self.putaway_project_dir_edit = self._line_edit("putawayProjectDirEdit", "E:/1PythonProject/PutawayAiRobot")
         self.putaway_data_dir_edit = self._line_edit("putawayDataDirEdit", "E:/1PythonProject/PutawayAiRobot/data")
         self.putaway_log_dir_edit = self._line_edit("putawayLogDirEdit", "E:/1PythonProject/PutawayAiRobot/log")
+        self.applygoods_project_dir_edit = self._line_edit("applyGoodsProjectDirEdit", "E:/1PythonProject/ApplyGoods")
         self.program_data_dir_edit = self._line_edit("programDataDirEdit")
 
         self.startup_width_spin = QSpinBox()
@@ -112,6 +113,7 @@ class SettingsPage(QWidget):
             ("image", "生图 / 改图"),
             ("publish", "发布"),
             ("putaway", "上架"),
+            ("apply", "合规"),
             ("program", "程序"),
         ]
         for index, (key, label) in enumerate(tab_items):
@@ -131,6 +133,7 @@ class SettingsPage(QWidget):
         self.stack.addWidget(self._build_image_panel())
         self.stack.addWidget(self._build_publish_panel())
         self.stack.addWidget(self._build_putaway_panel())
+        self.stack.addWidget(self._build_apply_panel())
         self.stack.addWidget(self._build_program_panel())
 
         actions = QHBoxLayout()
@@ -260,6 +263,18 @@ class SettingsPage(QWidget):
         form.addRow("上架项目目录", self._browse_row(self.putaway_project_dir_edit, self.choose_putaway_project_dir))
         form.addRow("上架 data 目录", self._browse_row(self.putaway_data_dir_edit, self.choose_putaway_data_dir))
         form.addRow("上架日志目录", self._browse_row(self.putaway_log_dir_edit, self.choose_putaway_log_dir))
+        layout.addLayout(form)
+        layout.addStretch(1)
+        return panel
+
+    def _build_apply_panel(self) -> QFrame:
+        panel = self._make_panel("合规模块", "ApplyGoods 的项目目录放在这里，内嵌合规页面会从该目录加载界面。", compact=True)
+        layout = panel.layout()
+        form = QFormLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        form.setLabelAlignment(Qt.AlignRight)
+        form.addRow("合规项目目录", self._browse_row(self.applygoods_project_dir_edit, self.choose_applygoods_project_dir))
         layout.addLayout(form)
         layout.addStretch(1)
         return panel
@@ -441,6 +456,7 @@ class SettingsPage(QWidget):
         self.putaway_project_dir_edit.setText(settings.putaway_project_dir)
         self.putaway_data_dir_edit.setText(settings.putaway_data_dir)
         self.putaway_log_dir_edit.setText(settings.putaway_log_dir)
+        self.applygoods_project_dir_edit.setText(settings.applygoods_project_dir)
         self.program_data_dir_edit.setText(settings.program_data_dir)
         self.startup_width_spin.setValue(settings.startup_width)
         self.startup_height_spin.setValue(settings.startup_height)
@@ -485,6 +501,7 @@ class SettingsPage(QWidget):
             putaway_project_dir=self.putaway_project_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot",
             putaway_data_dir=self.putaway_data_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot/data",
             putaway_log_dir=self.putaway_log_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot/log",
+            applygoods_project_dir=self.applygoods_project_dir_edit.text().strip() or "E:/1PythonProject/ApplyGoods",
             program_data_dir=self.program_data_dir_edit.text().strip(),
             bo_product_title=self.bo_product_title_edit.text().strip() or "BO固定产品标题",
             szw_product_title=self.szw_product_title_edit.text().strip() or "SZW固定产品标题",
@@ -537,6 +554,9 @@ class SettingsPage(QWidget):
 
     def choose_putaway_log_dir(self) -> None:
         self._choose_directory_for(self.putaway_log_dir_edit, "选择 Putaway 日志目录")
+
+    def choose_applygoods_project_dir(self) -> None:
+        self._choose_directory_for(self.applygoods_project_dir_edit, "选择 ApplyGoods 项目目录")
 
     def choose_program_data_dir(self) -> None:
         self._choose_directory_for(self.program_data_dir_edit, "选择程序数据目录")

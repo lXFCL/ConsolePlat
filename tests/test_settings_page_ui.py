@@ -30,7 +30,7 @@ def test_settings_page_has_module_tabs(tmp_path, monkeypatch):
         for button in page.findChildren(QPushButton)
         if button.objectName() == "settingsTabButton"
     ]
-    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "程序"]
+    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "合规", "程序"]
 
     page.close()
 
@@ -86,7 +86,7 @@ def test_settings_page_program_panel_only_keeps_program_fields(tmp_path, monkeyp
 
     page = SettingsPage()
 
-    program_panel = page.stack.widget(5)
+    program_panel = page.stack.widget(6)
     program_labels = [label.text() for label in program_panel.findChildren(QLabel)]
 
     assert "程序模块" in program_labels
@@ -115,6 +115,25 @@ def test_settings_page_putaway_panel_contains_putaway_paths(tmp_path, monkeypatc
     assert "上架项目目录" in putaway_labels
     assert "上架 data 目录" in putaway_labels
     assert "上架日志目录" in putaway_labels
+
+    page.close()
+
+
+def test_settings_page_apply_panel_contains_applygoods_path(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(applygoods_project_dir="E:/1PythonProject/ApplyGoods"))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    apply_panel = page.stack.widget(5)
+    apply_labels = [label.text() for label in apply_panel.findChildren(QLabel)]
+    edits = {edit.objectName(): edit.text() for edit in apply_panel.findChildren(QLineEdit)}
+
+    assert "合规模块" in apply_labels
+    assert "合规项目目录" in apply_labels
+    assert edits["applyGoodsProjectDirEdit"] == "E:/1PythonProject/ApplyGoods"
 
     page.close()
 
@@ -260,7 +279,7 @@ def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
 
     page = SettingsPage()
 
-    for index in (0, 1, 3, 4, 5):
+    for index in (0, 1, 3, 4, 5, 6):
         panel = page.stack.widget(index)
         layout = panel.layout()
         assert layout.spacing() <= 14
@@ -282,7 +301,7 @@ def test_settings_page_non_image_panels_push_extra_space_below_form(tmp_path, mo
 
     page = SettingsPage()
 
-    for index in (0, 1, 3, 4, 5):
+    for index in (0, 1, 3, 4, 5, 6):
         panel = page.stack.widget(index)
         layout = panel.layout()
         trailing_item = layout.itemAt(layout.count() - 1)

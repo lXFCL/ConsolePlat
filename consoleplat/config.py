@@ -149,6 +149,7 @@ class AppSettings:
     putaway_project_dir: str = "E:/1PythonProject/PutawayAiRobot"
     putaway_data_dir: str = "E:/1PythonProject/PutawayAiRobot/data"
     putaway_log_dir: str = "E:/1PythonProject/PutawayAiRobot/log"
+    applygoods_project_dir: str = "E:/1PythonProject/ApplyGoods"
     program_data_dir: str = ""
     bo_product_title: str = "BO固定产品标题"
     szw_product_title: str = "SZW固定产品标题"
@@ -259,6 +260,7 @@ class SettingsStore:
             putaway_project_dir=str(data.get("putaway_project_dir") or "E:/1PythonProject/PutawayAiRobot"),
             putaway_data_dir=str(data.get("putaway_data_dir") or "E:/1PythonProject/PutawayAiRobot/data"),
             putaway_log_dir=str(data.get("putaway_log_dir") or "E:/1PythonProject/PutawayAiRobot/log"),
+            applygoods_project_dir=str(data.get("applygoods_project_dir") or "E:/1PythonProject/ApplyGoods"),
             program_data_dir=str(data.get("program_data_dir") or ""),
             bo_product_title=str(data.get("bo_product_title") or "BO固定产品标题"),
             szw_product_title=str(data.get("szw_product_title") or "SZW固定产品标题"),
@@ -324,6 +326,7 @@ class SettingsStore:
             "putaway_project_dir": settings.putaway_project_dir or "E:/1PythonProject/PutawayAiRobot",
             "putaway_data_dir": settings.putaway_data_dir or "E:/1PythonProject/PutawayAiRobot/data",
             "putaway_log_dir": settings.putaway_log_dir or "E:/1PythonProject/PutawayAiRobot/log",
+            "applygoods_project_dir": settings.applygoods_project_dir or "E:/1PythonProject/ApplyGoods",
             "program_data_dir": settings.program_data_dir or "",
             "bo_product_title": settings.bo_product_title or "BO固定产品标题",
             "szw_product_title": settings.szw_product_title or "SZW固定产品标题",
