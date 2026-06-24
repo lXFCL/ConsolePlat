@@ -26,7 +26,13 @@ class ApplyGoodsAdapter:
         if spec is None or spec.loader is None:
             raise ImportError(f"无法加载 ApplyGoods 模块：{entry}")
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            if sys.modules.get(spec.name) is module:
+                del sys.modules[spec.name]
+            raise
         factory = getattr(module, "create_apply_goods_widget", None)
         if factory is None:
             raise AttributeError("ApplyGoods 未提供 create_apply_goods_widget() 入口")

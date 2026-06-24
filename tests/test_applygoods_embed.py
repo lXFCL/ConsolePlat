@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -67,3 +68,35 @@ def test_applygoods_adapter_module_exists_and_missing_entry_raises():
         assert "未找到 ApplyGoods 入口文件" in str(exc)
     else:
         raise AssertionError("expected FileNotFoundError")
+
+
+def test_applygoods_adapter_loads_dataclass_module_from_file(tmp_path):
+    from consoleplat.adapters.applygoods_adapter import ApplyGoodsAdapter
+
+    project_dir = tmp_path / "ApplyGoods"
+    project_dir.mkdir()
+    (project_dir / "main.py").write_text(
+        "\n".join(
+            [
+                "from __future__ import annotations",
+                "from dataclasses import dataclass",
+                "from typing import Callable",
+                "",
+                "@dataclass(frozen=True)",
+                "class Payload:",
+                "    value: str",
+                "    callback: Callable[[str], None] | None = None",
+                "",
+                "def create_apply_goods_widget(parent=None):",
+                "    return Payload('ok')",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    adapter = ApplyGoodsAdapter(project_dir=project_dir)
+
+    widget = adapter.build_embedded_widget()
+
+    assert widget.value == "ok"
