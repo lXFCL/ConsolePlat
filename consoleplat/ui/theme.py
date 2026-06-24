@@ -77,10 +77,46 @@ QLabel#statusPill {
     background: #eef5fc;
     color: #5f7390;
 }
+QLabel#applyPageEyebrow {
+    color: #5d96d8;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
 QFrame#panel {
     background: #ffffff;
     border: 1px solid #e3ebf4;
     border-radius: 8px;
+}
+QFrame#applyHeaderPanel {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffffff, stop:1 #f4f8fd);
+    border: 1px solid #dce6f1;
+    border-radius: 12px;
+}
+QFrame#applyEmbedPanel {
+    background: #ffffff;
+    border: 1px solid #dce6f1;
+    border-radius: 12px;
+}
+QFrame#applyEmbedShell {
+    background: #f8fbff;
+    border: 1px solid #e4edf6;
+    border-radius: 10px;
+}
+QLabel#applyStatusBanner {
+    background: #eef5fc;
+    border: 1px solid #d9e7f6;
+    border-radius: 10px;
+    color: #56708d;
+    font-weight: 700;
+    padding: 8px 12px;
+}
+QLabel#applyErrorLabel {
+    background: #fff4f2;
+    border: 1px solid #f3c8bf;
+    border-radius: 10px;
+    color: #a34b3d;
+    padding: 10px 12px;
 }
 QFrame#metricCard {
     background: #ffffff;
@@ -146,6 +182,12 @@ QListWidget#eventList::item {
     border-bottom: 1px solid #ecf2f8;
 }
 QScrollArea#monitorScroll {
+    background: transparent;
+}
+QScrollArea#applyGoodsScroll {
+    background: transparent;
+}
+QWidget#applyGoodsScrollContent {
     background: transparent;
 }
 QScrollBar:vertical {
