@@ -72,6 +72,9 @@ class MainWindow(QMainWindow):
         self.state = ShellState()
         self.nav_buttons: dict[str, QPushButton] = {}
         self.page_indexes: dict[str, int] = {}
+        self.pages: dict[str, QWidget] = {}
+        self._page_placeholders: dict[str, QWidget] = {}
+        self._built: set[str] = set()
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(QIcon(str(resource_path("assets/images/app_icon.ico"))))
@@ -133,10 +136,23 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         for item in DEFAULT_NAV_ITEMS:
-            page = self._create_page(item.key)
-            self.page_indexes[item.key] = self.stack.addWidget(page)
+            placeholder = self._create_loading_placeholder(item.key)
+            self._page_placeholders[item.key] = placeholder
+            self.page_indexes[item.key] = self.stack.addWidget(placeholder)
         layout.addWidget(self.stack, stretch=1)
         return content
+
+    def _create_loading_placeholder(self, key: str) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 24)
+        label = QLabel(f"正在加载{PAGE_TITLES.get(key, key)}…")
+        label.setObjectName("sectionTitle")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addStretch(1)
+        layout.addWidget(label)
+        layout.addStretch(1)
+        return page
 
     def _create_page(self, key: str) -> QWidget:
         if key == "monitor":
@@ -163,6 +179,7 @@ class MainWindow(QMainWindow):
         return page
 
     def activate_page(self, key: str) -> None:
+        self._ensure_page_built(key)
         self.state.active_page = key
         self.stack.setCurrentIndex(self.page_indexes[key])
         for item_key, button in self.nav_buttons.items():
@@ -171,6 +188,32 @@ class MainWindow(QMainWindow):
             button.setProperty("active", "true" if is_active else "false")
             button.style().unpolish(button)
             button.style().polish(button)
+
+    def _ensure_page_built(self, key: str) -> None:
+        if key in self._built:
+            return
+
+        old_index = self.page_indexes[key]
+        placeholder = self._page_placeholders[key]
+        page = self._create_page(key)
+        self.stack.insertWidget(old_index, page)
+        self.stack.removeWidget(placeholder)
+        placeholder.deleteLater()
+
+        self.pages[key] = page
+        self.page_indexes[key] = old_index
+        self._built.add(key)
+
+        for index in range(self.stack.count()):
+            widget = self.stack.widget(index)
+            for item_key, item_page in self.pages.items():
+                if widget is item_page:
+                    self.page_indexes[item_key] = index
+                    break
+            for item_key, item_placeholder in self._page_placeholders.items():
+                if item_key not in self._built and widget is item_placeholder:
+                    self.page_indexes[item_key] = index
+                    break
 
     def closeEvent(self, event) -> None:  # noqa: N802
         for monitor_page in self.findChildren(MonitorPage):
