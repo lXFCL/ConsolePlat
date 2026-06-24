@@ -1989,6 +1989,32 @@ class AIEditPage(QWidget):
             self.tasks.append(record)
         self._rebuild_task_list()
 
+    def reload_tasks_from_store(self) -> None:
+        if self.task_store is None:
+            return
+        current_task = self.current_task
+        current_task_id = current_task.task_id if current_task is not None else ""
+        records: list[AIEditTaskRecord] = []
+        seen_task_ids: set[str] = set()
+        for payload in self.task_store.load():
+            record = self._task_from_dict(payload)
+            if record is None:
+                continue
+            self._backfill_history_xlsx_colors(record)
+            if current_task is not None and record.task_id == current_task_id:
+                records.append(current_task)
+            else:
+                records.append(record)
+            seen_task_ids.add(record.task_id)
+        if current_task is not None and current_task_id and current_task_id not in seen_task_ids:
+            records.append(current_task)
+        self.tasks = records
+        self._rebuild_task_list()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.reload_tasks_from_store()
+
     def closeEvent(self, event) -> None:  # noqa: N802
         if self.process is not None:
             kill = getattr(self.process, "kill", None)

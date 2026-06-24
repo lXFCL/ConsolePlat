@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from PyQt5.QtGui import QShowEvent
 from PyQt5.QtWidgets import QApplication
 
 from consoleplat.config import AppSettings, SettingsStore
@@ -52,5 +55,30 @@ def test_local_image_page_loads_preferences_and_history(tmp_path, monkeypatch):
     page.task_sort_combo.setCurrentText("按时间（旧到新）")
 
     assert "2026.0623.1059.00" in page.task_list.item(0).text()
+
+    page.close()
+
+
+def test_local_image_page_show_event_reloads_mirror_tasks(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, path = _page_with_temp_store(tmp_path, monkeypatch)
+    program_data_dir = Path(SettingsStore(path).load().program_data_dir)
+    tasks_dir = program_data_dir / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "local_image_tasks.json").write_text(
+        '[{"task_id":"20260624153000","mode_text":"完整模式","title":"mirror task","status":"完成","stage_text":"已完成",'
+        '"progress_percent":100,"logs":["13:00 done"],"print_dir":"E:/prints","product_dir":"E:/products","xlsx_path":"E:/batch.xlsx",'
+        '"job":{"prefix":"BO","start_number":1661,"count":10,"style_name":"style","steps":28,"width":832,"height":1216,'
+        '"seed":1,"test_mode":false,"auto_start_comfyui":true,"keep_comfyui":true,"gallery_root":"E:/gallery",'
+        '"mockup_root":"E:/mockup","xlsx_root":"E:/xlsx"}}]',
+        encoding="utf-8",
+    )
+
+    page.showEvent(QShowEvent())
+
+    assert any(record.task_id == "20260624153000" for record in page.tasks)
+    assert page.task_list.count() == 1
+    assert "mirror task" in page.task_list.item(0).text()
 
     page.close()

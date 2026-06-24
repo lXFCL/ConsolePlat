@@ -4,11 +4,12 @@ import os
 import re
 import shutil
 import site
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QProcess, QProcessEnvironment, Qt
+from PyQt5.QtCore import QProcess, QProcessEnvironment, QTimer, Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -34,7 +35,9 @@ from consoleplat.adapters.posaiimg_adapter import AIEditJob, LocalImageJob, PosA
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore
 from consoleplat.services.ai_edit_formalize_service import formalize_ai_edit_outputs
+from consoleplat.services.comfyui_service import ComfyUIService
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
+from consoleplat.services.publish_orchestrator import PublishStage, StageOrchestrator
 from consoleplat.services.putaway_sync_service import IMAGE_SUFFIXES, PutawaySyncSummary, sync_putaway_assets
 from consoleplat.services.task_store import TaskStore
 
@@ -160,6 +163,7 @@ class ProductPublishPage(QWidget):
         self.settings_store = SettingsStore()
         self.settings = self.settings_store.load()
         self.adapter = PosAiImgAdapter()
+        self.comfyui_service = ComfyUIService()
         self.putaway_adapter = PutawayAdapter(
             project_dir=Path(self.settings.putaway_project_dir or r"E:\1PythonProject\PutawayAiRobot"),
             data_dir_path=Path(self.settings.putaway_data_dir or r"E:\1PythonProject\PutawayAiRobot\data"),
@@ -176,6 +180,12 @@ class ProductPublishPage(QWidget):
         self._loading_preferences = False
         self._saved_local_count = 10
         self._saved_ai_count = 2
+        self._task_started_at = 0.0
+        self.orchestrator: StageOrchestrator | None = None
+
+        self.no_output_timer = QTimer(self)
+        self.no_output_timer.setSingleShot(False)
+        self.no_output_timer.timeout.connect(self._warn_if_no_output_yet)
 
         self._build_ui()
         self._load_preferences()
@@ -246,6 +256,11 @@ class ProductPublishPage(QWidget):
 
         self.test_mode_check = QCheckBox("测试模式：不占用正式货号，不自动衔接真实发布")
         self.test_mode_check.setChecked(True)
+        self.handoff_delay_spin = QSpinBox()
+        self.handoff_delay_spin.setRange(0, 3600)
+        self.handoff_delay_spin.setSuffix(" 秒")
+        self.pause_before_putaway_check = QCheckBox("上架前暂停，等我点“继续上架”")
+        self.pause_before_putaway_check.setChecked(True)
 
         self.form_layout = QFormLayout()
         self.form_layout.setLabelAlignment(Qt.AlignRight)
@@ -256,8 +271,10 @@ class ProductPublishPage(QWidget):
         self.count_label = QLabel("计划张数")
         self.form_layout.addRow(self.count_label, self.count_spin)
         self.form_layout.addRow("上架衔接", self.handoff_combo)
+        self.form_layout.addRow("等待上架", self.handoff_delay_spin)
         layout.addLayout(self.form_layout)
         layout.addWidget(self.test_mode_check)
+        layout.addWidget(self.pause_before_putaway_check)
 
         self.local_params_panel = self._build_local_params_panel()
         self.ai_params_panel = self._build_ai_params_panel()
@@ -496,6 +513,9 @@ class ProductPublishPage(QWidget):
         return batch.gallery_batch_dir / "临时输出"
 
     def confirm_and_start(self) -> None:
+        if self.orchestrator is not None and self.orchestrator.stage == PublishStage.PENDING_CONFIRM:
+            self._resume_pending_launch()
+            return
         summary = self._confirmation_summary()
         accepted = QMessageBox.question(self, "确认产品任务", summary)
         if accepted != QMessageBox.Yes:
@@ -519,6 +539,8 @@ class ProductPublishPage(QWidget):
         occupy_text = "不会占用正式货号" if self.test_mode_check.isChecked() else "将占用正式货号"
         sync_text = "会同步到 PutawayAiRobot data"
         launch_text = "会启动/唤起 PutawayAiRobot"
+        delay_seconds = self.handoff_delay_spin.value()
+        pause_text = "上架前会暂停等待人工确认" if self.pause_before_putaway_check.isChecked() else "上架前不会额外暂停"
         return (
             f"任务：{self.task_name_edit.text().strip() or '默认产品发布任务'}\n"
             f"店铺前缀：{self.prefix_combo.currentText()}\n"
@@ -527,6 +549,7 @@ class ProductPublishPage(QWidget):
             f"生图方式：{mode}\n"
             f"货号策略：{occupy_text}\n"
             f"上架衔接：{sync_text}；{launch_text}\n"
+            f"编排策略：生图完成后等待 {delay_seconds} 秒；{pause_text}\n"
             "安全边界：不会自动点击真实发布按钮。"
         )
 
@@ -570,6 +593,20 @@ class ProductPublishPage(QWidget):
         record.job_payload = self._local_job_payload(job)
         self._sync_mirror_task(record)
         program, args, cwd = self.adapter.local_image_command(job)
+        comfy_status = self.comfyui_service.ensure_ready(
+            auto_start=job.auto_start_comfyui,
+            timeout_seconds=240,
+            logger=lambda msg: self._append_record_log(record, msg),
+        )
+        self._append_record_log(record, comfy_status.message)
+        if not comfy_status.ready:
+            record.status = "confirmed"
+            record.stage_text = "等待 ComfyUI"
+            self.confirm_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
+            self.current_task = None
+            self._save_and_refresh(record)
+            return
         if job.test_mode:
             self._append_record_log(record, "测试模式：只生成测试印花，不占用正式货号，也不自动进入上架。")
         else:
@@ -648,10 +685,12 @@ class ProductPublishPage(QWidget):
             started_signal.connect(lambda: self._append_record_log(record, f"生图进程已启动，PID={process.processId()}"))
         self._stdout_buffer = ""
         self._stderr_buffer = ""
+        self._task_started_at = time.time()
         self.process = process
         self.confirm_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self._set_process_env(process, api_key)
+        self.no_output_timer.start(15000)
         process.start()
 
     def _set_process_env(self, process: QProcess, api_key: str = "") -> None:
@@ -671,6 +710,8 @@ class ProductPublishPage(QWidget):
         if self.current_task is record:
             self.current_task = None
         self.process = None
+        self.no_output_timer.stop()
+        self._task_started_at = 0.0
         self.confirm_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         record.status = "failed"
@@ -681,17 +722,33 @@ class ProductPublishPage(QWidget):
         self._save_and_refresh(record)
 
     def stop_job(self) -> None:
-        if self.process is None or self.current_task is None:
+        if self.current_task is None:
             return
-        self._stopping_task_id = self.current_task.task_id
-        self._append_record_log(self.current_task, "正在停止任务...")
-        self.process.kill()
+        if self.process is not None:
+            self._stopping_task_id = self.current_task.task_id
+            self._append_record_log(self.current_task, "正在停止任务...")
+            if self.orchestrator is not None:
+                self.orchestrator.abort()
+            self.process.kill()
+            return
+        if self.orchestrator is None:
+            return
+        self._append_record_log(self.current_task, "已中止等待中的上架衔接。")
+        self.orchestrator.abort()
+        self.current_task.status = "failed"
+        self.current_task.stage_text = "已中止"
+        self.current_task.progress_percent = 0
+        self._save_and_refresh(self.current_task)
+        self.confirm_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
 
     def _read_stdout(self) -> None:
         if self.process is None or self.current_task is None:
             return
         text = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
         self._stdout_buffer += text
+        if text.strip():
+            self.no_output_timer.stop()
         self._append_record_log(self.current_task, text.rstrip())
         self._update_progress_from_text(text)
 
@@ -700,6 +757,8 @@ class ProductPublishPage(QWidget):
             return
         text = bytes(self.process.readAllStandardError()).decode("utf-8", errors="replace")
         self._stderr_buffer += text
+        if text.strip():
+            self.no_output_timer.stop()
         self._append_record_log(self.current_task, text.rstrip())
 
     def _update_progress_from_text(self, text: str) -> None:
@@ -736,6 +795,8 @@ class ProductPublishPage(QWidget):
             self._stderr_buffer += stderr
             self._append_record_log(record, stderr.rstrip())
         self.process = None
+        self.no_output_timer.stop()
+        self._task_started_at = 0.0
         self.current_task = None
         self.confirm_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -851,6 +912,84 @@ class ProductPublishPage(QWidget):
             return total_rounds * split_count
         return max(1, int(record.count or 1))
 
+    def _build_orchestrator(self, record: ProductTaskRecord) -> StageOrchestrator:
+        return StageOrchestrator(
+            schedule=lambda delay_seconds, callback: QTimer.singleShot(max(0, int(delay_seconds)) * 1000, callback),
+            on_validate=self._run_handoff_validation,
+            on_launch=self._launch_putaway_record,
+            on_stage_changed=lambda target, stage, countdown_seconds=None: self._on_orchestrator_stage_changed(
+                target,
+                stage,
+                countdown_seconds=countdown_seconds,
+            ),
+        )
+
+    def _on_orchestrator_stage_changed(
+        self,
+        record: ProductTaskRecord,
+        stage: PublishStage,
+        *,
+        countdown_seconds: int | None = None,
+    ) -> None:
+        stage_text_map = {
+            PublishStage.WAITING_HANDOFF: "等待上架",
+            PublishStage.VALIDATING: "产物校验",
+            PublishStage.PENDING_CONFIRM: "待确认上架",
+            PublishStage.LAUNCHING: "正在唤起上架",
+            PublishStage.DONE: "已唤起上架",
+            PublishStage.ABORTED: "已中止",
+            PublishStage.FAILED: "上架衔接失败",
+        }
+        progress_map = {
+            PublishStage.WAITING_HANDOFF: 80,
+            PublishStage.VALIDATING: 60,
+            PublishStage.PENDING_CONFIRM: 90,
+            PublishStage.LAUNCHING: 95,
+            PublishStage.DONE: 100,
+            PublishStage.ABORTED: 0,
+            PublishStage.FAILED: 0,
+        }
+        record.stage_text = stage_text_map.get(stage, record.stage_text)
+        record.progress_percent = progress_map.get(stage, record.progress_percent)
+        if stage == PublishStage.WAITING_HANDOFF and countdown_seconds is not None:
+            self._append_record_log(record, f"将在 {countdown_seconds} 秒后进入上架衔接。")
+        elif stage == PublishStage.PENDING_CONFIRM:
+            self._append_record_log(record, "已完成校验与同步，等待人工确认继续上架。")
+        elif stage == PublishStage.ABORTED:
+            self._append_record_log(record, "上架衔接已中止。")
+        self.stop_button.setEnabled(stage not in {PublishStage.DONE, PublishStage.ABORTED, PublishStage.FAILED})
+        self.confirm_button.setEnabled(stage in {PublishStage.PENDING_CONFIRM} or self.process is None)
+        if stage == PublishStage.PENDING_CONFIRM:
+            self.confirm_button.setText("继续上架")
+        else:
+            self.confirm_button.setText("同意并开始")
+        self._save_and_refresh(record)
+
+    def _resume_pending_launch(self) -> None:
+        if self.orchestrator is None:
+            return
+        self.orchestrator.resume_launch()
+
+    def _run_handoff_validation(self, record: ProductTaskRecord) -> bool:
+        if record.status != "generated":
+            return True
+        return bool(getattr(self.validate_and_sync(record), "ok", False))
+
+    def _warn_if_no_output_yet(self) -> None:
+        if self.process is None or self.current_task is None:
+            return
+        if self._stdout_buffer.strip() or self._stderr_buffer.strip():
+            return
+        waited_seconds = max(0, int(time.time() - self._task_started_at)) if self._task_started_at else 0
+        state = getattr(self.process, "state", lambda: None)()
+        state_text = "运行中" if state == QProcess.Running else ("启动中" if state == QProcess.Starting else "未知")
+        self._append_record_log(
+            self.current_task,
+            f"暂时还没有收到脚本输出，已等待 {waited_seconds} 秒。当前进程状态：{state_text}。"
+            "常见原因是 ComfyUI 尚未启动、conda 环境启动较慢，或脚本仍在初始化。",
+        )
+        self._save_and_refresh(self.current_task)
+
     def _derive_ai_product_dir(self, record: ProductTaskRecord) -> Path:
         mockup_root = str(record.job_payload.get("mockup_root") or self.settings.posai_mockup_root)
         batch_dir = Path(str(record.job_payload.get("batch_dir") or ""))
@@ -894,15 +1033,19 @@ class ProductPublishPage(QWidget):
             return
         if not record.product_dir or not record.xlsx_path:
             return
-        if record.status == "generated":
-            summary = self.validate_and_sync(record)
-            if not getattr(summary, "ok", False):
-                return
-        self._launch_putaway_record(record)
+        self.current_task = record
+        self.orchestrator = self._build_orchestrator(record)
+        self.orchestrator.begin_handoff(
+            record,
+            delay_seconds=self.settings.publish_handoff_delay_seconds,
+            pause_before_putaway=self.settings.publish_pause_before_putaway,
+        )
 
     def _on_process_error(self, error) -> None:
         record = self.current_task
         message = f"生图进程启动失败：{error}"
+        self.no_output_timer.stop()
+        self._task_started_at = 0.0
         if record is None:
             self.process = None
             self.confirm_button.setEnabled(True)
@@ -1273,6 +1416,8 @@ class ProductPublishPage(QWidget):
             self._saved_ai_count if self.generation_mode_combo.currentText() == "AI 改图" else self._saved_local_count
         )
         self.handoff_combo.setCurrentText(str(getattr(settings, "publish_handoff_mode", "") or "同步并唤起"))
+        self.handoff_delay_spin.setValue(max(0, int(getattr(settings, "publish_handoff_delay_seconds", 0) or 0)))
+        self.pause_before_putaway_check.setChecked(bool(getattr(settings, "publish_pause_before_putaway", True)))
         self.test_mode_check.setChecked(bool(getattr(settings, "publish_test_mode", True)))
         self.steps_spin.setValue(max(8, int(getattr(settings, "publish_local_steps", 28) or 28)))
         self.seed_spin.setValue(max(1, int(getattr(settings, "publish_local_seed", 2026061702) or 2026061702)))
@@ -1291,6 +1436,8 @@ class ProductPublishPage(QWidget):
         self.start_spin.valueChanged.connect(self._save_preferences)
         self.count_spin.valueChanged.connect(self._save_preferences)
         self.handoff_combo.currentTextChanged.connect(self._save_preferences)
+        self.handoff_delay_spin.valueChanged.connect(self._save_preferences)
+        self.pause_before_putaway_check.toggled.connect(self._save_preferences)
         self.test_mode_check.toggled.connect(self._save_preferences)
         self.steps_spin.valueChanged.connect(self._save_preferences)
         self.seed_spin.valueChanged.connect(self._save_preferences)
@@ -1317,6 +1464,8 @@ class ProductPublishPage(QWidget):
         if not settings.publish_ai_count:
             settings.publish_ai_count = self._saved_ai_count
         settings.publish_handoff_mode = self.handoff_combo.currentText()
+        settings.publish_handoff_delay_seconds = self.handoff_delay_spin.value()
+        settings.publish_pause_before_putaway = self.pause_before_putaway_check.isChecked()
         settings.publish_test_mode = self.test_mode_check.isChecked()
         settings.publish_local_steps = self.steps_spin.value()
         settings.publish_local_seed = self.seed_spin.value()
@@ -1391,6 +1540,9 @@ class ProductPublishPage(QWidget):
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self.no_output_timer.stop()
+        if self.orchestrator is not None:
+            self.orchestrator.abort()
         if self.process is not None:
             kill = getattr(self.process, "kill", None)
             if kill is not None:

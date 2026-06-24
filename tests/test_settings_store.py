@@ -49,6 +49,21 @@ def test_settings_store_persists_startup_window_size(tmp_path):
     assert loaded.startup_height == 820
 
 
+def test_settings_store_persists_publish_handoff_preferences(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        publish_handoff_delay_seconds=90,
+        publish_pause_before_putaway=False,
+    )
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.publish_handoff_delay_seconds == 90
+    assert loaded.publish_pause_before_putaway is False
+
+
 def test_settings_store_migrates_legacy_ai_provider_fields(tmp_path):
     path = tmp_path / "settings.json"
     path.write_text(

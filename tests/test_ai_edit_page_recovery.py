@@ -5,6 +5,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from PyQt5.QtGui import QShowEvent
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget
 from openpyxl import Workbook, load_workbook
 from PIL import Image
@@ -1058,6 +1059,69 @@ def test_ai_edit_page_backfills_xlsx_colors_when_restoring_history(tmp_path, mon
     assert ws["E2"].value == "白"
     assert ws["E3"].value == "黑"
     wb.close()
+
+    page.close()
+
+
+def test_ai_edit_page_show_event_reloads_mirror_tasks(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    settings_path = tmp_path / "settings.json"
+    program_data_dir = tmp_path / "ConsolePlatData"
+    SettingsStore(settings_path).save(AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(program_data_dir)))
+    tasks_dir = program_data_dir / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.SettingsStore", lambda: SettingsStore(settings_path))
+
+    page = AIEditPage()
+    (tasks_dir / "ai_edit_tasks.json").write_text(
+        (
+            "[{"
+            "\"task_id\":\"20260624153500\","
+            "\"title\":\"AI mirror\","
+            "\"status\":\"完成\","
+            "\"stage_text\":\"已完成\","
+            "\"progress_percent\":100,"
+            "\"logs\":[\"13:05 done\"],"
+            "\"output_dir\":\"E:/ai/output\","
+            "\"outputs\":[\"E:/ai/output/1.png\"],"
+            "\"failed\":[],"
+            "\"warnings\":[],"
+            "\"round_sources\":[\"E:/ai/output/1.png\"],"
+            "\"collage_transparent_sources\":[],"
+            "\"active_round_index\":0,"
+            "\"final_transparent_dir\":\"E:/ai/transparent\","
+            "\"final_product_dir\":\"E:/ai/products\","
+            "\"xlsx_path\":\"E:/ai.xlsx\","
+            "\"split_profile\":{},"
+            "\"job\":{"
+            "\"images\":[\"E:/ref.png\"],"
+            "\"prompt\":\"keep subject\","
+            "\"api_key\":\"\","
+            "\"api_base\":\"https://api.openai.com/v1\","
+            "\"model\":\"gpt-image-2\","
+            "\"output_dir\":\"E:/ai/output\","
+            "\"size\":\"1024x1024\","
+            "\"split_collage\":true,"
+            "\"split_count\":25,"
+            "\"total_return_count\":1,"
+            "\"prefix\":\"BO\","
+            "\"start_number\":1661,"
+            "\"test_mode\":true,"
+            "\"gallery_root\":\"E:/gallery\","
+            "\"mockup_root\":\"E:/mockup\","
+            "\"xlsx_root\":\"E:/xlsx\""
+            "}"
+            "}]"
+        ),
+        encoding="utf-8",
+    )
+
+    page.showEvent(QShowEvent())
+
+    assert any(record.task_id == "20260624153500" for record in page.tasks)
+    assert page.task_list.count() == 1
+    assert "AI mirror" in page.task_list.item(0).text()
 
     page.close()
 

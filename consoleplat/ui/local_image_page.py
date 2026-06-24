@@ -693,6 +693,31 @@ class LocalImagePage(QWidget):
             self.tasks.append(record)
         self._rebuild_task_list()
 
+    def reload_tasks_from_store(self) -> None:
+        if self.task_store is None:
+            return
+        current_task = self.current_task
+        current_task_id = current_task.task_id if current_task is not None else ""
+        records: list[LocalImageTaskRecord] = []
+        seen_task_ids: set[str] = set()
+        for payload in self.task_store.load():
+            record = self._task_from_dict(payload)
+            if record is None:
+                continue
+            if current_task is not None and record.task_id == current_task_id:
+                records.append(current_task)
+            else:
+                records.append(record)
+            seen_task_ids.add(record.task_id)
+        if current_task is not None and current_task_id and current_task_id not in seen_task_ids:
+            records.append(current_task)
+        self.tasks = records
+        self._rebuild_task_list()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.reload_tasks_from_store()
+
     def _ordered_tasks(self) -> list[LocalImageTaskRecord]:
         reverse = self.task_sort_combo.currentText() != "按时间（旧到新）" if hasattr(self, "task_sort_combo") else True
         return sorted(self.tasks, key=lambda record: record.task_id, reverse=reverse)

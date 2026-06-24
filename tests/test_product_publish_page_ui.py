@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QApplication, QListWidget, QMessageBox
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, LocalImageJob
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary
 from consoleplat.config import AppSettings, SettingsStore
+from consoleplat.services.publish_orchestrator import PublishStage
 from consoleplat.ui.product_publish_page import (
     PRODUCT_TASK_STATUSES,
     ProductPublishPage,
@@ -361,7 +362,16 @@ def test_product_publish_page_sync_stops_when_validation_fails(tmp_path, monkeyp
 def test_product_publish_page_finish_local_generation_auto_syncs_and_handoffs(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
-    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+            publish_handoff_delay_seconds=0,
+            publish_pause_before_putaway=False,
+            publish_test_mode=False,
+        ),
+    )
     launches = []
     sync_calls = []
 
@@ -396,6 +406,12 @@ def test_product_publish_page_finish_local_generation_auto_syncs_and_handoffs(tm
     monkeypatch.setattr(page, "validate_and_sync", fake_validate_and_sync)
     monkeypatch.setattr(page, "_launch_putaway_record", lambda target: launches.append(target.task_id))
 
+    scheduled = []
+    monkeypatch.setattr(
+        "consoleplat.ui.product_publish_page.QTimer.singleShot",
+        lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
+    )
+
     page._finish_local_generation(record, 0)
 
     assert sync_calls == ["20260622123000"]
@@ -407,7 +423,16 @@ def test_product_publish_page_finish_local_generation_auto_syncs_and_handoffs(tm
 def test_product_publish_page_finish_ai_generation_auto_formalizes_and_handoffs(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
-    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+            publish_handoff_delay_seconds=0,
+            publish_pause_before_putaway=False,
+            publish_test_mode=False,
+        ),
+    )
     launches = []
     formalize_calls = []
     record = ProductTaskRecord(
@@ -453,6 +478,12 @@ def test_product_publish_page_finish_ai_generation_auto_formalizes_and_handoffs(
 
     monkeypatch.setattr(page, "_formalize_ai_outputs", fake_formalize)
     monkeypatch.setattr(page, "_launch_putaway_record", lambda target: launches.append(target.task_id))
+
+    scheduled = []
+    monkeypatch.setattr(
+        "consoleplat.ui.product_publish_page.QTimer.singleShot",
+        lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
+    )
 
     page._finish_ai_generation(record, 0)
 
@@ -551,6 +582,8 @@ def test_product_publish_page_auto_saves_adjustable_config(tmp_path, monkeypatch
     page.generation_mode_combo.setCurrentIndex(1)
     page.count_spin.setValue(3)
     page.test_mode_check.setChecked(False)
+    page.handoff_delay_spin.setValue(45)
+    page.pause_before_putaway_check.setChecked(False)
     page._add_reference_image(str(reference))
     page.ai_prompt_edit.setPlainText("save ai prompt")
     page.generation_mode_combo.setCurrentIndex(0)
@@ -569,6 +602,8 @@ def test_product_publish_page_auto_saves_adjustable_config(tmp_path, monkeypatch
     assert restored.generation_mode_combo.currentText() == "本地生图"
     assert restored.count_spin.value() == 12
     assert restored.test_mode_check.isChecked() is False
+    assert restored.handoff_delay_spin.value() == 45
+    assert restored.pause_before_putaway_check.isChecked() is False
     assert restored.steps_spin.value() == 33
     assert restored.seed_spin.value() == 123456
     assert restored.auto_start_comfyui_check.isChecked() is False
@@ -748,3 +783,173 @@ def test_product_task_statuses_are_fixed():
         "handoff",
         "failed",
     )
+
+
+def test_product_publish_page_local_generation_waits_for_comfyui(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624130000",
+        task_name="local publish",
+        prefix="BO",
+        start_number=1661,
+        count=2,
+        generation_mode="本地生图",
+        product_title="fixed title",
+    )
+    starts = []
+
+    class FakeComfyStatus:
+        ready = False
+        message = "ComfyUI 尚未就绪"
+
+    monkeypatch.setattr(page.comfyui_service, "ensure_ready", lambda **_kwargs: FakeComfyStatus())
+    monkeypatch.setattr(page, "_start_process", lambda *args, **kwargs: starts.append((args, kwargs)))
+
+    page._start_local_generation(record)
+
+    assert starts == []
+    assert record.stage_text == "等待 ComfyUI"
+    assert record.status == "confirmed"
+    assert any("ComfyUI 尚未就绪" in line for line in record.logs)
+    assert page.confirm_button.isEnabled() is True
+    assert page.stop_button.isEnabled() is False
+
+    page.close()
+
+
+def test_product_publish_page_warns_when_generation_has_no_output(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624130500",
+        task_name="local publish",
+        prefix="BO",
+        start_number=1661,
+        count=2,
+        generation_mode="本地生图",
+        product_title="fixed title",
+    )
+
+    class FakeStateProcess:
+        Running = 2
+
+        def state(self):
+            return FakeStateProcess.Running
+
+    page.current_task = record
+    page.process = FakeStateProcess()
+    page._stdout_buffer = ""
+    page._stderr_buffer = ""
+    page._task_started_at = 1
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.time.time", lambda: 21)
+
+    page._warn_if_no_output_yet()
+
+    assert any("已等待 20 秒" in line for line in record.logs)
+    assert any("ComfyUI 尚未启动" in line or "ComfyUI" in line for line in record.logs)
+
+    page.close()
+
+
+def test_product_publish_page_auto_continue_uses_orchestrator_delay_and_pause(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+            publish_handoff_delay_seconds=2,
+            publish_pause_before_putaway=True,
+            publish_test_mode=False,
+        ),
+    )
+    launches = []
+    validations = []
+    scheduled = []
+    record = ProductTaskRecord(
+        task_id="20260624131000",
+        task_name="handoff task",
+        prefix="BO",
+        start_number=1661,
+        count=2,
+        generation_mode="本地生图",
+        product_title="fixed title",
+        test_mode=False,
+        status="generated",
+        stage_text="生图完成",
+        progress_percent=55,
+        product_dir="E:/products",
+        xlsx_path="E:/batch.xlsx",
+    )
+
+    monkeypatch.setattr(page, "validate_and_sync", lambda target: validations.append(target.task_id) or PutawaySyncSummary(ok=True, message="同步完成"))
+    monkeypatch.setattr(page, "_launch_putaway_record", lambda target: launches.append(target.task_id))
+    monkeypatch.setattr(
+        "consoleplat.ui.product_publish_page.QTimer.singleShot",
+        lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
+    )
+
+    page._auto_continue_after_generation(record)
+
+    assert page.orchestrator is not None
+    assert page.orchestrator.stage == PublishStage.WAITING_HANDOFF
+    assert record.stage_text == "等待上架"
+    assert scheduled
+    assert validations == []
+    assert launches == []
+
+    while scheduled:
+        _delay, callback = scheduled.pop(0)
+        callback()
+
+    assert validations == ["20260624131000"]
+    assert launches == []
+    assert page.orchestrator.stage == PublishStage.PENDING_CONFIRM
+    assert record.stage_text == "待确认上架"
+
+    page.orchestrator.resume_launch()
+
+    assert launches == ["20260624131000"]
+    assert page.orchestrator.stage == PublishStage.DONE
+
+    page.close()
+
+
+def test_product_publish_page_stop_button_aborts_waiting_handoff(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624131500",
+        task_name="abort task",
+        prefix="BO",
+        start_number=1661,
+        count=2,
+        generation_mode="本地生图",
+        product_title="fixed title",
+        status="generated",
+        stage_text="等待上架",
+        progress_percent=80,
+    )
+    page.tasks = [record]
+    page.current_task = record
+
+    scheduled = []
+    monkeypatch.setattr(
+        "consoleplat.ui.product_publish_page.QTimer.singleShot",
+        lambda delay_ms, callback: scheduled.append((delay_ms, callback)),
+    )
+    page.orchestrator = page._build_orchestrator(record)
+    page.orchestrator.begin_handoff(record, delay_seconds=2, pause_before_putaway=False)
+
+    page.stop_job()
+
+    assert page.orchestrator.stage == PublishStage.ABORTED
+    assert record.stage_text == "已中止"
+    assert record.status == "failed"
+
+    page.close()

@@ -160,6 +160,8 @@ class AppSettings:
     publish_local_count: int = 10
     publish_ai_count: int = 2
     publish_handoff_mode: str = "同步并唤起"
+    publish_handoff_delay_seconds: int = 0
+    publish_pause_before_putaway: bool = True
     publish_test_mode: bool = True
     publish_local_steps: int = 28
     publish_local_seed: int = 2026061702
@@ -271,6 +273,8 @@ class SettingsStore:
             publish_local_count=max(1, int(data.get("publish_local_count") or 10)),
             publish_ai_count=max(1, int(data.get("publish_ai_count") or 2)),
             publish_handoff_mode=str(data.get("publish_handoff_mode") or "同步并唤起"),
+            publish_handoff_delay_seconds=max(0, int(data.get("publish_handoff_delay_seconds") or 0)),
+            publish_pause_before_putaway=bool(data.get("publish_pause_before_putaway", True)),
             publish_test_mode=bool(data.get("publish_test_mode", True)),
             publish_local_steps=max(8, int(data.get("publish_local_steps") or 28)),
             publish_local_seed=max(1, int(data.get("publish_local_seed") or 2026061702)),
@@ -337,6 +341,8 @@ class SettingsStore:
             "publish_local_count": max(1, int(settings.publish_local_count or 10)),
             "publish_ai_count": max(1, int(settings.publish_ai_count or 2)),
             "publish_handoff_mode": settings.publish_handoff_mode or "同步并唤起",
+            "publish_handoff_delay_seconds": max(0, int(settings.publish_handoff_delay_seconds or 0)),
+            "publish_pause_before_putaway": bool(settings.publish_pause_before_putaway),
             "publish_test_mode": bool(settings.publish_test_mode),
             "publish_local_steps": max(8, int(settings.publish_local_steps or 28)),
             "publish_local_seed": max(1, int(settings.publish_local_seed or 2026061702)),
