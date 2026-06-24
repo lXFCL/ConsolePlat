@@ -180,6 +180,11 @@ class ProductPublishPage(QWidget):
         self._loading_preferences = False
         self._saved_local_count = 10
         self._saved_ai_count = 2
+        self._preferences_dirty = False
+        self._pref_save_timer = QTimer(self)
+        self._pref_save_timer.setSingleShot(True)
+        self._pref_save_timer.setInterval(800)
+        self._pref_save_timer.timeout.connect(self._flush_preference_save)
         self._task_started_at = 0.0
         self.orchestrator: StageOrchestrator | None = None
         self._dirty_records: set[str] = set()
@@ -1494,7 +1499,7 @@ class ProductPublishPage(QWidget):
     def _save_preferences(self, *_args) -> None:
         if self._loading_preferences:
             return
-        settings = self.settings_store.load()
+        settings = self.settings
         settings.publish_prefix = self.prefix_combo.currentText()
         settings.publish_task_name = self.task_name_edit.text().strip() or "默认产品发布任务"
         settings.publish_start_number = self.start_spin.value()
@@ -1519,8 +1524,16 @@ class ProductPublishPage(QWidget):
         settings.publish_keep_comfyui = self.keep_comfyui_check.isChecked()
         settings.publish_ai_prompt = self.ai_prompt_edit.toPlainText().strip() or DEFAULT_AI_EDIT_PROMPT
         settings.publish_ai_reference_images = [str(path) for path in self._reference_images]
-        self.settings_store.save(settings)
         self.settings = settings
+        self._preferences_dirty = True
+        self._pref_save_timer.start()
+
+    def _flush_preference_save(self) -> None:
+        if not self._preferences_dirty:
+            return
+        self._pref_save_timer.stop()
+        self.settings_store.save(self.settings)
+        self._preferences_dirty = False
 
     def _save_task_history(self) -> None:
         if self.task_store is None:
@@ -1586,6 +1599,7 @@ class ProductPublishPage(QWidget):
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._flush_preference_save()
         self._flush_persist()
         self.no_output_timer.stop()
         if self.orchestrator is not None:

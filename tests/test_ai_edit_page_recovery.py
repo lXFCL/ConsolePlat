@@ -2069,6 +2069,32 @@ def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path
     page.close()
 
 
+def test_ai_edit_page_show_event_skips_reload_when_task_file_unchanged(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    program_data_dir = Path(SettingsStore(path).load().program_data_dir)
+    tasks_file = program_data_dir / "tasks" / "ai_edit_tasks.json"
+    tasks_file.parent.mkdir(parents=True, exist_ok=True)
+    tasks_file.write_text("[]", encoding="utf-8")
+    page.showEvent(QShowEvent())
+    load_calls = []
+    rebuild_calls = []
+    monkeypatch.setattr(page.task_store, "load", lambda: load_calls.append("load") or [])
+    monkeypatch.setattr(page, "_rebuild_task_list", lambda: rebuild_calls.append("rebuild"))
+
+    page.showEvent(QShowEvent())
+
+    assert load_calls == []
+    assert rebuild_calls == []
+
+    page.close()
+
+
 def test_ai_edit_page_formal_mode_accepts_non_split_png_outputs(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

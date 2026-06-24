@@ -86,6 +86,28 @@ def test_local_image_page_show_event_reloads_mirror_tasks(tmp_path, monkeypatch)
     page.close()
 
 
+def test_local_image_page_show_event_skips_reload_when_task_file_unchanged(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, path = _page_with_temp_store(tmp_path, monkeypatch)
+    program_data_dir = Path(SettingsStore(path).load().program_data_dir)
+    tasks_file = program_data_dir / "tasks" / "local_image_tasks.json"
+    tasks_file.parent.mkdir(parents=True, exist_ok=True)
+    tasks_file.write_text("[]", encoding="utf-8")
+    page.showEvent(QShowEvent())
+    load_calls = []
+    rebuild_calls = []
+    monkeypatch.setattr(page.task_store, "load", lambda: load_calls.append("load") or [])
+    monkeypatch.setattr(page, "_rebuild_task_list", lambda: rebuild_calls.append("rebuild"))
+
+    page.showEvent(QShowEvent())
+
+    assert load_calls == []
+    assert rebuild_calls == []
+
+    page.close()
+
+
 def test_local_image_page_debounces_log_and_progress_persistence(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

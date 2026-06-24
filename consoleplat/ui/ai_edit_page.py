@@ -1135,6 +1135,7 @@ class AIEditPage(QWidget):
         self.gallery_root = ""
         self.mockup_root = ""
         self.xlsx_root = ""
+        self._tasks_file_mtime: float | None = None
         self._dirty_task_ids: set[str] = set()
         self._persist_timer = QTimer(self)
         self._persist_timer.setSingleShot(True)
@@ -2112,6 +2113,7 @@ class AIEditPage(QWidget):
         self._persist_timer.stop()
         self._dirty_task_ids.clear()
         self._save_task_history()
+        self._remember_tasks_file_mtime()
 
     def _on_task_sort_changed(self, _text: str) -> None:
         self._rebuild_task_list()
@@ -2251,9 +2253,13 @@ class AIEditPage(QWidget):
             self._backfill_history_xlsx_colors(record)
             self.tasks.append(record)
         self._rebuild_task_list()
+        self._remember_tasks_file_mtime()
 
-    def reload_tasks_from_store(self) -> None:
+    def reload_tasks_from_store(self, *, force: bool = False) -> None:
         if self.task_store is None:
+            return
+        current_mtime = self._current_tasks_file_mtime()
+        if not force and current_mtime == self._tasks_file_mtime:
             return
         current_task = self.current_task
         current_task_id = current_task.task_id if current_task is not None else ""
@@ -2273,10 +2279,19 @@ class AIEditPage(QWidget):
             records.append(current_task)
         self.tasks = records
         self._rebuild_task_list()
+        self._tasks_file_mtime = current_mtime
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self.reload_tasks_from_store()
+
+    def _current_tasks_file_mtime(self) -> float | None:
+        if self.task_store is None or not self.task_store.path.exists():
+            return None
+        return self.task_store.path.stat().st_mtime
+
+    def _remember_tasks_file_mtime(self) -> None:
+        self._tasks_file_mtime = self._current_tasks_file_mtime()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._flush_persist()

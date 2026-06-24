@@ -912,6 +912,31 @@ def test_product_publish_page_debounces_progress_persistence_and_updates_item(tm
     page.close()
 
 
+def test_product_publish_page_debounces_text_preference_saves(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    save_calls = []
+    original_save = page.settings_store.save
+    monkeypatch.setattr(page.settings_store, "save", lambda settings: save_calls.append(settings.publish_task_name))
+
+    page.task_name_edit.setText("task A")
+    page.task_name_edit.setText("task AB")
+    page.ai_prompt_edit.setPlainText("prompt one")
+    page.ai_prompt_edit.setPlainText("prompt two")
+
+    assert save_calls == []
+    assert page.settings.publish_task_name == "task AB"
+    assert page.settings.publish_ai_prompt == "prompt two"
+
+    page._flush_preference_save()
+
+    assert save_calls == ["task AB"]
+
+    monkeypatch.setattr(page.settings_store, "save", original_save)
+    page.close()
+
+
 def test_product_publish_page_warns_when_generation_has_no_output(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
