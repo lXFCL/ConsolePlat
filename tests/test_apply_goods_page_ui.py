@@ -80,3 +80,15 @@ def test_apply_goods_page_uses_scroll_container_for_tall_content(tmp_path, monke
     assert page.scroll_content.layout().spacing() >= 16
 
     page.close()
+
+
+def test_apply_goods_page_uses_updated_header_copy(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page = _page_with_temp_store(tmp_path, monkeypatch)
+    labels = [label.text() for label in page.findChildren(QLabel)]
+
+    assert "当前页面直接内嵌 ApplyGoods 界面，已与控制台主题统一配色。可在此连接浏览器并执行套版组、合规上传、JIT 与库存等操作。" in labels
+    assert "已改为纵向卷轴式承载，便于在较小窗口里继续操作套版组、合规上传、JIT 和库存流程。" not in labels
+
+    page.close()

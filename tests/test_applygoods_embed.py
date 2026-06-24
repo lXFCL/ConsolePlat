@@ -1,4 +1,5 @@
 import sys
+import importlib.util
 from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication
@@ -100,3 +101,24 @@ def test_applygoods_adapter_loads_dataclass_module_from_file(tmp_path):
     widget = adapter.build_embedded_widget()
 
     assert widget.value == "ok"
+
+
+def test_applygoods_embedded_widget_hides_workflow_overview():
+    applygoods_root = Path(r"E:\1PythonProject\ApplyGoods")
+    entry = applygoods_root / "main.py"
+    if str(applygoods_root) not in sys.path:
+        sys.path.insert(0, str(applygoods_root))
+    spec = importlib.util.spec_from_file_location("applygoods_real_main_for_test", entry)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    app = QApplication.instance() or QApplication([])
+    widget = module.ApplyGoodsEmbeddedWidget()
+    texts = [label.text() for label in widget.findChildren(type(widget.summary_label))]
+
+    assert "流程总览" not in texts
+    assert "按顺序向下执行，每一步都单独成卡，减少内嵌场景下的横向拥挤。" not in texts
+
+    widget.close()

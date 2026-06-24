@@ -44,11 +44,11 @@ class ApplyGoodsPage(QWidget):
         header_layout.setContentsMargins(24, 22, 24, 22)
         header_layout.setSpacing(10)
 
-        eyebrow = QLabel("真实流程工作台")
+        eyebrow = QLabel("合规工作台")
         eyebrow.setObjectName("applyPageEyebrow")
         title = QLabel("申请 / 合规")
         title.setObjectName("sectionTitle")
-        hint = QLabel("当前页面直接内嵌 ApplyGoods 界面。已改为纵向卷轴式承载，便于在较小窗口里继续操作套版组、合规上传、JIT 和库存流程。")
+        hint = QLabel("当前页面直接内嵌 ApplyGoods 界面，已与控制台主题统一配色。可在此连接浏览器并执行套版组、合规上传、JIT 与库存等操作。")
         hint.setObjectName("cardSubtitle")
         hint.setWordWrap(True)
 
