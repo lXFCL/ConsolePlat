@@ -870,6 +870,48 @@ def test_product_publish_page_local_generation_waits_for_comfyui(tmp_path, monke
     page.close()
 
 
+def test_product_publish_page_debounces_progress_persistence_and_updates_item(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624172000",
+        task_name="debounce publish",
+        prefix="BO",
+        start_number=1661,
+        count=2,
+        generation_mode="本地生图",
+        product_title="fixed title",
+        status="generating",
+        stage_text="准备启动",
+        progress_percent=5,
+    )
+    page.current_task = record
+    page.tasks = [record]
+    page._rebuild_task_list()
+    save_calls = []
+    rebuild_calls = []
+    mirror_calls = []
+    monkeypatch.setattr(page, "_save_task_history", lambda: save_calls.append("save"))
+    monkeypatch.setattr(page, "_rebuild_task_list", lambda: rebuild_calls.append("rebuild"))
+    monkeypatch.setattr(page, "_sync_mirror_task", lambda current: mirror_calls.append(current.task_id))
+
+    page._update_progress_from_text("Queued one")
+    page._update_progress_from_text("Saved one")
+
+    assert save_calls == []
+    assert rebuild_calls == []
+    assert mirror_calls == []
+    assert "生成中" in page.task_list.item(0).text()
+
+    page._flush_persist()
+
+    assert save_calls == ["save"]
+    assert mirror_calls == ["20260624172000"]
+
+    page.close()
+
+
 def test_product_publish_page_warns_when_generation_has_no_output(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

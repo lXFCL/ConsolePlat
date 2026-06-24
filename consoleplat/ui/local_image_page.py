@@ -203,6 +203,11 @@ class LocalImagePage(QWidget):
         self.mockup_root = ""
         self.xlsx_root = ""
         self.task_store: TaskStore | None = None
+        self._dirty_task_ids: set[str] = set()
+        self._persist_timer = QTimer(self)
+        self._persist_timer.setSingleShot(True)
+        self._persist_timer.setInterval(500)
+        self._persist_timer.timeout.connect(self._flush_persist)
 
         self.no_output_timer = QTimer(self)
         self.no_output_timer.setSingleShot(False)
@@ -430,7 +435,8 @@ class LocalImagePage(QWidget):
         )
         self.tasks.append(record)
         self._rebuild_task_list()
-        self._save_task_history()
+        self._dirty_task_ids.add(record.task_id)
+        self._flush_persist()
         return record
 
     def stop_job(self) -> None:
@@ -518,12 +524,14 @@ class LocalImagePage(QWidget):
             self.status_label.setText(status_text)
             self.open_output_button.setEnabled(bool(summary.print_dir or summary.mockup_dir))
             self._append_log(summary.message)
+            self._flush_persist()
             return
 
         message = f"任务失败，退出码 {exit_code}"
         self._update_current_task(status="失败", stage_text="失败", progress_percent=0)
         self.status_label.setText("失败")
         self._append_log(message)
+        self._flush_persist()
 
     def _on_process_error(self, error) -> None:
         self.process = None
@@ -535,6 +543,7 @@ class LocalImagePage(QWidget):
         self._update_current_task(status="启动失败", stage_text="启动失败", progress_percent=0)
         message = f"生图进程启动失败：{error}"
         self._append_log(message)
+        self._flush_persist()
         log_exception("local-image-process", RuntimeError(message))
 
     def _append_log(self, text: str) -> None:
@@ -548,7 +557,7 @@ class LocalImagePage(QWidget):
             if not stripped:
                 continue
             self.current_task.logs.append(f"{time_text}  {stripped}")
-        self._save_task_history()
+        self._touch_task(self.current_task)
         self._refresh_task_detail_dialog()
 
     def _update_progress_from_text(self, text: str) -> None:
@@ -605,18 +614,38 @@ class LocalImagePage(QWidget):
             self.current_task.product_dir = product_dir
         if xlsx_path:
             self.current_task.xlsx_path = xlsx_path
-        self._rebuild_task_list()
-        self._save_task_history()
+        self._touch_task(self.current_task)
         self._refresh_task_detail_dialog()
 
     def _refresh_task_item(self, record: LocalImageTaskRecord) -> None:
-        index = self._ordered_tasks().index(record)
-        item = self.task_list.item(index)
+        item = self._task_item(record)
         if item is None:
+            self._rebuild_task_list()
             return
         item.setText(
             f"{_format_task_timestamp(record.task_id)}  {record.title}  {record.status} · {record.stage_text} {record.progress_percent}%"
         )
+
+    def _task_item(self, record: LocalImageTaskRecord) -> QListWidgetItem | None:
+        for index in range(self.task_list.count()):
+            item = self.task_list.item(index)
+            if item is not None and item.data(Qt.UserRole) == record.task_id:
+                return item
+        return None
+
+    def _touch_task(self, record: LocalImageTaskRecord | None) -> None:
+        if record is None:
+            return
+        self._dirty_task_ids.add(record.task_id)
+        self._refresh_task_item(record)
+        self._persist_timer.start()
+
+    def _flush_persist(self) -> None:
+        if not self._dirty_task_ids and self.task_store is not None:
+            return
+        self._persist_timer.stop()
+        self._dirty_task_ids.clear()
+        self._save_task_history()
 
     def _refresh_task_detail_dialog(self) -> None:
         if self.task_detail_dialog is not None and self.task_detail_dialog.isVisible():
@@ -718,6 +747,10 @@ class LocalImagePage(QWidget):
         super().showEvent(event)
         self.reload_tasks_from_store()
 
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._flush_persist()
+        super().closeEvent(event)
+
     def _ordered_tasks(self) -> list[LocalImageTaskRecord]:
         reverse = self.task_sort_combo.currentText() != "按时间（旧到新）" if hasattr(self, "task_sort_combo") else True
         return sorted(self.tasks, key=lambda record: record.task_id, reverse=reverse)
@@ -725,7 +758,9 @@ class LocalImagePage(QWidget):
     def _rebuild_task_list(self) -> None:
         self.task_list.clear()
         for record in self._ordered_tasks():
-            self.task_list.addItem(QListWidgetItem(""))
+            item = QListWidgetItem("")
+            item.setData(Qt.UserRole, record.task_id)
+            self.task_list.addItem(item)
             self._refresh_task_item(record)
 
     def _on_task_sort_changed(self, _text: str) -> None:

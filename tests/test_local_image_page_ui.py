@@ -4,6 +4,8 @@ from PyQt5.QtGui import QShowEvent
 from PyQt5.QtWidgets import QApplication
 
 from consoleplat.config import AppSettings, SettingsStore
+from consoleplat.adapters.posaiimg_adapter import LocalImageJob
+from consoleplat.ui.local_image_page import LocalImageTaskRecord
 from consoleplat.ui.local_image_page import LocalImagePage
 
 
@@ -80,5 +82,41 @@ def test_local_image_page_show_event_reloads_mirror_tasks(tmp_path, monkeypatch)
     assert any(record.task_id == "20260624153000" for record in page.tasks)
     assert page.task_list.count() == 1
     assert "mirror task" in page.task_list.item(0).text()
+
+    page.close()
+
+
+def test_local_image_page_debounces_log_and_progress_persistence(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = LocalImageTaskRecord(
+        task_id="20260624170000",
+        mode_text="测试模式",
+        title="debounce task",
+        job=LocalImageJob(prefix="BO", start_number=1661, count=2),
+        status="运行中",
+        stage_text="准备启动",
+        progress_percent=5,
+    )
+    page.current_task = record
+    page.tasks = [record]
+    page._rebuild_task_list()
+    save_calls = []
+    rebuild_calls = []
+    monkeypatch.setattr(page, "_save_task_history", lambda: save_calls.append("save"))
+    monkeypatch.setattr(page, "_rebuild_task_list", lambda: rebuild_calls.append("rebuild"))
+
+    page._append_log("Queued one\nSaved one")
+    page._set_task_progress(36, "排队")
+    page._set_task_progress(48, "生成")
+
+    assert save_calls == []
+    assert rebuild_calls == []
+    assert "生成" in page.task_list.item(0).text()
+
+    page._flush_persist()
+
+    assert save_calls == ["save"]
 
     page.close()

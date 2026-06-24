@@ -182,6 +182,11 @@ class ProductPublishPage(QWidget):
         self._saved_ai_count = 2
         self._task_started_at = 0.0
         self.orchestrator: StageOrchestrator | None = None
+        self._dirty_records: set[str] = set()
+        self._persist_timer = QTimer(self)
+        self._persist_timer.setSingleShot(True)
+        self._persist_timer.setInterval(500)
+        self._persist_timer.timeout.connect(self._flush_persist)
 
         self.no_output_timer = QTimer(self)
         self.no_output_timer.setSingleShot(False)
@@ -530,6 +535,7 @@ class ProductPublishPage(QWidget):
         self._select_record(record)
         self._set_status(record)
         self._start_generation(record)
+        self._flush_persist()
 
     def _count_summary_text(self) -> str:
         if self.generation_mode_combo.currentText() == "AI 改图":
@@ -722,6 +728,7 @@ class ProductPublishPage(QWidget):
         record.failure_reason = reason
         self._append_record_log(record, reason)
         self._save_and_refresh(record)
+        self._flush_persist()
 
     def stop_job(self) -> None:
         if self.current_task is None:
@@ -741,6 +748,7 @@ class ProductPublishPage(QWidget):
         self.current_task.stage_text = "已中止"
         self.current_task.progress_percent = 0
         self._save_and_refresh(self.current_task)
+        self._flush_persist()
         self.confirm_button.setEnabled(True)
         self.stop_button.setEnabled(False)
 
@@ -1249,11 +1257,25 @@ class ProductPublishPage(QWidget):
                 return
 
     def _save_and_refresh(self, record: ProductTaskRecord) -> None:
+        self._touch_record(record)
+
+    def _touch_record(self, record: ProductTaskRecord) -> None:
+        self._dirty_records.add(record.task_id)
+        self._update_task_item(record)
+        if self._selected_record() is record:
+            self._set_status(record)
+        self._persist_timer.start()
+
+    def _flush_persist(self) -> None:
+        if not self._dirty_records and self.task_store is not None:
+            return
+        dirty_ids = set(self._dirty_records)
+        self._persist_timer.stop()
+        self._dirty_records.clear()
         self._save_task_history()
-        self._sync_mirror_task(record)
-        self._rebuild_task_list()
-        self._select_record(record)
-        self._set_status(record)
+        for record in self.tasks:
+            if record.task_id in dirty_ids:
+                self._sync_mirror_task(record)
 
     def _sync_mirror_task(self, record: ProductTaskRecord) -> None:
         program_data_dir = (self.settings.program_data_dir or "").strip()
@@ -1404,6 +1426,18 @@ class ProductPublishPage(QWidget):
             item.setData(Qt.UserRole, record.task_id)
             self.task_list.addItem(item)
 
+    def _update_task_item(self, record: ProductTaskRecord) -> None:
+        for index in range(self.task_list.count()):
+            item = self.task_list.item(index)
+            if item.data(Qt.UserRole) != record.task_id:
+                continue
+            item.setText(
+                f"{_format_task_timestamp(record.task_id)}  {record.task_name}\n"
+                f"{record.generation_mode} · {record.prefix}-{record.start_number} · {record.status} · {record.stage_text}"
+            )
+            return
+        self._rebuild_task_list()
+
     def _build_task_store(self, settings: AppSettings) -> TaskStore | None:
         if not settings.program_data_dir:
             return None
@@ -1552,6 +1586,7 @@ class ProductPublishPage(QWidget):
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._flush_persist()
         self.no_output_timer.stop()
         if self.orchestrator is not None:
             self.orchestrator.abort()

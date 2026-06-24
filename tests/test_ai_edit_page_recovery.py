@@ -1949,6 +1949,44 @@ def test_ai_edit_page_start_job_validates_required_inputs(tmp_path, monkeypatch)
     page.close()
 
 
+def test_ai_edit_page_debounces_log_and_progress_persistence(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260624171000",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="BO", start_number=1661),
+        status="运行中",
+        stage_text="生图中",
+        progress_percent=5,
+    )
+    page.current_task = record
+    page.tasks = [record]
+    page._rebuild_task_list()
+    save_calls = []
+    rebuild_calls = []
+    monkeypatch.setattr(page, "_save_task_history", lambda: save_calls.append("save"))
+    monkeypatch.setattr(page, "_rebuild_task_list", lambda: rebuild_calls.append("rebuild"))
+
+    page._append_log("progress 20\nprogress 40")
+    page._update_current_task(status="运行中", stage_text="生图中", progress_percent=42)
+
+    assert save_calls == []
+    assert rebuild_calls == []
+    assert "42%" in page.task_list.item(0).text()
+
+    page._flush_persist()
+
+    assert save_calls == ["save"]
+
+    page.close()
+
+
 def test_ai_edit_page_formal_mode_runs_post_process_and_updates_outputs(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 

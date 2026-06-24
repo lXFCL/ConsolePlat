@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QProcess, Qt, QThread, QObject, pyqtSignal
+from PyQt5.QtCore import QProcess, Qt, QThread, QObject, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -1135,6 +1135,11 @@ class AIEditPage(QWidget):
         self.gallery_root = ""
         self.mockup_root = ""
         self.xlsx_root = ""
+        self._dirty_task_ids: set[str] = set()
+        self._persist_timer = QTimer(self)
+        self._persist_timer.setSingleShot(True)
+        self._persist_timer.setInterval(500)
+        self._persist_timer.timeout.connect(self._flush_persist)
 
         self._build_ui()
         self._load_preferences()
@@ -1815,8 +1820,7 @@ class AIEditPage(QWidget):
                 progress = _progress_from_text(stripped)
                 if progress is not None:
                     record.progress_percent = progress
-        self._rebuild_task_list()
-        self._save_task_history()
+        self._touch_task(record)
         self._refresh_task_detail_dialog()
 
     def _update_current_task(
@@ -1834,8 +1838,7 @@ class AIEditPage(QWidget):
         self.current_task.progress_percent = progress_percent
         if output_dir:
             self.current_task.output_dir = output_dir
-        self._rebuild_task_list()
-        self._save_task_history()
+        self._touch_task(self.current_task)
         self._refresh_task_detail_dialog()
 
     def _build_output_path_for_source(self, source_path: str) -> Path:
@@ -2076,7 +2079,39 @@ class AIEditPage(QWidget):
                 f"{_format_task_timestamp(record.task_id)}  {record.title}\n"
                 f"{record.status} · {record.stage_text} {record.progress_percent}%"
             )
+            item.setData(Qt.UserRole, record.task_id)
             self.task_list.addItem(item)
+
+    def _refresh_task_item(self, record: AIEditTaskRecord) -> None:
+        item = self._task_item(record)
+        if item is None:
+            self._rebuild_task_list()
+            return
+        item.setText(
+            f"{_format_task_timestamp(record.task_id)}  {record.title}\n"
+            f"{record.status} · {record.stage_text} {record.progress_percent}%"
+        )
+
+    def _task_item(self, record: AIEditTaskRecord) -> QListWidgetItem | None:
+        for index in range(self.task_list.count()):
+            item = self.task_list.item(index)
+            if item is not None and item.data(Qt.UserRole) == record.task_id:
+                return item
+        return None
+
+    def _touch_task(self, record: AIEditTaskRecord | None) -> None:
+        if record is None:
+            return
+        self._dirty_task_ids.add(record.task_id)
+        self._refresh_task_item(record)
+        self._persist_timer.start()
+
+    def _flush_persist(self) -> None:
+        if not self._dirty_task_ids and self.task_store is not None:
+            return
+        self._persist_timer.stop()
+        self._dirty_task_ids.clear()
+        self._save_task_history()
 
     def _on_task_sort_changed(self, _text: str) -> None:
         self._rebuild_task_list()
@@ -2244,6 +2279,7 @@ class AIEditPage(QWidget):
         self.reload_tasks_from_store()
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        self._flush_persist()
         if self.process is not None:
             kill = getattr(self.process, "kill", None)
             if kill is not None:
