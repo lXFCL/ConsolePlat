@@ -33,7 +33,7 @@ from PyQt5.QtWidgets import (
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, LocalImageJob, PosAiImgAdapter
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
-from consoleplat.config import AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore
+from consoleplat.config import AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore, resolve_project_dir
 from consoleplat.services.ai_edit_formalize_service import formalize_ai_edit_outputs
 from consoleplat.services.comfyui_service import ComfyUIService
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
@@ -164,10 +164,17 @@ class ProductPublishPage(QWidget):
         self.settings = self.settings_store.load()
         self.adapter = PosAiImgAdapter()
         self.comfyui_service = ComfyUIService()
+        putaway_project_dir = resolve_project_dir("putaway", self.settings.putaway_project_dir)
+        putaway_data_dir = Path(self.settings.putaway_data_dir).expanduser() if self.settings.putaway_data_dir else (
+            putaway_project_dir / "data" if putaway_project_dir else Path("PutawayAiRobot/data")
+        )
+        putaway_log_dir = Path(self.settings.putaway_log_dir).expanduser() if self.settings.putaway_log_dir else (
+            putaway_project_dir / "log" if putaway_project_dir else Path("PutawayAiRobot/log")
+        )
         self.putaway_adapter = PutawayAdapter(
-            project_dir=Path(self.settings.putaway_project_dir or r"E:\1PythonProject\PutawayAiRobot"),
-            data_dir_path=Path(self.settings.putaway_data_dir or r"E:\1PythonProject\PutawayAiRobot\data"),
-            log_dir_path=Path(self.settings.putaway_log_dir or r"E:\1PythonProject\PutawayAiRobot\log"),
+            project_dir=putaway_project_dir or Path("PutawayAiRobot"),
+            data_dir_path=putaway_data_dir,
+            log_dir_path=putaway_log_dir,
         )
         self.task_store = self._build_task_store(self.settings)
         self.tasks: list[ProductTaskRecord] = []

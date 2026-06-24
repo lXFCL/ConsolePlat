@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QButtonGroup,
@@ -18,7 +20,15 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from consoleplat.config import AIProviderConfig, AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore, ShopAccount
+from consoleplat.config import (
+    AIProviderConfig,
+    AppSettings,
+    DEFAULT_AI_EDIT_PROMPT,
+    SettingsStore,
+    ShopAccount,
+    default_project_search_roots,
+    resolve_project_dir,
+)
 
 
 class SettingsPage(QWidget):
@@ -52,11 +62,11 @@ class SettingsPage(QWidget):
         self.interval_spin.setRange(2, 120)
         self.interval_spin.setSuffix(" 秒")
 
-        self.purchase_export_dir_edit = self._line_edit("purchaseExportDirEdit", "E:/1PythonProject/SendGoods/outputs")
-        self.posai_gallery_root_edit = self._line_edit("posaiGalleryRootEdit", "E:/1PythonProject/PosAiImg/图库")
-        self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "E:/1PythonProject/PosAiImg/批量贴图结果")
-        self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "E:/1PythonProject/PosAiImg/衣物对应的xlsx")
-        self.posai_model_root_edit = self._line_edit("posaiModelRootEdit", "E:/1PythonProject/PosAiImg/模特图-干净")
+        self.purchase_export_dir_edit = self._line_edit("purchaseExportDirEdit", "留空则自动使用 SendGoods/outputs")
+        self.posai_gallery_root_edit = self._line_edit("posaiGalleryRootEdit", "留空则自动探测 PosAiImg/图库")
+        self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "留空则自动探测 PosAiImg/批量贴图结果")
+        self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "留空则自动探测 PosAiImg/衣物对应的xlsx")
+        self.posai_model_root_edit = self._line_edit("posaiModelRootEdit", "留空则自动探测 PosAiImg/模特图-干净")
 
         self.ai_provider_combo = QComboBox()
         self.ai_provider_combo.setObjectName("aiProviderCombo")
@@ -88,11 +98,12 @@ class SettingsPage(QWidget):
         self.publish_ai_count_spin.setRange(1, 500)
         self.publish_ai_count_spin.setSuffix(" 轮")
 
-        self.putaway_project_dir_edit = self._line_edit("putawayProjectDirEdit", "E:/1PythonProject/PutawayAiRobot")
-        self.putaway_data_dir_edit = self._line_edit("putawayDataDirEdit", "E:/1PythonProject/PutawayAiRobot/data")
-        self.putaway_log_dir_edit = self._line_edit("putawayLogDirEdit", "E:/1PythonProject/PutawayAiRobot/log")
-        self.applygoods_project_dir_edit = self._line_edit("applyGoodsProjectDirEdit", "E:/1PythonProject/ApplyGoods")
+        self.putaway_project_dir_edit = self._line_edit("putawayProjectDirEdit", "留空则自动探测 PutawayAiRobot")
+        self.putaway_data_dir_edit = self._line_edit("putawayDataDirEdit", "留空则使用上架项目 data")
+        self.putaway_log_dir_edit = self._line_edit("putawayLogDirEdit", "留空则使用上架项目 log")
+        self.applygoods_project_dir_edit = self._line_edit("applyGoodsProjectDirEdit", "留空则自动探测 ApplyGoods")
         self.program_data_dir_edit = self._line_edit("programDataDirEdit")
+        self.path_status_labels: dict[str, QLabel] = {}
 
         self.startup_width_spin = QSpinBox()
         self.startup_width_spin.setObjectName("startupWidthSpin")
@@ -144,6 +155,11 @@ class SettingsPage(QWidget):
         self.status_label = QLabel("")
         self.status_label.setObjectName("cardSubtitle")
         actions.addWidget(self.save_button)
+        self.detect_paths_button = QPushButton("自动定位源项目")
+        self.detect_paths_button.setObjectName("ghostButton")
+        self.detect_paths_button.setCursor(Qt.PointingHandCursor)
+        self.detect_paths_button.clicked.connect(self.detect_project_paths)
+        actions.addWidget(self.detect_paths_button)
         actions.addWidget(self.status_label)
         actions.addStretch(1)
 
@@ -193,6 +209,7 @@ class SettingsPage(QWidget):
         path_form.addRow("产品图目录", self._browse_row(self.posai_mockup_root_edit, self.choose_posai_mockup_root))
         path_form.addRow("XLSX 目录", self._browse_row(self.posai_xlsx_root_edit, self.choose_posai_xlsx_root))
         path_form.addRow("模特底图目录", self._browse_row(self.posai_model_root_edit, self.choose_posai_model_root))
+        path_form.addRow("PosAiImg 状态", self._path_status_label("posaiimg"))
         layout.addLayout(path_form)
 
         provider_panel = QFrame()
@@ -263,6 +280,7 @@ class SettingsPage(QWidget):
         form.addRow("上架项目目录", self._browse_row(self.putaway_project_dir_edit, self.choose_putaway_project_dir))
         form.addRow("上架 data 目录", self._browse_row(self.putaway_data_dir_edit, self.choose_putaway_data_dir))
         form.addRow("上架日志目录", self._browse_row(self.putaway_log_dir_edit, self.choose_putaway_log_dir))
+        form.addRow("上架路径状态", self._path_status_label("putaway"))
         layout.addLayout(form)
         layout.addStretch(1)
         return panel
@@ -275,6 +293,7 @@ class SettingsPage(QWidget):
         form.setVerticalSpacing(8)
         form.setLabelAlignment(Qt.AlignRight)
         form.addRow("合规项目目录", self._browse_row(self.applygoods_project_dir_edit, self.choose_applygoods_project_dir))
+        form.addRow("合规路径状态", self._path_status_label("applygoods"))
         layout.addLayout(form)
         layout.addStretch(1)
         return panel
@@ -312,6 +331,14 @@ class SettingsPage(QWidget):
         layout.addWidget(edit, 1)
         layout.addWidget(button)
         return row
+
+    def _path_status_label(self, key: str) -> QLabel:
+        label = QLabel("")
+        label.setObjectName(f"{key}PathStatusLabel")
+        label.setWordWrap(True)
+        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.path_status_labels[key] = label
+        return label
 
     def _make_panel(self, title: str, hint: str, compact: bool = False) -> QFrame:
         panel = QFrame()
@@ -462,6 +489,7 @@ class SettingsPage(QWidget):
         self.startup_height_spin.setValue(settings.startup_height)
 
         self._load_account_for_shop(self.shop_combo.currentText(), settings)
+        self._refresh_path_status_labels()
 
     def save_settings(self) -> None:
         old_settings = self.store.load()
@@ -479,7 +507,7 @@ class SettingsPage(QWidget):
             active_shop=shop_name,
             cdp_endpoint=self.cdp_edit.text().strip() or "http://127.0.0.1:9222",
             refresh_interval_seconds=self.interval_spin.value(),
-            purchase_export_dir=self.purchase_export_dir_edit.text().strip() or "E:/1PythonProject/SendGoods/outputs",
+            purchase_export_dir=self.purchase_export_dir_edit.text().strip(),
             local_image_auto_start_comfyui=old_settings.local_image_auto_start_comfyui,
             local_image_keep_comfyui=old_settings.local_image_keep_comfyui,
             local_image_test_mode=old_settings.local_image_test_mode,
@@ -494,14 +522,14 @@ class SettingsPage(QWidget):
             ai_edit_split_count=old_settings.ai_edit_split_count,
             ai_edit_total_return_count=old_settings.ai_edit_total_return_count,
             ai_edit_reference_dir=old_settings.ai_edit_reference_dir,
-            posai_gallery_root=self.posai_gallery_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/图库",
-            posai_mockup_root=self.posai_mockup_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/批量贴图结果",
-            posai_xlsx_root=self.posai_xlsx_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/衣物对应的xlsx",
-            posai_model_root=self.posai_model_root_edit.text().strip() or "E:/1PythonProject/PosAiImg/模特图-干净",
-            putaway_project_dir=self.putaway_project_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot",
-            putaway_data_dir=self.putaway_data_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot/data",
-            putaway_log_dir=self.putaway_log_dir_edit.text().strip() or "E:/1PythonProject/PutawayAiRobot/log",
-            applygoods_project_dir=self.applygoods_project_dir_edit.text().strip() or "E:/1PythonProject/ApplyGoods",
+            posai_gallery_root=self.posai_gallery_root_edit.text().strip(),
+            posai_mockup_root=self.posai_mockup_root_edit.text().strip(),
+            posai_xlsx_root=self.posai_xlsx_root_edit.text().strip(),
+            posai_model_root=self.posai_model_root_edit.text().strip(),
+            putaway_project_dir=self.putaway_project_dir_edit.text().strip(),
+            putaway_data_dir=self.putaway_data_dir_edit.text().strip(),
+            putaway_log_dir=self.putaway_log_dir_edit.text().strip(),
+            applygoods_project_dir=self.applygoods_project_dir_edit.text().strip(),
             program_data_dir=self.program_data_dir_edit.text().strip(),
             bo_product_title=self.bo_product_title_edit.text().strip() or "BO固定产品标题",
             szw_product_title=self.szw_product_title_edit.text().strip() or "SZW固定产品标题",
@@ -525,6 +553,59 @@ class SettingsPage(QWidget):
         )
         self.store.save(settings)
         self.status_label.setText(f"已保存到 {self.store.path}")
+        self._refresh_path_status_labels()
+
+    def _resolved_project_status(self, key: str, configured: str) -> str:
+        resolved = resolve_project_dir(key, configured, search_roots=default_project_search_roots())
+        if configured.strip():
+            return f"已配置：{resolved or configured}"
+        if resolved:
+            return f"自动探测到：{resolved}"
+        project_names = {"posaiimg": "PosAiImg", "putaway": "PutawayAiRobot", "applygoods": "ApplyGoods"}
+        return f"未找到 {project_names.get(key, key)}，请手动选择目录"
+
+    def _refresh_path_status_labels(self) -> None:
+        if "posaiimg" in self.path_status_labels:
+            self.path_status_labels["posaiimg"].setText(
+                self._resolved_project_status("posaiimg", self._configured_posai_project_dir())
+            )
+        if "putaway" in self.path_status_labels:
+            self.path_status_labels["putaway"].setText(
+                self._resolved_project_status("putaway", self.putaway_project_dir_edit.text())
+            )
+        if "applygoods" in self.path_status_labels:
+            self.path_status_labels["applygoods"].setText(
+                self._resolved_project_status("applygoods", self.applygoods_project_dir_edit.text())
+            )
+
+    def _configured_posai_project_dir(self) -> str:
+        for edit in (
+            self.posai_gallery_root_edit,
+            self.posai_mockup_root_edit,
+            self.posai_xlsx_root_edit,
+            self.posai_model_root_edit,
+        ):
+            path = Path(edit.text().strip())
+            if path.parts:
+                return str(path if path.name == "PosAiImg" else path.parent)
+        return ""
+
+    def detect_project_paths(self) -> None:
+        posai = resolve_project_dir("posaiimg", self._configured_posai_project_dir())
+        if posai and not self._configured_posai_project_dir():
+            self.posai_gallery_root_edit.setText(str(posai / "图库"))
+            self.posai_mockup_root_edit.setText(str(posai / "批量贴图结果"))
+            self.posai_xlsx_root_edit.setText(str(posai / "衣物对应的xlsx"))
+            self.posai_model_root_edit.setText(str(posai / "模特图-干净"))
+        putaway = resolve_project_dir("putaway", self.putaway_project_dir_edit.text())
+        if putaway and not self.putaway_project_dir_edit.text().strip():
+            self.putaway_project_dir_edit.setText(str(putaway))
+            self.putaway_data_dir_edit.setText(str(putaway / "data"))
+            self.putaway_log_dir_edit.setText(str(putaway / "log"))
+        applygoods = resolve_project_dir("applygoods", self.applygoods_project_dir_edit.text())
+        if applygoods and not self.applygoods_project_dir_edit.text().strip():
+            self.applygoods_project_dir_edit.setText(str(applygoods))
+        self._refresh_path_status_labels()
 
     def _choose_directory_for(self, edit: QLineEdit, title: str) -> None:
         path = QFileDialog.getExistingDirectory(self, title, edit.text())

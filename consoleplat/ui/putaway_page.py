@@ -6,17 +6,25 @@ from PyQt5.QtCore import QEvent, Qt, QTimer
 from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
-from consoleplat.config import SettingsStore
+from consoleplat.config import SettingsStore, resolve_project_dir
 
 
 class PutawayPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.settings = SettingsStore().load()
+        project_dir = resolve_project_dir("putaway", self.settings.putaway_project_dir)
+        data_dir = Path(self.settings.putaway_data_dir).expanduser() if self.settings.putaway_data_dir else (
+            project_dir / "data" if project_dir else None
+        )
+        log_dir = Path(self.settings.putaway_log_dir).expanduser() if self.settings.putaway_log_dir else (
+            project_dir / "log" if project_dir else None
+        )
+        self._path_error = "" if project_dir else "未找到 PutawayAiRobot 项目，请在设置中指定上架项目目录。"
         self.adapter = PutawayAdapter(
-            project_dir=Path(self.settings.putaway_project_dir or r"E:\1PythonProject\PutawayAiRobot"),
-            data_dir_path=Path(self.settings.putaway_data_dir or r"E:\1PythonProject\PutawayAiRobot\data"),
-            log_dir_path=Path(self.settings.putaway_log_dir or r"E:\1PythonProject\PutawayAiRobot\log"),
+            project_dir=project_dir or Path("PutawayAiRobot"),
+            data_dir_path=data_dir or Path("PutawayAiRobot/data"),
+            log_dir_path=log_dir or Path("PutawayAiRobot/log"),
         )
         self._embed_loaded = False
         self._parent_stack: QStackedWidget | None = None
@@ -96,6 +104,11 @@ class PutawayPage(QWidget):
         if self._embed_loaded:
             return
         self._embed_loaded = True
+        if self._path_error:
+            self.status_label.setText("内嵌上架界面加载失败")
+            self.error_label.setText(self._path_error)
+            self.error_label.show()
+            return
         self.status_label.setText("正在加载内嵌上架界面…")
         QApplication.processEvents()
 

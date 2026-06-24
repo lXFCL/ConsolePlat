@@ -2,7 +2,7 @@ import sys
 import importlib.util
 from pathlib import Path
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QLabel
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -16,7 +16,7 @@ def test_appsettings_exposes_applygoods_project_dir():
     settings = AppSettings()
 
     assert hasattr(settings, "applygoods_project_dir")
-    assert settings.applygoods_project_dir == "E:/1PythonProject/ApplyGoods"
+    assert settings.applygoods_project_dir == ""
 
 
 def test_settings_page_has_apply_module_tab_and_path_field(tmp_path, monkeypatch):
@@ -33,9 +33,11 @@ def test_settings_page_has_apply_module_tab_and_path_field(tmp_path, monkeypatch
         if button.objectName() == "settingsTabButton"
     ]
     edits = {edit.objectName(): edit.text() for edit in page.findChildren(type(page.putaway_project_dir_edit))}
+    labels = [label.text() for label in page.findChildren(QLabel)]
 
     assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "合规", "程序"]
-    assert edits["applyGoodsProjectDirEdit"] == "E:/1PythonProject/ApplyGoods"
+    assert edits["applyGoodsProjectDirEdit"] == ""
+    assert any("ApplyGoods" in text for text in labels)
 
     page.close()
 

@@ -13,6 +13,60 @@ from pathlib import Path
 DEFAULT_AI_EDIT_PROMPT = "保留主体，整理成适合印花的透明底效果。"
 DEFAULT_AI_PROVIDER_ID = "default-ai-provider"
 
+PROJECT_DIR_NAMES = {
+    "sendgoods": "SendGoods",
+    "posaiimg": "PosAiImg",
+    "putaway": "PutawayAiRobot",
+    "applygoods": "ApplyGoods",
+}
+
+
+def default_project_search_roots() -> list[Path]:
+    roots: list[Path] = []
+    env_root = os.environ.get("CONSOLEPLAT_PROJECT_ROOT")
+    if env_root:
+        roots.append(Path(env_root))
+    repo_root = Path(__file__).resolve().parents[1]
+    roots.extend([repo_root.parent, Path.cwd(), Path.cwd().parent, Path.home(), Path.home() / "1PythonProject"])
+    drive = Path.cwd().drive
+    if drive:
+        roots.append(Path(f"{drive}/1PythonProject"))
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            key = str(root.expanduser().resolve())
+        except OSError:
+            key = str(root.expanduser())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(root.expanduser())
+    return unique
+
+
+def resolve_project_dir(
+    name: str,
+    configured: str | Path | None = "",
+    search_roots: list[Path] | tuple[Path, ...] | None = None,
+) -> Path | None:
+    configured_text = str(configured or "").strip()
+    if configured_text:
+        configured_path = Path(configured_text).expanduser()
+        return configured_path if configured_path.exists() else None
+
+    project_dir_name = PROJECT_DIR_NAMES.get(name.lower(), name)
+    for root in search_roots or default_project_search_roots():
+        root = Path(root).expanduser()
+        candidates = [root / project_dir_name, root / "1PythonProject" / project_dir_name]
+        if root.name.lower() == project_dir_name.lower():
+            candidates.insert(0, root)
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+    return None
+
 
 class DATA_BLOB(ctypes.Structure):
     _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
@@ -128,7 +182,7 @@ class AppSettings:
     active_shop: str = "YUHOOBO"
     cdp_endpoint: str = "http://127.0.0.1:9222"
     refresh_interval_seconds: int = 5
-    purchase_export_dir: str = "E:/1PythonProject/SendGoods/outputs"
+    purchase_export_dir: str = ""
     local_image_auto_start_comfyui: bool = True
     local_image_keep_comfyui: bool = True
     local_image_test_mode: bool = True
@@ -143,14 +197,14 @@ class AppSettings:
     ai_edit_split_count: int = 10
     ai_edit_total_return_count: int = 10
     ai_edit_reference_dir: str = ""
-    posai_gallery_root: str = "E:/1PythonProject/PosAiImg/图库"
-    posai_mockup_root: str = "E:/1PythonProject/PosAiImg/批量贴图结果"
-    posai_xlsx_root: str = "E:/1PythonProject/PosAiImg/衣物对应的xlsx"
-    posai_model_root: str = "E:/1PythonProject/PosAiImg/模特图-干净"
-    putaway_project_dir: str = "E:/1PythonProject/PutawayAiRobot"
-    putaway_data_dir: str = "E:/1PythonProject/PutawayAiRobot/data"
-    putaway_log_dir: str = "E:/1PythonProject/PutawayAiRobot/log"
-    applygoods_project_dir: str = "E:/1PythonProject/ApplyGoods"
+    posai_gallery_root: str = ""
+    posai_mockup_root: str = ""
+    posai_xlsx_root: str = ""
+    posai_model_root: str = ""
+    putaway_project_dir: str = ""
+    putaway_data_dir: str = ""
+    putaway_log_dir: str = ""
+    applygoods_project_dir: str = ""
     program_data_dir: str = ""
     bo_product_title: str = "BO固定产品标题"
     szw_product_title: str = "SZW固定产品标题"
@@ -252,7 +306,7 @@ class SettingsStore:
             active_shop=str(data.get("active_shop") or "YUHOOBO"),
             cdp_endpoint=str(data.get("cdp_endpoint") or "http://127.0.0.1:9222"),
             refresh_interval_seconds=int(data.get("refresh_interval_seconds") or 5),
-            purchase_export_dir=str(data.get("purchase_export_dir") or "E:/1PythonProject/SendGoods/outputs"),
+            purchase_export_dir=str(data.get("purchase_export_dir") or ""),
             local_image_auto_start_comfyui=bool(data.get("local_image_auto_start_comfyui", True)),
             local_image_keep_comfyui=bool(data.get("local_image_keep_comfyui", True)),
             local_image_test_mode=bool(data.get("local_image_test_mode", True)),
@@ -267,14 +321,14 @@ class SettingsStore:
             ai_edit_split_count=max(1, int(data.get("ai_edit_split_count") or 10)),
             ai_edit_total_return_count=max(1, int(data.get("ai_edit_total_return_count") or 10)),
             ai_edit_reference_dir=str(data.get("ai_edit_reference_dir") or ""),
-            posai_gallery_root=str(data.get("posai_gallery_root") or "E:/1PythonProject/PosAiImg/图库"),
-            posai_mockup_root=str(data.get("posai_mockup_root") or "E:/1PythonProject/PosAiImg/批量贴图结果"),
-            posai_xlsx_root=str(data.get("posai_xlsx_root") or "E:/1PythonProject/PosAiImg/衣物对应的xlsx"),
-            posai_model_root=str(data.get("posai_model_root") or "E:/1PythonProject/PosAiImg/模特图-干净"),
-            putaway_project_dir=str(data.get("putaway_project_dir") or "E:/1PythonProject/PutawayAiRobot"),
-            putaway_data_dir=str(data.get("putaway_data_dir") or "E:/1PythonProject/PutawayAiRobot/data"),
-            putaway_log_dir=str(data.get("putaway_log_dir") or "E:/1PythonProject/PutawayAiRobot/log"),
-            applygoods_project_dir=str(data.get("applygoods_project_dir") or "E:/1PythonProject/ApplyGoods"),
+            posai_gallery_root=str(data.get("posai_gallery_root") or ""),
+            posai_mockup_root=str(data.get("posai_mockup_root") or ""),
+            posai_xlsx_root=str(data.get("posai_xlsx_root") or ""),
+            posai_model_root=str(data.get("posai_model_root") or ""),
+            putaway_project_dir=str(data.get("putaway_project_dir") or ""),
+            putaway_data_dir=str(data.get("putaway_data_dir") or ""),
+            putaway_log_dir=str(data.get("putaway_log_dir") or ""),
+            applygoods_project_dir=str(data.get("applygoods_project_dir") or ""),
             program_data_dir=str(data.get("program_data_dir") or ""),
             bo_product_title=str(data.get("bo_product_title") or "BO固定产品标题"),
             szw_product_title=str(data.get("szw_product_title") or "SZW固定产品标题"),
@@ -314,7 +368,7 @@ class SettingsStore:
             "active_shop": settings.active_shop,
             "cdp_endpoint": settings.cdp_endpoint,
             "refresh_interval_seconds": int(settings.refresh_interval_seconds or 5),
-            "purchase_export_dir": settings.purchase_export_dir or "E:/1PythonProject/SendGoods/outputs",
+            "purchase_export_dir": settings.purchase_export_dir or "",
             "local_image_auto_start_comfyui": bool(settings.local_image_auto_start_comfyui),
             "local_image_keep_comfyui": bool(settings.local_image_keep_comfyui),
             "local_image_test_mode": bool(settings.local_image_test_mode),
@@ -339,14 +393,14 @@ class SettingsStore:
             "ai_edit_split_count": max(1, int(settings.ai_edit_split_count or 10)),
             "ai_edit_total_return_count": max(1, int(settings.ai_edit_total_return_count or 10)),
             "ai_edit_reference_dir": settings.ai_edit_reference_dir or "",
-            "posai_gallery_root": settings.posai_gallery_root or "E:/1PythonProject/PosAiImg/图库",
-            "posai_mockup_root": settings.posai_mockup_root or "E:/1PythonProject/PosAiImg/批量贴图结果",
-            "posai_xlsx_root": settings.posai_xlsx_root or "E:/1PythonProject/PosAiImg/衣物对应的xlsx",
-            "posai_model_root": settings.posai_model_root or "E:/1PythonProject/PosAiImg/模特图-干净",
-            "putaway_project_dir": settings.putaway_project_dir or "E:/1PythonProject/PutawayAiRobot",
-            "putaway_data_dir": settings.putaway_data_dir or "E:/1PythonProject/PutawayAiRobot/data",
-            "putaway_log_dir": settings.putaway_log_dir or "E:/1PythonProject/PutawayAiRobot/log",
-            "applygoods_project_dir": settings.applygoods_project_dir or "E:/1PythonProject/ApplyGoods",
+            "posai_gallery_root": settings.posai_gallery_root or "",
+            "posai_mockup_root": settings.posai_mockup_root or "",
+            "posai_xlsx_root": settings.posai_xlsx_root or "",
+            "posai_model_root": settings.posai_model_root or "",
+            "putaway_project_dir": settings.putaway_project_dir or "",
+            "putaway_data_dir": settings.putaway_data_dir or "",
+            "putaway_log_dir": settings.putaway_log_dir or "",
+            "applygoods_project_dir": settings.applygoods_project_dir or "",
             "program_data_dir": settings.program_data_dir or "",
             "bo_product_title": settings.bo_product_title or "BO固定产品标题",
             "szw_product_title": settings.szw_product_title or "SZW固定产品标题",

@@ -6,15 +6,17 @@ from PyQt5.QtCore import QEvent, Qt, QTimer
 from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QScrollArea, QStackedWidget, QVBoxLayout, QWidget
 
 from consoleplat.adapters.applygoods_adapter import ApplyGoodsAdapter
-from consoleplat.config import SettingsStore
+from consoleplat.config import SettingsStore, resolve_project_dir
 
 
 class ApplyGoodsPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.settings = SettingsStore().load()
+        project_dir = resolve_project_dir("applygoods", self.settings.applygoods_project_dir)
+        self._path_error = "" if project_dir else "未找到 ApplyGoods 项目，请在设置中指定合规项目目录。"
         self.adapter = ApplyGoodsAdapter(
-            project_dir=Path(self.settings.applygoods_project_dir or r"E:\1PythonProject\ApplyGoods"),
+            project_dir=project_dir or Path("ApplyGoods"),
         )
         self._embed_loaded = False
         self._parent_stack: QStackedWidget | None = None
@@ -122,6 +124,11 @@ class ApplyGoodsPage(QWidget):
         if self._embed_loaded:
             return
         self._embed_loaded = True
+        if self._path_error:
+            self.status_label.setText("内嵌合规界面加载失败")
+            self.error_label.setText(self._path_error)
+            self.error_label.show()
+            return
         self.status_label.setText("正在加载内嵌合规界面…")
         QApplication.processEvents()
 
