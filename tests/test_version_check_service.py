@@ -5,6 +5,8 @@ import json
 import pytest
 
 from consoleplat.services.version_check_service import (
+    UpdateProxyConfig,
+    _build_opener,
     _pick_asset,
     check_for_update,
     is_newer,
@@ -61,7 +63,10 @@ def test_check_for_update_returns_release_payload(monkeypatch):
         asset_name = "app.zip"
         published_at = "2026-06-25T00:00:00Z"
 
-    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", lambda timeout=8: FakeRelease())
+    monkeypatch.setattr(
+        "consoleplat.services.version_check_service.fetch_latest_release",
+        lambda timeout=8, proxy=None: FakeRelease(),
+    )
 
     result = check_for_update(current="1.4.1")
 
@@ -69,3 +74,38 @@ def test_check_for_update_returns_release_payload(monkeypatch):
     assert result["has_update"] is True
     assert result["release"]["version"] == "1.5.0"
     assert json.dumps(result, ensure_ascii=False)
+
+
+def test_build_opener_uses_proxy_for_http_and_https(monkeypatch):
+    captured = {}
+
+    class FakeProxyHandler:
+        def __init__(self, proxies):
+            captured["proxies"] = proxies
+
+    class FakeOpener:
+        pass
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.ProxyHandler", FakeProxyHandler)
+    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.build_opener", lambda handler: FakeOpener())
+
+    opener = _build_opener(UpdateProxyConfig(enabled=True, host="127.0.0.1", port=7890))
+
+    assert isinstance(opener, FakeOpener)
+    assert captured["proxies"] == {
+        "http": "http://127.0.0.1:7890",
+        "https": "http://127.0.0.1:7890",
+    }
+
+
+def test_check_for_update_reports_proxy_connection_failure(monkeypatch):
+    def fake_fetch(timeout=8, proxy=None):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
+
+    result = check_for_update(current="1.4.1", proxy=UpdateProxyConfig(enabled=True, host="127.0.0.1", port=7890))
+
+    assert result["ok"] is False
+    assert result["kind"] == "proxy_error"
+    assert "127.0.0.1:7890" in result["message"]

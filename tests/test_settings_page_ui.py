@@ -132,7 +132,7 @@ def test_settings_page_appearance_panel_exposes_theme_and_background_controls(tm
 
 def test_settings_page_update_panel_exposes_update_controls(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
-    SettingsStore(path).save(AppSettings(check_update_on_startup=False))
+    SettingsStore(path).save(AppSettings(check_update_on_startup=False, update_proxy_host="127.0.0.2", update_proxy_port=10809))
     monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
     app = QApplication.instance() or QApplication([])
 
@@ -148,6 +148,9 @@ def test_settings_page_update_panel_exposes_update_controls(tmp_path, monkeypatc
     assert page.findChild(QTextEdit, "releaseNotesEdit").isReadOnly()
     assert page.findChild(QPushButton, "checkUpdateButton").text() == "检查更新"
     assert page.findChild(QPushButton, "downloadUpdateButton").isEnabled() is False
+    assert page.findChild(QCheckBox, "updateProxyEnabledCheck").isChecked() is True
+    assert page.findChild(QLineEdit, "updateProxyHostEdit").text() == "127.0.0.2"
+    assert page.findChild(QSpinBox, "updateProxyPortSpin").value() == 10809
 
     page.close()
 
@@ -160,6 +163,9 @@ def test_settings_page_save_persists_update_startup_toggle(tmp_path, monkeypatch
             last_update_check="2026-06-25T10:00:00",
             skipped_update_version="1.5.0",
             update_download_dir="E:/downloads",
+            update_proxy_enabled=True,
+            update_proxy_host="127.0.0.1",
+            update_proxy_port=7890,
         )
     )
     monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
@@ -168,6 +174,9 @@ def test_settings_page_save_persists_update_startup_toggle(tmp_path, monkeypatch
     page = SettingsPage()
 
     page.findChild(QCheckBox, "checkUpdateOnStartupCheck").setChecked(False)
+    page.findChild(QCheckBox, "updateProxyEnabledCheck").setChecked(False)
+    page.findChild(QLineEdit, "updateProxyHostEdit").setText("127.0.0.2")
+    page.findChild(QSpinBox, "updateProxyPortSpin").setValue(10809)
     page.save_settings()
     saved = SettingsStore(path).load()
 
@@ -175,6 +184,9 @@ def test_settings_page_save_persists_update_startup_toggle(tmp_path, monkeypatch
     assert saved.last_update_check == "2026-06-25T10:00:00"
     assert saved.skipped_update_version == "1.5.0"
     assert saved.update_download_dir == "E:/downloads"
+    assert saved.update_proxy_enabled is False
+    assert saved.update_proxy_host == "127.0.0.2"
+    assert saved.update_proxy_port == 10809
 
     page.close()
 
@@ -402,20 +414,29 @@ def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
     page.close()
 
 
-def test_settings_page_non_image_panels_push_extra_space_below_form(tmp_path, monkeypatch):
+def test_settings_page_panels_use_expected_fill_policy(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
     SettingsStore(path).save(AppSettings())
     monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
     app = QApplication.instance() or QApplication([])
 
     page = SettingsPage()
+    page.resize(1180, 760)
+    page.show()
+    app.processEvents()
 
-    for index in (0, 1, 3, 4, 5, 6):
+    page.activate_module(2)
+    app.processEvents()
+    image_panel = page.stack.widget(2)
+    assert image_panel.widget().minimumHeight() >= image_panel.viewport().height()
+
+    for index in (0, 1, 3, 4, 5, 6, 7, 8):
+        page.activate_module(index)
+        app.processEvents()
         panel = page.stack.widget(index)
-        layout = panel.widget().layout()
-        trailing_item = layout.itemAt(layout.count() - 1)
-        assert trailing_item is not None
-        assert trailing_item.spacerItem() is not None
+        assert panel.widgetResizable() is False
+        assert panel.widget().minimumHeight() == 0
+        assert panel.widget().height() != panel.viewport().height()
 
     page.close()
 

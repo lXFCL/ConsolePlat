@@ -38,20 +38,22 @@ from consoleplat.config import (
     resolve_project_dir,
 )
 from consoleplat.services.version_check_service import download_asset
+from consoleplat.services.version_check_service import UpdateProxyConfig
 
 
 class _DownloadWorker(QObject):
     progress = pyqtSignal(int, int)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, url: str, dest: str) -> None:
+    def __init__(self, url: str, dest: str, proxy: UpdateProxyConfig | None = None) -> None:
         super().__init__()
         self.url = url
         self.dest = dest
+        self.proxy = proxy
 
     def run(self) -> None:
         try:
-            path = download_asset(self.url, self.dest, progress_cb=self.progress.emit)
+            path = download_asset(self.url, self.dest, progress_cb=self.progress.emit, proxy=self.proxy)
         except Exception as exc:  # noqa: BLE001 - UI 只显示失败文案，不让后台异常穿透
             self.finished.emit(False, str(exc))
             return
@@ -218,8 +220,7 @@ class SettingsPage(QWidget):
         form.addRow("刷新间隔", self.interval_spin)
         form.addRow("拿货表导出目录", self._browse_row(self.purchase_export_dir_edit, self.choose_export_dir))
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_account_panel(self) -> QFrame:
         panel = self._make_panel("账号模块", "账号密码仅保存在当前机器，密码继续走 Windows DPAPI。", compact=True)
@@ -231,8 +232,7 @@ class SettingsPage(QWidget):
         form.addRow("账号", self.phone_edit)
         form.addRow("密码", self.password_edit)
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_image_panel(self) -> QFrame:
         panel = self._make_panel("生图 / 改图", "恢复多套 AI 接口配置、PosAiImg 路径和默认改图提示词。")
@@ -287,7 +287,7 @@ class SettingsPage(QWidget):
         prompt_form.setLabelAlignment(Qt.AlignRight)
         prompt_form.addRow("默认改图要求", self.ai_edit_prompt_edit)
         layout.addLayout(prompt_form)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=True)
 
     def _build_publish_panel(self) -> QFrame:
         panel = self._make_panel("发布模块", "固定产品标题和发布页默认模板都放回这里。", compact=True)
@@ -304,8 +304,7 @@ class SettingsPage(QWidget):
         form.addRow("本地生图默认张数", self.publish_local_count_spin)
         form.addRow("AI 改图默认轮数", self.publish_ai_count_spin)
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_putaway_panel(self) -> QFrame:
         panel = self._make_panel("上架模块", "PutawayAiRobot 的项目目录、data 目录和日志目录集中放在这里管理。", compact=True)
@@ -319,8 +318,7 @@ class SettingsPage(QWidget):
         form.addRow("上架日志目录", self._browse_row(self.putaway_log_dir_edit, self.choose_putaway_log_dir))
         form.addRow("上架路径状态", self._path_status_label("putaway"))
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_apply_panel(self) -> QFrame:
         panel = self._make_panel("合规模块", "ApplyGoods 的项目目录放在这里，内嵌合规页面会从该目录加载界面。", compact=True)
@@ -332,8 +330,7 @@ class SettingsPage(QWidget):
         form.addRow("合规项目目录", self._browse_row(self.applygoods_project_dir_edit, self.choose_applygoods_project_dir))
         form.addRow("合规路径状态", self._path_status_label("applygoods"))
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_program_panel(self) -> QFrame:
         panel = self._make_panel("程序模块", "这里仅保留 ConsolePlat 自身的数据目录和启动窗口大小。", compact=True)
@@ -346,8 +343,7 @@ class SettingsPage(QWidget):
         form.addRow("启动宽度", self.startup_width_spin)
         form.addRow("启动高度", self.startup_height_spin)
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_appearance_panel(self) -> QFrame:
         panel = self._make_panel("外观模块", "切换浅色 / 深色主题，并可选设置主窗口背景图。", compact=True)
@@ -363,8 +359,7 @@ class SettingsPage(QWidget):
         form.addRow("主题", self.theme_combo)
         form.addRow("背景图", self._browse_row(self._build_bg_image_edit(), self.choose_bg_image))
         layout.addLayout(form)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_update_panel(self) -> QFrame:
         panel = self._make_panel("软件更新", "从 GitHub 检查并下载新版本，不会自动覆盖运行中的程序。", compact=True)
@@ -379,6 +374,21 @@ class SettingsPage(QWidget):
 
         self.check_update_on_startup_check = QCheckBox("启动时自动检查更新")
         self.check_update_on_startup_check.setObjectName("checkUpdateOnStartupCheck")
+        self.update_proxy_enabled_check = QCheckBox("使用代理访问 GitHub")
+        self.update_proxy_enabled_check.setObjectName("updateProxyEnabledCheck")
+        self.update_proxy_host_edit = self._line_edit("updateProxyHostEdit", "127.0.0.1")
+        self.update_proxy_port_spin = QSpinBox()
+        self.update_proxy_port_spin.setObjectName("updateProxyPortSpin")
+        self.update_proxy_port_spin.setRange(1, 65535)
+        self.update_proxy_port_spin.setValue(7890)
+
+        proxy_form = QFormLayout()
+        proxy_form.setHorizontalSpacing(10)
+        proxy_form.setVerticalSpacing(8)
+        proxy_form.setLabelAlignment(Qt.AlignRight)
+        proxy_form.addRow("", self.update_proxy_enabled_check)
+        proxy_form.addRow("代理地址", self.update_proxy_host_edit)
+        proxy_form.addRow("代理端口", self.update_proxy_port_spin)
 
         self.release_notes_edit = QTextEdit()
         self.release_notes_edit.setObjectName("releaseNotesEdit")
@@ -422,13 +432,13 @@ class SettingsPage(QWidget):
         layout.addWidget(self.current_version_label)
         layout.addWidget(self.latest_version_label)
         layout.addWidget(self.check_update_on_startup_check)
+        layout.addLayout(proxy_form)
         layout.addLayout(button_row)
         layout.addWidget(self.download_progress)
         layout.addWidget(QLabel("更新日志"))
         layout.addWidget(self.release_notes_edit)
         layout.addWidget(self.update_status_label)
-        layout.addStretch(1)
-        return self._wrap_scroll_panel(panel)
+        return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _line_edit(self, object_name: str, placeholder: str = "") -> QLineEdit:
         edit = QLineEdit()
@@ -481,12 +491,31 @@ class SettingsPage(QWidget):
         layout.addWidget(hint_label)
         return panel
 
-    def _wrap_scroll_panel(self, panel: QFrame) -> QScrollArea:
+    def _wrap_scroll_panel(self, panel: QFrame, *, fill_viewport: bool = False) -> QScrollArea:
         scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
+        scroll.setWidgetResizable(fill_viewport)
         scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setObjectName("settingsModuleScroll")
+        scroll.setProperty("fillViewport", "true" if fill_viewport else "false")
         scroll.setWidget(panel)
+        scroll.viewport().installEventFilter(self)
+        if fill_viewport:
+            panel.setMinimumHeight(scroll.viewport().height())
         return scroll
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if event.type() == event.Resize:
+            for index in range(self.stack.count()):
+                scroll = self.stack.widget(index)
+                if isinstance(scroll, QScrollArea) and scroll.viewport() is watched:
+                    widget = scroll.widget()
+                    if widget is not None and scroll.property("fillViewport") == "true":
+                        widget.setMinimumHeight(scroll.viewport().height())
+                    elif widget is not None:
+                        widget.setMinimumHeight(0)
+                        widget.resize(scroll.viewport().width(), widget.sizeHint().height())
+                    break
+        return super().eventFilter(watched, event)
 
     def activate_module(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
@@ -530,6 +559,7 @@ class SettingsPage(QWidget):
             kind = result.get("kind")
             text = {
                 "offline": "无法连接 GitHub，请检查网络",
+                "proxy_error": result.get("message") or "代理连接失败，请检查代理设置",
                 "rate_limited": "GitHub 访问受限，请稍后再试",
             }.get(kind, "检查更新失败")
             self.update_status_label.setText(text)
@@ -574,13 +604,20 @@ class SettingsPage(QWidget):
         self.download_progress.setValue(0)
         self.download_update_button.setEnabled(False)
         self.update_status_label.setText(f"正在下载 {asset_name} …")
-        self._start_download_worker(download_url, str(dest))
+        self._start_download_worker(download_url, str(dest), self._proxy_config_from_settings(settings))
 
-    def _start_download_worker(self, url: str, dest: str) -> None:
+    def _proxy_config_from_settings(self, settings: AppSettings) -> UpdateProxyConfig:
+        return UpdateProxyConfig(
+            enabled=settings.update_proxy_enabled,
+            host=settings.update_proxy_host,
+            port=settings.update_proxy_port,
+        )
+
+    def _start_download_worker(self, url: str, dest: str, proxy: UpdateProxyConfig | None = None) -> None:
         if self._download_thread is not None:
             return
         thread = QThread(self)
-        worker = _DownloadWorker(url, dest)
+        worker = _DownloadWorker(url, dest, proxy)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._on_download_progress)
@@ -757,6 +794,12 @@ class SettingsPage(QWidget):
             self.bg_image_edit.setText(settings.bg_image_path or "")
         if hasattr(self, "check_update_on_startup_check"):
             self.check_update_on_startup_check.setChecked(settings.check_update_on_startup)
+        if hasattr(self, "update_proxy_enabled_check"):
+            self.update_proxy_enabled_check.setChecked(settings.update_proxy_enabled)
+        if hasattr(self, "update_proxy_host_edit"):
+            self.update_proxy_host_edit.setText(settings.update_proxy_host or "127.0.0.1")
+        if hasattr(self, "update_proxy_port_spin"):
+            self.update_proxy_port_spin.setValue(max(1, min(65535, int(settings.update_proxy_port or 7890))))
         self.startup_width_spin.setValue(settings.startup_width)
         self.startup_height_spin.setValue(settings.startup_height)
 
@@ -809,6 +852,9 @@ class SettingsPage(QWidget):
             last_update_check=old_settings.last_update_check,
             skipped_update_version=old_settings.skipped_update_version,
             update_download_dir=old_settings.update_download_dir,
+            update_proxy_enabled=self.update_proxy_enabled_check.isChecked(),
+            update_proxy_host=self.update_proxy_host_edit.text().strip() or "127.0.0.1",
+            update_proxy_port=self.update_proxy_port_spin.value(),
             bo_product_title=self.bo_product_title_edit.text().strip() or "BO固定产品标题",
             szw_product_title=self.szw_product_title_edit.text().strip() or "SZW固定产品标题",
             publish_prefix=self.publish_prefix_combo.currentText(),

@@ -214,6 +214,9 @@ class AppSettings:
     last_update_check: str = ""
     skipped_update_version: str = ""
     update_download_dir: str = ""
+    update_proxy_enabled: bool = True
+    update_proxy_host: str = "127.0.0.1"
+    update_proxy_port: int = 7890
     bo_product_title: str = "BO固定产品标题"
     szw_product_title: str = "SZW固定产品标题"
     publish_prefix: str = "BO"
@@ -349,6 +352,9 @@ class SettingsStore:
             last_update_check=str(data.get("last_update_check") or ""),
             skipped_update_version=str(data.get("skipped_update_version") or ""),
             update_download_dir=str(data.get("update_download_dir") or ""),
+            update_proxy_enabled=bool(data.get("update_proxy_enabled", True)),
+            update_proxy_host=str(data.get("update_proxy_host") or "127.0.0.1"),
+            update_proxy_port=max(1, min(65535, int(data.get("update_proxy_port") or 7890))),
             bo_product_title=str(data.get("bo_product_title") or "BO固定产品标题"),
             szw_product_title=str(data.get("szw_product_title") or "SZW固定产品标题"),
             publish_prefix=str(data.get("publish_prefix") or "BO"),
@@ -432,6 +438,9 @@ class SettingsStore:
             "last_update_check": settings.last_update_check or "",
             "skipped_update_version": settings.skipped_update_version or "",
             "update_download_dir": settings.update_download_dir or "",
+            "update_proxy_enabled": bool(settings.update_proxy_enabled),
+            "update_proxy_host": settings.update_proxy_host or "127.0.0.1",
+            "update_proxy_port": max(1, min(65535, int(settings.update_proxy_port or 7890))),
             "bo_product_title": settings.bo_product_title or "BO固定产品标题",
             "szw_product_title": settings.szw_product_title or "SZW固定产品标题",
             "publish_prefix": settings.publish_prefix or "BO",

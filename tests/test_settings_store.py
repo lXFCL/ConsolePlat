@@ -93,6 +93,26 @@ def test_settings_store_persists_update_preferences(tmp_path):
     assert loaded.last_update_check == "2026-06-25T12:00:00"
     assert loaded.skipped_update_version == "1.5.0"
     assert loaded.update_download_dir == "E:/downloads"
+    assert loaded.update_proxy_enabled is True
+    assert loaded.update_proxy_host == "127.0.0.1"
+    assert loaded.update_proxy_port == 7890
+
+
+def test_settings_store_persists_update_proxy_preferences(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        update_proxy_enabled=False,
+        update_proxy_host="127.0.0.2",
+        update_proxy_port=10809,
+    )
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.update_proxy_enabled is False
+    assert loaded.update_proxy_host == "127.0.0.2"
+    assert loaded.update_proxy_port == 10809
 
 
 def test_settings_store_migrates_legacy_ai_provider_fields(tmp_path):

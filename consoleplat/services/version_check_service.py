@@ -30,6 +30,21 @@ class ReleaseInfo:
     published_at: str
 
 
+@dataclass
+class UpdateProxyConfig:
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = 7890
+
+    @property
+    def address(self) -> str:
+        return f"{self.host}:{self.port}"
+
+    @property
+    def url(self) -> str:
+        return f"http://{self.address}"
+
+
 def parse_version(text: str) -> tuple[int, ...]:
     cleaned = (text or "").strip().lstrip("vV")
     match = re.match(r"(\d+(?:\.\d+)*)", cleaned)
@@ -57,7 +72,20 @@ def _pick_asset(assets: list[dict]) -> tuple[str, str]:
     return "", ""
 
 
-def fetch_latest_release(timeout: int = HTTP_TIMEOUT) -> ReleaseInfo:
+def _build_opener(proxy: UpdateProxyConfig | None = None):
+    if not proxy or not proxy.enabled:
+        return urllib.request.build_opener()
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler(
+            {
+                "http": proxy.url,
+                "https": proxy.url,
+            }
+        )
+    )
+
+
+def fetch_latest_release(timeout: int = HTTP_TIMEOUT, proxy: UpdateProxyConfig | None = None) -> ReleaseInfo:
     request = urllib.request.Request(
         RELEASES_API,
         headers={
@@ -65,7 +93,8 @@ def fetch_latest_release(timeout: int = HTTP_TIMEOUT) -> ReleaseInfo:
             "Accept": "application/vnd.github+json",
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - 固定官方 HTTPS API
+    opener = _build_opener(proxy)
+    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - 固定官方 HTTPS API
         payload = json.loads(response.read().decode("utf-8"))
 
     tag = str(payload.get("tag_name") or "")
@@ -85,13 +114,19 @@ def fetch_latest_release(timeout: int = HTTP_TIMEOUT) -> ReleaseInfo:
     )
 
 
-def check_for_update(current: str = APP_VERSION, timeout: int = HTTP_TIMEOUT) -> dict:
+def check_for_update(
+    current: str = APP_VERSION,
+    timeout: int = HTTP_TIMEOUT,
+    proxy: UpdateProxyConfig | None = None,
+) -> dict:
     try:
-        release = fetch_latest_release(timeout=timeout)
+        release = fetch_latest_release(timeout=timeout, proxy=proxy)
     except urllib.error.HTTPError as exc:
         kind = "rate_limited" if exc.code in (403, 429) else "error"
         return {"ok": False, "kind": kind, "message": f"GitHub 返回 {exc.code}"}
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        if proxy and proxy.enabled:
+            return {"ok": False, "kind": "proxy_error", "message": f"代理连接失败，请检查 {proxy.address}：{exc}"}
         return {"ok": False, "kind": "offline", "message": f"无法连接 GitHub：{exc}"}
     except (ValueError, KeyError, TypeError) as exc:
         return {"ok": False, "kind": "error", "message": f"解析 release 失败：{exc}"}
@@ -118,10 +153,12 @@ def download_asset(
     dest_path: str | Path,
     timeout: int = 60,
     progress_cb: Callable[[int, int], None] | None = None,
+    proxy: UpdateProxyConfig | None = None,
 ) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     dest = Path(dest_path)
-    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - URL 来自官方 GitHub release
+    opener = _build_opener(proxy)
+    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - URL 来自官方 GitHub release
         total = int(response.headers.get("Content-Length") or 0)
         received = 0
         with dest.open("wb") as handle:
