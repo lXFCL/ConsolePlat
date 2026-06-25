@@ -567,7 +567,7 @@ class SettingsPage(QWidget):
             return
         self.check_update_button.setEnabled(False)
         self.update_status_label.setText("正在连接 GitHub…")
-        proxy = self._proxy_config_from_settings(self.store.load())
+        proxy = self._proxy_config_from_form()
         thread = QThread(self)
         worker = _UpdateCheckWorker(proxy)
         worker.moveToThread(thread)
@@ -643,13 +643,20 @@ class SettingsPage(QWidget):
         self.download_progress.setValue(0)
         self.download_update_button.setEnabled(False)
         self.update_status_label.setText(f"正在下载 {asset_name} …")
-        self._start_download_worker(download_url, str(dest), self._proxy_config_from_settings(settings))
+        self._start_download_worker(download_url, str(dest), self._proxy_config_from_form())
 
     def _proxy_config_from_settings(self, settings: AppSettings) -> UpdateProxyConfig:
         return UpdateProxyConfig(
             enabled=settings.update_proxy_enabled,
             host=settings.update_proxy_host,
             port=settings.update_proxy_port,
+        )
+
+    def _proxy_config_from_form(self) -> UpdateProxyConfig:
+        return UpdateProxyConfig(
+            enabled=self.update_proxy_enabled_check.isChecked(),
+            host=self.update_proxy_host_edit.text().strip() or "127.0.0.1",
+            port=self.update_proxy_port_spin.value(),
         )
 
     def _start_download_worker(self, url: str, dest: str, proxy: UpdateProxyConfig | None = None) -> None:

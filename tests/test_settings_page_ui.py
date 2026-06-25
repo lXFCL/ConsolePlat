@@ -322,6 +322,65 @@ def test_settings_page_check_update_uses_thread_worker_instead_of_qprocess(tmp_p
     page.close()
 
 
+def test_settings_page_check_update_uses_current_proxy_controls_before_save(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(update_proxy_enabled=True, update_proxy_host="127.0.0.1", update_proxy_port=7890))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+    started = {}
+
+    class FakeThread:
+        def __init__(self, parent=None):
+            self.started = FakeSignal()
+            self.finished = FakeSignal()
+
+        def start(self):
+            started["thread_started"] = True
+
+        def quit(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    class FakeSignal:
+        def __init__(self):
+            self.callbacks = []
+
+        def connect(self, callback):
+            self.callbacks.append(callback)
+
+    class FakeWorker:
+        def __init__(self, proxy):
+            started["proxy_enabled"] = proxy.enabled
+            started["proxy_url"] = proxy.url
+            self.finished = FakeSignal()
+
+        def moveToThread(self, thread):
+            pass
+
+        def run(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("consoleplat.ui.settings_page.QThread", FakeThread)
+    monkeypatch.setattr("consoleplat.ui.settings_page._UpdateCheckWorker", FakeWorker)
+
+    page = SettingsPage()
+    page.findChild(QCheckBox, "updateProxyEnabledCheck").setChecked(False)
+    page.findChild(QLineEdit, "updateProxyHostEdit").setText("127.0.0.9")
+    page.findChild(QSpinBox, "updateProxyPortSpin").setValue(10809)
+    page.check_for_update()
+
+    assert started["proxy_enabled"] is False
+    assert started["proxy_url"] == "http://127.0.0.9:10809"
+    assert started["thread_started"] is True
+
+    page.close()
+
+
 def test_settings_page_putaway_panel_contains_putaway_paths(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
     SettingsStore(path).save(AppSettings())
