@@ -35,7 +35,7 @@ def test_settings_page_has_apply_module_tab_and_path_field(tmp_path, monkeypatch
     edits = {edit.objectName(): edit.text() for edit in page.findChildren(type(page.putaway_project_dir_edit))}
     labels = [label.text() for label in page.findChildren(QLabel)]
 
-    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "合规", "程序"]
+    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "合规", "程序", "外观", "更新"]
     assert edits["applyGoodsProjectDirEdit"] == ""
     assert any("ApplyGoods" in text for text in labels)
 

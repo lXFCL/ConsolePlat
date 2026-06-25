@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import json
+import sys
+from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QObject, QProcess, QThread, Qt, QUrl, pyqtSignal
+from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -12,7 +17,9 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QTextEdit,
@@ -20,6 +27,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from consoleplat import APP_VERSION
 from consoleplat.config import (
     AIProviderConfig,
     AppSettings,
@@ -29,15 +37,40 @@ from consoleplat.config import (
     default_project_search_roots,
     resolve_project_dir,
 )
+from consoleplat.services.version_check_service import download_asset
+
+
+class _DownloadWorker(QObject):
+    progress = pyqtSignal(int, int)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, url: str, dest: str) -> None:
+        super().__init__()
+        self.url = url
+        self.dest = dest
+
+    def run(self) -> None:
+        try:
+            path = download_asset(self.url, self.dest, progress_cb=self.progress.emit)
+        except Exception as exc:  # noqa: BLE001 - UI 只显示失败文案，不让后台异常穿透
+            self.finished.emit(False, str(exc))
+            return
+        self.finished.emit(True, path)
 
 
 class SettingsPage(QWidget):
+    settings_saved = pyqtSignal(object)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.store = SettingsStore()
         self.tab_buttons: dict[str, QPushButton] = {}
         self._provider_records: list[AIProviderConfig] = []
         self._provider_loading = False
+        self._update_process: QProcess | None = None
+        self._latest_release: dict | None = None
+        self._download_thread: QThread | None = None
+        self._download_worker: _DownloadWorker | None = None
         self._build_ui()
         self.load_settings()
 
@@ -126,6 +159,8 @@ class SettingsPage(QWidget):
             ("putaway", "上架"),
             ("apply", "合规"),
             ("program", "程序"),
+            ("appearance", "外观"),
+            ("update", "更新"),
         ]
         for index, (key, label) in enumerate(tab_items):
             button = QPushButton(label)
@@ -146,6 +181,8 @@ class SettingsPage(QWidget):
         self.stack.addWidget(self._build_putaway_panel())
         self.stack.addWidget(self._build_apply_panel())
         self.stack.addWidget(self._build_program_panel())
+        self.stack.addWidget(self._build_appearance_panel())
+        self.stack.addWidget(self._build_update_panel())
 
         actions = QHBoxLayout()
         self.save_button = QPushButton("保存设置")
@@ -182,7 +219,7 @@ class SettingsPage(QWidget):
         form.addRow("拿货表导出目录", self._browse_row(self.purchase_export_dir_edit, self.choose_export_dir))
         layout.addLayout(form)
         layout.addStretch(1)
-        return panel
+        return self._wrap_scroll_panel(panel)
 
     def _build_account_panel(self) -> QFrame:
         panel = self._make_panel("账号模块", "账号密码仅保存在当前机器，密码继续走 Windows DPAPI。", compact=True)
@@ -195,7 +232,7 @@ class SettingsPage(QWidget):
         form.addRow("密码", self.password_edit)
         layout.addLayout(form)
         layout.addStretch(1)
-        return panel
+        return self._wrap_scroll_panel(panel)
 
     def _build_image_panel(self) -> QFrame:
         panel = self._make_panel("生图 / 改图", "恢复多套 AI 接口配置、PosAiImg 路径和默认改图提示词。")
@@ -250,7 +287,7 @@ class SettingsPage(QWidget):
         prompt_form.setLabelAlignment(Qt.AlignRight)
         prompt_form.addRow("默认改图要求", self.ai_edit_prompt_edit)
         layout.addLayout(prompt_form)
-        return panel
+        return self._wrap_scroll_panel(panel)
 
     def _build_publish_panel(self) -> QFrame:
         panel = self._make_panel("发布模块", "固定产品标题和发布页默认模板都放回这里。", compact=True)
@@ -268,7 +305,7 @@ class SettingsPage(QWidget):
         form.addRow("AI 改图默认轮数", self.publish_ai_count_spin)
         layout.addLayout(form)
         layout.addStretch(1)
-        return panel
+        return self._wrap_scroll_panel(panel)
 
     def _build_putaway_panel(self) -> QFrame:
         panel = self._make_panel("上架模块", "PutawayAiRobot 的项目目录、data 目录和日志目录集中放在这里管理。", compact=True)
@@ -283,7 +320,7 @@ class SettingsPage(QWidget):
         form.addRow("上架路径状态", self._path_status_label("putaway"))
         layout.addLayout(form)
         layout.addStretch(1)
-        return panel
+        return self._wrap_scroll_panel(panel)
 
     def _build_apply_panel(self) -> QFrame:
         panel = self._make_panel("合规模块", "ApplyGoods 的项目目录放在这里，内嵌合规页面会从该目录加载界面。", compact=True)
@@ -296,7 +333,7 @@ class SettingsPage(QWidget):
         form.addRow("合规路径状态", self._path_status_label("applygoods"))
         layout.addLayout(form)
         layout.addStretch(1)
-        return panel
+        return self._wrap_scroll_panel(panel)
 
     def _build_program_panel(self) -> QFrame:
         panel = self._make_panel("程序模块", "这里仅保留 ConsolePlat 自身的数据目录和启动窗口大小。", compact=True)
@@ -310,7 +347,88 @@ class SettingsPage(QWidget):
         form.addRow("启动高度", self.startup_height_spin)
         layout.addLayout(form)
         layout.addStretch(1)
-        return panel
+        return self._wrap_scroll_panel(panel)
+
+    def _build_appearance_panel(self) -> QFrame:
+        panel = self._make_panel("外观模块", "切换浅色 / 深色主题，并可选设置主窗口背景图。", compact=True)
+        layout = panel.layout()
+        form = QFormLayout()
+        form.setHorizontalSpacing(10)
+        form.setVerticalSpacing(8)
+        form.setLabelAlignment(Qt.AlignRight)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.setObjectName("themeCombo")
+        self.theme_combo.addItems(["浅色 (light)", "深色 (dark)"])
+        form.addRow("主题", self.theme_combo)
+        form.addRow("背景图", self._browse_row(self._build_bg_image_edit(), self.choose_bg_image))
+        layout.addLayout(form)
+        layout.addStretch(1)
+        return self._wrap_scroll_panel(panel)
+
+    def _build_update_panel(self) -> QFrame:
+        panel = self._make_panel("软件更新", "从 GitHub 检查并下载新版本，不会自动覆盖运行中的程序。", compact=True)
+        layout = panel.layout()
+
+        self.current_version_label = QLabel(f"当前版本：v{APP_VERSION}")
+        self.current_version_label.setObjectName("sectionTitle")
+        self.latest_version_label = QLabel("最新版本：尚未检查")
+        self.update_status_label = QLabel("")
+        self.update_status_label.setObjectName("cardSubtitle")
+        self.update_status_label.setWordWrap(True)
+
+        self.check_update_on_startup_check = QCheckBox("启动时自动检查更新")
+        self.check_update_on_startup_check.setObjectName("checkUpdateOnStartupCheck")
+
+        self.release_notes_edit = QTextEdit()
+        self.release_notes_edit.setObjectName("releaseNotesEdit")
+        self.release_notes_edit.setReadOnly(True)
+        self.release_notes_edit.setMaximumHeight(180)
+        self.release_notes_edit.setPlaceholderText("更新日志会显示在这里")
+
+        self.download_progress = QProgressBar()
+        self.download_progress.setObjectName("downloadProgress")
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(0)
+        self.download_progress.hide()
+
+        button_row = QHBoxLayout()
+        button_row.setSpacing(8)
+        self.check_update_button = QPushButton("检查更新")
+        self.check_update_button.setObjectName("checkUpdateButton")
+        self.check_update_button.setProperty("variant", "primary")
+        self.check_update_button.setStyleSheet("")
+        self.check_update_button.setCursor(Qt.PointingHandCursor)
+        self.check_update_button.clicked.connect(self.check_for_update)
+        self.download_update_button = QPushButton("下载更新")
+        self.download_update_button.setObjectName("downloadUpdateButton")
+        self.download_update_button.setCursor(Qt.PointingHandCursor)
+        self.download_update_button.clicked.connect(self.download_update)
+        self.download_update_button.setEnabled(False)
+        self.skip_version_button = QPushButton("跳过此版本")
+        self.skip_version_button.setObjectName("skipVersionButton")
+        self.skip_version_button.setCursor(Qt.PointingHandCursor)
+        self.skip_version_button.clicked.connect(self.skip_current_version)
+        self.skip_version_button.setEnabled(False)
+        for button in (self.check_update_button, self.download_update_button, self.skip_version_button):
+            if not button.property("variant"):
+                button.setProperty("variant", "ghost")
+            button.setObjectName(button.objectName())
+        button_row.addWidget(self.check_update_button)
+        button_row.addWidget(self.download_update_button)
+        button_row.addWidget(self.skip_version_button)
+        button_row.addStretch(1)
+
+        layout.addWidget(self.current_version_label)
+        layout.addWidget(self.latest_version_label)
+        layout.addWidget(self.check_update_on_startup_check)
+        layout.addLayout(button_row)
+        layout.addWidget(self.download_progress)
+        layout.addWidget(QLabel("更新日志"))
+        layout.addWidget(self.release_notes_edit)
+        layout.addWidget(self.update_status_label)
+        layout.addStretch(1)
+        return self._wrap_scroll_panel(panel)
 
     def _line_edit(self, object_name: str, placeholder: str = "") -> QLineEdit:
         edit = QLineEdit()
@@ -340,6 +458,10 @@ class SettingsPage(QWidget):
         self.path_status_labels[key] = label
         return label
 
+    def _build_bg_image_edit(self) -> QLineEdit:
+        self.bg_image_edit = self._line_edit("bgImageEdit", "留空则无背景图")
+        return self.bg_image_edit
+
     def _make_panel(self, title: str, hint: str, compact: bool = False) -> QFrame:
         panel = QFrame()
         panel.setObjectName("panel")
@@ -359,6 +481,13 @@ class SettingsPage(QWidget):
         layout.addWidget(hint_label)
         return panel
 
+    def _wrap_scroll_panel(self, panel: QFrame) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(panel)
+        return scroll
+
     def activate_module(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
         for button_index, button in enumerate(self.tab_group.buttons()):
@@ -367,6 +496,143 @@ class SettingsPage(QWidget):
             button.setProperty("active", "true" if is_active else "false")
             button.style().unpolish(button)
             button.style().polish(button)
+
+    def activate_update_tab(self) -> None:
+        keys = list(self.tab_buttons)
+        if "update" in keys:
+            self.activate_module(keys.index("update"))
+
+    def check_for_update(self) -> None:
+        if self._update_process is not None:
+            return
+        self.check_update_button.setEnabled(False)
+        self.update_status_label.setText("正在连接 GitHub…")
+        self._update_process = QProcess(self)
+        self._update_process.finished.connect(self._on_check_finished)
+        self._update_process.start(sys.executable, ["-m", "consoleplat.services.version_check_cli"])
+
+    def _on_check_finished(self, *args) -> None:
+        if self._update_process is None:
+            return
+        raw = bytes(self._update_process.readAllStandardOutput()).decode("utf-8", errors="ignore")
+        self._update_process = None
+        self.check_update_button.setEnabled(True)
+        self._persist_last_check_time()
+        try:
+            result = json.loads(raw or "{}")
+        except ValueError:
+            self.update_status_label.setText("解析检查结果失败")
+            return
+        self._apply_update_check_result(result)
+
+    def _apply_update_check_result(self, result: dict) -> None:
+        if not result.get("ok"):
+            kind = result.get("kind")
+            text = {
+                "offline": "无法连接 GitHub，请检查网络",
+                "rate_limited": "GitHub 访问受限，请稍后再试",
+            }.get(kind, "检查更新失败")
+            self.update_status_label.setText(text)
+            self.download_update_button.setEnabled(False)
+            self.skip_version_button.setEnabled(False)
+            return
+
+        release = result.get("release") or {}
+        self._latest_release = release
+        self.latest_version_label.setText(f"最新版本：v{release.get('version', '?')}（{release.get('tag_name', '')}）")
+        self.release_notes_edit.setPlainText(release.get("body") or "（无更新日志）")
+        if result.get("has_update"):
+            self.update_status_label.setText("发现新版本，可下载更新")
+            self.download_update_button.setEnabled(True)
+            self.skip_version_button.setEnabled(True)
+        else:
+            self.update_status_label.setText("已是最新版本")
+            self.download_update_button.setEnabled(False)
+            self.skip_version_button.setEnabled(False)
+
+    def _persist_last_check_time(self) -> None:
+        settings = self.store.load()
+        settings.last_update_check = datetime.now().isoformat(timespec="seconds")
+        self.store.save(settings)
+
+    def download_update(self) -> None:
+        release = self._latest_release or {}
+        download_url = str(release.get("download_url") or "")
+        asset_name = str(release.get("asset_name") or "")
+        if not download_url:
+            return
+        if not asset_name:
+            QDesktopServices.openUrl(QUrl(release.get("html_url") or download_url))
+            self.update_status_label.setText("已打开下载页面，请在浏览器中下载")
+            return
+
+        settings = self.store.load()
+        target_dir = Path(settings.update_download_dir or (Path.home() / "Downloads"))
+        target_dir.mkdir(parents=True, exist_ok=True)
+        dest = target_dir / asset_name
+        self.download_progress.show()
+        self.download_progress.setValue(0)
+        self.download_update_button.setEnabled(False)
+        self.update_status_label.setText(f"正在下载 {asset_name} …")
+        self._start_download_worker(download_url, str(dest))
+
+    def _start_download_worker(self, url: str, dest: str) -> None:
+        if self._download_thread is not None:
+            return
+        thread = QThread(self)
+        worker = _DownloadWorker(url, dest)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_download_progress)
+        worker.finished.connect(self._on_download_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._cleanup_download_worker(thread, worker))
+        self._download_thread = thread
+        self._download_worker = worker
+        thread.start()
+
+    def _cleanup_download_worker(self, thread: QThread, worker: _DownloadWorker) -> None:
+        if self._download_thread is thread:
+            self._download_thread = None
+        if self._download_worker is worker:
+            self._download_worker = None
+
+    def _on_download_progress(self, received: int, total: int) -> None:
+        if total <= 0:
+            self.download_progress.setRange(0, 0)
+            return
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(min(100, int(received * 100 / total)))
+
+    def _on_download_finished(self, ok: bool, message: str) -> None:
+        self.download_progress.setRange(0, 100)
+        if ok:
+            self.download_progress.setValue(100)
+            self.update_status_label.setText("下载完成，请关闭程序后手动安装")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(message).parent)))
+            return
+        self.download_update_button.setEnabled(True)
+        self.update_status_label.setText(f"下载失败：{message}")
+        release = self._latest_release or {}
+        asset_name = str(release.get("asset_name") or "")
+        if asset_name:
+            target_dir = Path(self.store.load().update_download_dir or (Path.home() / "Downloads"))
+            partial = target_dir / asset_name
+            if partial.exists():
+                partial.unlink(missing_ok=True)
+
+    def skip_current_version(self) -> None:
+        release = self._latest_release or {}
+        version = str(release.get("version") or "")
+        if not version:
+            return
+        settings = self.store.load()
+        settings.skipped_update_version = version
+        self.store.save(settings)
+        self.update_status_label.setText(f"已跳过 v{version}，启动时不再提示该版本")
+        self.skip_version_button.setEnabled(False)
 
     def _provider_from_form(self, provider_id: str) -> AIProviderConfig:
         return AIProviderConfig(
@@ -485,6 +751,12 @@ class SettingsPage(QWidget):
         self.putaway_log_dir_edit.setText(settings.putaway_log_dir)
         self.applygoods_project_dir_edit.setText(settings.applygoods_project_dir)
         self.program_data_dir_edit.setText(settings.program_data_dir)
+        if hasattr(self, "theme_combo"):
+            self.theme_combo.setCurrentIndex(0 if (settings.theme_name or "light") == "light" else 1)
+        if hasattr(self, "bg_image_edit"):
+            self.bg_image_edit.setText(settings.bg_image_path or "")
+        if hasattr(self, "check_update_on_startup_check"):
+            self.check_update_on_startup_check.setChecked(settings.check_update_on_startup)
         self.startup_width_spin.setValue(settings.startup_width)
         self.startup_height_spin.setValue(settings.startup_height)
 
@@ -531,6 +803,12 @@ class SettingsPage(QWidget):
             putaway_log_dir=self.putaway_log_dir_edit.text().strip(),
             applygoods_project_dir=self.applygoods_project_dir_edit.text().strip(),
             program_data_dir=self.program_data_dir_edit.text().strip(),
+            theme_name="light" if self.theme_combo.currentIndex() == 0 else "dark",
+            bg_image_path=self.bg_image_edit.text().strip(),
+            check_update_on_startup=self.check_update_on_startup_check.isChecked(),
+            last_update_check=old_settings.last_update_check,
+            skipped_update_version=old_settings.skipped_update_version,
+            update_download_dir=old_settings.update_download_dir,
             bo_product_title=self.bo_product_title_edit.text().strip() or "BO固定产品标题",
             szw_product_title=self.szw_product_title_edit.text().strip() or "SZW固定产品标题",
             publish_prefix=self.publish_prefix_combo.currentText(),
@@ -554,6 +832,7 @@ class SettingsPage(QWidget):
         self.store.save(settings)
         self.status_label.setText(f"已保存到 {self.store.path}")
         self._refresh_path_status_labels()
+        self.settings_saved.emit(settings)
 
     def _resolved_project_status(self, key: str, configured: str) -> str:
         resolved = resolve_project_dir(key, configured, search_roots=default_project_search_roots())
@@ -641,6 +920,11 @@ class SettingsPage(QWidget):
 
     def choose_program_data_dir(self) -> None:
         self._choose_directory_for(self.program_data_dir_edit, "选择程序数据目录")
+
+    def choose_bg_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "选择背景图", "", "图片 (*.png *.jpg *.jpeg *.bmp)")
+        if path:
+            self.bg_image_edit.setText(path)
 
     def _load_account_for_shop(self, shop_name: str, settings: AppSettings | None = None) -> None:
         settings = settings or self.store.load()

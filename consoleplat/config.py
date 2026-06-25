@@ -208,6 +208,12 @@ class AppSettings:
     putaway_log_dir: str = ""
     applygoods_project_dir: str = ""
     program_data_dir: str = ""
+    theme_name: str = "light"
+    bg_image_path: str = ""
+    check_update_on_startup: bool = True
+    last_update_check: str = ""
+    skipped_update_version: str = ""
+    update_download_dir: str = ""
     bo_product_title: str = "BO固定产品标题"
     szw_product_title: str = "SZW固定产品标题"
     publish_prefix: str = "BO"
@@ -337,6 +343,12 @@ class SettingsStore:
             putaway_log_dir=str(data.get("putaway_log_dir") or ""),
             applygoods_project_dir=str(data.get("applygoods_project_dir") or ""),
             program_data_dir=str(data.get("program_data_dir") or ""),
+            theme_name=str(data.get("theme_name") or "light"),
+            bg_image_path=str(data.get("bg_image_path") or ""),
+            check_update_on_startup=bool(data.get("check_update_on_startup", True)),
+            last_update_check=str(data.get("last_update_check") or ""),
+            skipped_update_version=str(data.get("skipped_update_version") or ""),
+            update_download_dir=str(data.get("update_download_dir") or ""),
             bo_product_title=str(data.get("bo_product_title") or "BO固定产品标题"),
             szw_product_title=str(data.get("szw_product_title") or "SZW固定产品标题"),
             publish_prefix=str(data.get("publish_prefix") or "BO"),
@@ -414,6 +426,12 @@ class SettingsStore:
             "putaway_log_dir": settings.putaway_log_dir or "",
             "applygoods_project_dir": settings.applygoods_project_dir or "",
             "program_data_dir": settings.program_data_dir or "",
+            "theme_name": settings.theme_name or "light",
+            "bg_image_path": settings.bg_image_path or "",
+            "check_update_on_startup": bool(settings.check_update_on_startup),
+            "last_update_check": settings.last_update_check or "",
+            "skipped_update_version": settings.skipped_update_version or "",
+            "update_download_dir": settings.update_download_dir or "",
             "bo_product_title": settings.bo_product_title or "BO固定产品标题",
             "szw_product_title": settings.szw_product_title or "SZW固定产品标题",
             "publish_prefix": settings.publish_prefix or "BO",

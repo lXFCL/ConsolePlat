@@ -1,6 +1,19 @@
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.settings_page import SettingsPage
-from PyQt5.QtWidgets import QApplication, QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton, QSpinBox
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QProgressBar,
+    QScrollArea,
+    QSpinBox,
+    QTextEdit,
+)
 
 
 def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):
@@ -30,7 +43,7 @@ def test_settings_page_has_module_tabs(tmp_path, monkeypatch):
         for button in page.findChildren(QPushButton)
         if button.objectName() == "settingsTabButton"
     ]
-    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "合规", "程序"]
+    assert tab_texts == ["监控", "账号", "生图 / 改图", "发布", "上架", "合规", "程序", "外观", "更新"]
 
     page.close()
 
@@ -96,6 +109,102 @@ def test_settings_page_program_panel_only_keeps_program_fields(tmp_path, monkeyp
     assert "上架项目目录" not in program_labels
     assert "上架 data 目录" not in program_labels
     assert "上架日志目录" not in program_labels
+
+    page.close()
+
+
+def test_settings_page_appearance_panel_exposes_theme_and_background_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(theme_name="dark", bg_image_path="E:/bg.png"))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    appearance_panel = page.stack.widget(7)
+    assert isinstance(appearance_panel, QScrollArea)
+    assert page.tab_buttons["appearance"].text() == "外观"
+    assert page.findChild(QComboBox, "themeCombo").currentText().startswith("深色")
+    assert page.findChild(QLineEdit, "bgImageEdit").text() == "E:/bg.png"
+
+    page.close()
+
+
+def test_settings_page_update_panel_exposes_update_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(check_update_on_startup=False))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    update_panel = page.stack.widget(8)
+    update_labels = [label.text() for label in update_panel.findChildren(QLabel)]
+    assert isinstance(update_panel, QScrollArea)
+    assert page.tab_buttons["update"].text() == "更新"
+    assert "软件更新" in update_labels
+    assert page.findChild(QCheckBox, "checkUpdateOnStartupCheck").isChecked() is False
+    assert page.findChild(QProgressBar, "downloadProgress") is not None
+    assert page.findChild(QTextEdit, "releaseNotesEdit").isReadOnly()
+    assert page.findChild(QPushButton, "checkUpdateButton").text() == "检查更新"
+    assert page.findChild(QPushButton, "downloadUpdateButton").isEnabled() is False
+
+    page.close()
+
+
+def test_settings_page_save_persists_update_startup_toggle(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            check_update_on_startup=True,
+            last_update_check="2026-06-25T10:00:00",
+            skipped_update_version="1.5.0",
+            update_download_dir="E:/downloads",
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page.findChild(QCheckBox, "checkUpdateOnStartupCheck").setChecked(False)
+    page.save_settings()
+    saved = SettingsStore(path).load()
+
+    assert saved.check_update_on_startup is False
+    assert saved.last_update_check == "2026-06-25T10:00:00"
+    assert saved.skipped_update_version == "1.5.0"
+    assert saved.update_download_dir == "E:/downloads"
+
+    page.close()
+
+
+def test_settings_page_applies_successful_update_check_result(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page._apply_update_check_result(
+        {
+            "ok": True,
+            "has_update": True,
+            "release": {
+                "version": "1.5.0",
+                "tag_name": "v1.5.0",
+                "body": "更新日志正文",
+                "download_url": "https://example.invalid/app.zip",
+                "asset_name": "app.zip",
+            },
+        }
+    )
+
+    assert page.latest_version_label.text().startswith("最新版本：v1.5.0")
+    assert page.release_notes_edit.toPlainText() == "更新日志正文"
+    assert page.download_update_button.isEnabled() is True
+    assert page.skip_version_button.isEnabled() is True
 
     page.close()
 
@@ -261,7 +370,7 @@ def test_settings_page_image_panel_stays_compact(tmp_path, monkeypatch):
     page = SettingsPage()
 
     image_panel = page.stack.widget(2)
-    layout = image_panel.layout()
+    layout = image_panel.widget().layout()
     assert layout.spacing() <= 12
     assert layout.contentsMargins().top() <= 18
     assert page.ai_edit_prompt_edit.maximumHeight() <= 96
@@ -281,7 +390,7 @@ def test_settings_page_other_panels_stay_compact(tmp_path, monkeypatch):
 
     for index in (0, 1, 3, 4, 5, 6):
         panel = page.stack.widget(index)
-        layout = panel.layout()
+        layout = panel.widget().layout()
         assert layout.spacing() <= 14
         assert layout.contentsMargins().top() <= 22
         forms = panel.findChildren(QFormLayout)
@@ -303,7 +412,7 @@ def test_settings_page_non_image_panels_push_extra_space_below_form(tmp_path, mo
 
     for index in (0, 1, 3, 4, 5, 6):
         panel = page.stack.widget(index)
-        layout = panel.layout()
+        layout = panel.widget().layout()
         trailing_item = layout.itemAt(layout.count() - 1)
         assert trailing_item is not None
         assert trailing_item.spacerItem() is not None

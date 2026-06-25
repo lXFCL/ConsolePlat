@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+import sys
 from functools import partial
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QProcess, QTimer, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QFrame,
@@ -26,7 +28,7 @@ from consoleplat.ui.monitor_page import MonitorPage
 from consoleplat.ui.product_publish_page import ProductPublishPage
 from consoleplat.ui.putaway_page import PutawayPage
 from consoleplat.ui.settings_page import SettingsPage
-from consoleplat.ui.theme import APP_STYLE
+from consoleplat.ui.theme import APP_STYLE, get_app_style
 
 
 PAGE_BODIES = {
@@ -80,15 +82,17 @@ class MainWindow(QMainWindow):
         self.pages: dict[str, QWidget] = {}
         self._page_placeholders: dict[str, QWidget] = {}
         self._built: set[str] = set()
+        self._update_check_process: QProcess | None = None
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(QIcon(str(resource_path("assets/images/app_icon.ico"))))
         settings = SettingsStore().load()
         self.resize(settings.startup_width, settings.startup_height)
         self.setMinimumSize(920, 600)
-        self.setStyleSheet(APP_STYLE)
+        self.setStyleSheet(get_app_style(settings.theme_name, settings.bg_image_path))
         self._build_ui()
         self.activate_page(self.state.active_page)
+        QTimer.singleShot(1500, self._maybe_check_update_on_startup)
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -132,11 +136,11 @@ class MainWindow(QMainWindow):
         header = QHBoxLayout()
         app_title = QLabel(f"{APP_NAME} v{APP_VERSION}")
         app_title.setObjectName("appTitle")
-        status = QLabel("框架预览")
-        status.setObjectName("statusPill")
+        self.status_pill = QLabel("框架预览")
+        self.status_pill.setObjectName("statusPill")
         header.addWidget(app_title)
         header.addStretch(1)
-        header.addWidget(status)
+        header.addWidget(self.status_pill)
         layout.addLayout(header)
 
         self.stack = QStackedWidget()
@@ -179,7 +183,11 @@ class MainWindow(QMainWindow):
         if key == "apply":
             return ApplyGoodsPage()
         if key == "settings":
-            return SettingsPage()
+            settings_page = SettingsPage()
+            settings_page.settings_saved.connect(
+                lambda s: self.setStyleSheet(get_app_style(s.theme_name, s.bg_image_path))
+            )
+            return settings_page
 
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -200,6 +208,52 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
         self.refresh_task_badges()
+
+    def _maybe_check_update_on_startup(self) -> None:
+        settings = SettingsStore().load()
+        if not settings.check_update_on_startup or self._update_check_process is not None:
+            return
+        self._update_check_process = QProcess(self)
+        self._update_check_process.finished.connect(self._on_startup_check_finished)
+        self._update_check_process.start(sys.executable, ["-m", "consoleplat.services.version_check_cli"])
+
+    def _on_startup_check_finished(self, *args) -> None:
+        if self._update_check_process is None:
+            return
+        raw = bytes(self._update_check_process.readAllStandardOutput()).decode("utf-8", errors="ignore")
+        self._update_check_process = None
+        try:
+            result = json.loads(raw or "{}")
+        except ValueError:
+            return
+        self._on_startup_update_result(result)
+
+    def _on_startup_update_result(self, result: dict) -> None:
+        if not result.get("ok") or not result.get("has_update"):
+            return
+        release = result.get("release") or {}
+        version = str(release.get("version") or "")
+        if not version:
+            return
+        if version == SettingsStore().load().skipped_update_version:
+            return
+        self._show_update_available(version)
+
+    def _show_update_available(self, version: str) -> None:
+        if not hasattr(self, "status_pill"):
+            return
+        self.status_pill.setText(f"● 发现新版本 v{version}")
+        self.status_pill.setProperty("hasUpdate", "true")
+        self.status_pill.setCursor(Qt.PointingHandCursor)
+        self.status_pill.style().unpolish(self.status_pill)
+        self.status_pill.style().polish(self.status_pill)
+        self.status_pill.mousePressEvent = lambda event: self._open_update_settings()
+
+    def _open_update_settings(self) -> None:
+        self.activate_page("settings")
+        page = self.pages.get("settings")
+        if isinstance(page, SettingsPage):
+            page.activate_update_tab()
 
     def refresh_task_badges(self) -> None:
         for key, button in self.nav_buttons.items():

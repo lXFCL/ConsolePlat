@@ -64,6 +64,37 @@ def test_settings_store_persists_publish_handoff_preferences(tmp_path):
     assert loaded.publish_pause_before_putaway is False
 
 
+def test_settings_store_persists_theme_preferences(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(theme_name="dark", bg_image_path="E:/images/bg.png")
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.theme_name == "dark"
+    assert loaded.bg_image_path == "E:/images/bg.png"
+
+
+def test_settings_store_persists_update_preferences(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        check_update_on_startup=False,
+        last_update_check="2026-06-25T12:00:00",
+        skipped_update_version="1.5.0",
+        update_download_dir="E:/downloads",
+    )
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.check_update_on_startup is False
+    assert loaded.last_update_check == "2026-06-25T12:00:00"
+    assert loaded.skipped_update_version == "1.5.0"
+    assert loaded.update_download_dir == "E:/downloads"
+
+
 def test_settings_store_migrates_legacy_ai_provider_fields(tmp_path):
     path = tmp_path / "settings.json"
     path.write_text(

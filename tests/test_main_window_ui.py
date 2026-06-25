@@ -6,6 +6,7 @@ from consoleplat.ui.local_image_page import LocalImagePage
 from consoleplat.ui.main_window import MainWindow
 from consoleplat.ui.product_publish_page import ProductPublishPage
 from consoleplat.ui.putaway_page import PutawayPage
+from consoleplat.ui.theme import get_app_style
 
 
 class FakeSettingsStore:
@@ -21,6 +22,71 @@ def test_main_window_uses_saved_startup_size(monkeypatch):
 
     assert window.width() == 1280
     assert window.height() == 820
+
+    window.close()
+
+
+def test_main_window_applies_saved_theme_and_background(monkeypatch):
+    class FakeThemedSettingsStore:
+        def load(self):
+            return AppSettings(startup_width=1280, startup_height=820, theme_name="dark", bg_image_path="E:/bg.png")
+
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeThemedSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+
+    assert window.styleSheet() == get_app_style("dark", "E:/bg.png")
+
+    window.close()
+
+
+def test_main_window_startup_update_result_shows_clickable_status_pill(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    window._on_startup_update_result(
+        {
+            "ok": True,
+            "has_update": True,
+            "release": {"version": "1.5.0"},
+        }
+    )
+
+    assert window.status_pill.text() == "● 发现新版本 v1.5.0"
+    assert window.status_pill.property("hasUpdate") == "true"
+
+    window.status_pill.mousePressEvent(None)
+
+    assert window.state.active_page == "settings"
+
+    window.close()
+
+
+def test_main_window_startup_update_result_respects_skipped_version(monkeypatch):
+    class FakeSkippedSettingsStore:
+        def load(self):
+            return AppSettings(
+                startup_width=1280,
+                startup_height=820,
+                skipped_update_version="1.5.0",
+            )
+
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSkippedSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    window._on_startup_update_result(
+        {
+            "ok": True,
+            "has_update": True,
+            "release": {"version": "1.5.0"},
+        }
+    )
+
+    assert window.status_pill.text() == "框架预览"
+    assert window.status_pill.property("hasUpdate") in (None, False)
 
     window.close()
 
