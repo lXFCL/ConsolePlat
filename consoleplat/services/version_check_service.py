@@ -167,6 +167,31 @@ def check_for_update(
     timeout: int = HTTP_TIMEOUT,
     proxy: UpdateProxyConfig | None = None,
 ) -> dict:
+    if proxy is not None and not proxy.enabled:
+        try:
+            release = fetch_latest_release_without_proxy(timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            return _http_error_result(exc)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            return {"ok": False, "kind": "offline", "message": f"无法连接 GitHub：{exc}"}
+        except (ValueError, KeyError, TypeError) as exc:
+            return {"ok": False, "kind": "error", "message": f"解析 release 失败：{exc}"}
+        return {
+            "ok": True,
+            "current_version": current,
+            "has_update": is_newer(release.version, current),
+            "release": {
+                "version": release.version,
+                "tag_name": release.tag_name,
+                "name": release.name,
+                "body": release.body,
+                "html_url": release.html_url,
+                "download_url": release.download_url,
+                "asset_name": release.asset_name,
+                "published_at": release.published_at,
+            },
+        }
+
     try:
         release = fetch_latest_release(timeout=timeout, proxy=proxy)
     except urllib.error.HTTPError as exc:

@@ -201,3 +201,38 @@ def test_build_opener_without_proxy_bypasses_environment_proxy(monkeypatch):
 
     assert isinstance(opener, FakeOpener)
     assert captured == [{}]
+
+
+def test_check_for_update_without_proxy_uses_direct_fetch(monkeypatch):
+    calls = []
+
+    class FakeRelease:
+        version = "1.5.3"
+        tag_name = "v1.5.3"
+        name = "ConsolePlat 1.5.3"
+        body = "direct fetch"
+        html_url = "https://github.com/lXFCL/ConsolePlat/releases/tag/v1.5.3"
+        download_url = "https://github.com/lXFCL/ConsolePlat/releases/download/v1.5.3/app.zip"
+        asset_name = "app.zip"
+        published_at = "2026-06-25T12:00:00Z"
+
+    def fake_fetch(timeout=8, proxy=None):
+        calls.append(("proxy", proxy.url if proxy else None))
+        raise AssertionError("disabled proxy path should not call fetch_latest_release")
+
+    def fake_fetch_without_proxy(timeout=8):
+        calls.append(("direct", timeout))
+        return FakeRelease()
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
+    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release_without_proxy", fake_fetch_without_proxy)
+
+    result = check_for_update(
+        current="1.5.0",
+        proxy=UpdateProxyConfig(enabled=False, host="127.0.0.1", port=7890),
+    )
+
+    assert result["ok"] is True
+    assert result["has_update"] is True
+    assert result["release"]["version"] == "1.5.3"
+    assert calls == [("direct", 8)]
