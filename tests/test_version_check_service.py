@@ -134,7 +134,7 @@ def test_check_for_update_reports_missing_release_as_reachable_repo(monkeypatch)
 
 def test_check_for_update_reports_proxy_connection_failure(monkeypatch):
     def fake_fetch(timeout=8, proxy=None):
-        raise OSError("[ASN1: NOT_ENOUGH_DATA] not enough data (ssl.c:4178)")
+        raise OSError("[some other error] proxy down")
 
     monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
 
@@ -144,3 +144,35 @@ def test_check_for_update_reports_proxy_connection_failure(monkeypatch):
     assert result["kind"] == "proxy_error"
     assert "127.0.0.1:7890" in result["message"]
     assert "HTTP 代理" in result["message"]
+
+
+def test_check_for_update_retries_without_proxy_after_tls_proxy_handshake_error(monkeypatch):
+    calls = []
+
+    class FakeRelease:
+        version = "1.5.1"
+        tag_name = "v1.5.1"
+        name = "ConsolePlat 1.5.1"
+        body = "fix proxy fallback"
+        html_url = "https://github.com/lXFCL/ConsolePlat/releases/tag/v1.5.1"
+        download_url = "https://github.com/lXFCL/ConsolePlat/releases/download/v1.5.1/app.zip"
+        asset_name = "app.zip"
+        published_at = "2026-06-25T12:00:00Z"
+
+    def fake_fetch(timeout=8, proxy=None):
+        calls.append(proxy.url if proxy else None)
+        if proxy and proxy.enabled:
+            raise OSError("[ASN1: NOT_ENOUGH_DATA] not enough data (ssl.c:4178)")
+        return FakeRelease()
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
+
+    result = check_for_update(
+        current="1.5.0",
+        proxy=UpdateProxyConfig(enabled=True, host="127.0.0.1", port=7890),
+    )
+
+    assert result["ok"] is True
+    assert result["has_update"] is True
+    assert result["release"]["version"] == "1.5.1"
+    assert calls == ["http://127.0.0.1:7890", None]

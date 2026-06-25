@@ -19,6 +19,11 @@ RELEASES_API = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/relea
 RELEASES_PAGE = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 USER_AGENT = f"ConsolePlat/{APP_VERSION} (auto-update-check)"
 HTTP_TIMEOUT = 8
+PROXY_TLS_FALLBACK_MARKERS = (
+    "ASN1: NOT_ENOUGH_DATA",
+    "WRONG_VERSION_NUMBER",
+    "UNKNOWN_PROTOCOL",
+)
 
 
 @dataclass
@@ -56,7 +61,7 @@ class UpdateProxyConfig:
 
     @property
     def hint(self) -> str:
-        return f"{self.address}（HTTP 代理地址，不要填 https://）"
+        return f"{self.address} (HTTP 代理地址，不要填 https://)"
 
 
 class UpdateCheckWorker(QObject):
@@ -119,7 +124,7 @@ def fetch_latest_release(timeout: int = HTTP_TIMEOUT, proxy: UpdateProxyConfig |
         },
     )
     opener = _build_opener(proxy)
-    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - 固定官方 HTTPS API
+    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - fixed official HTTPS API
         payload = json.loads(response.read().decode("utf-8"))
 
     tag = str(payload.get("tag_name") or "")
@@ -139,6 +144,22 @@ def fetch_latest_release(timeout: int = HTTP_TIMEOUT, proxy: UpdateProxyConfig |
     )
 
 
+def _should_retry_without_proxy(exc: BaseException) -> bool:
+    text = str(exc).upper()
+    return any(marker in text for marker in PROXY_TLS_FALLBACK_MARKERS)
+
+
+def _http_error_result(exc: urllib.error.HTTPError) -> dict:
+    if exc.code == 404:
+        return {
+            "ok": False,
+            "kind": "no_release",
+            "message": "GitHub 已连通，但仓库还没有发布 Release",
+        }
+    kind = "rate_limited" if exc.code in (403, 429) else "error"
+    return {"ok": False, "kind": kind, "message": f"GitHub 返回 {exc.code}"}
+
+
 def check_for_update(
     current: str = APP_VERSION,
     timeout: int = HTTP_TIMEOUT,
@@ -147,18 +168,29 @@ def check_for_update(
     try:
         release = fetch_latest_release(timeout=timeout, proxy=proxy)
     except urllib.error.HTTPError as exc:
-        if exc.code == 404:
+        return _http_error_result(exc)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        if proxy and proxy.enabled and _should_retry_without_proxy(exc):
+            try:
+                release = fetch_latest_release(timeout=timeout, proxy=None)
+            except urllib.error.HTTPError as inner_exc:
+                return _http_error_result(inner_exc)
+            except (urllib.error.URLError, TimeoutError, OSError) as inner_exc:
+                return {
+                    "ok": False,
+                    "kind": "proxy_error",
+                    "message": f"代理连接失败，请检查 {proxy.hint} ：{inner_exc}",
+                }
+            except (ValueError, KeyError, TypeError) as inner_exc:
+                return {"ok": False, "kind": "error", "message": f"解析 release 失败：{inner_exc}"}
+        elif proxy and proxy.enabled:
             return {
                 "ok": False,
-                "kind": "no_release",
-                "message": "GitHub 已连通，但仓库还没有发布 Release",
+                "kind": "proxy_error",
+                "message": f"代理连接失败，请检查 {proxy.hint} ：{exc}",
             }
-        kind = "rate_limited" if exc.code in (403, 429) else "error"
-        return {"ok": False, "kind": kind, "message": f"GitHub 返回 {exc.code}"}
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        if proxy and proxy.enabled:
-            return {"ok": False, "kind": "proxy_error", "message": f"代理连接失败，请检查 {proxy.hint}：{exc}"}
-        return {"ok": False, "kind": "offline", "message": f"无法连接 GitHub：{exc}"}
+        else:
+            return {"ok": False, "kind": "offline", "message": f"无法连接 GitHub：{exc}"}
     except (ValueError, KeyError, TypeError) as exc:
         return {"ok": False, "kind": "error", "message": f"解析 release 失败：{exc}"}
 
@@ -189,7 +221,7 @@ def download_asset(
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     dest = Path(dest_path)
     opener = _build_opener(proxy)
-    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - URL 来自官方 GitHub release
+    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - URL comes from official GitHub release
         total = int(response.headers.get("Content-Length") or 0)
         received = 0
         with dest.open("wb") as handle:
