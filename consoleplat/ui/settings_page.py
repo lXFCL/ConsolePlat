@@ -583,6 +583,7 @@ class SettingsPage(QWidget):
             text = {
                 "offline": "无法连接 GitHub，请检查网络",
                 "proxy_error": result.get("message") or "代理连接失败，请检查代理设置",
+                "no_release": result.get("message") or "GitHub 已连通，但仓库还没有发布 Release",
                 "rate_limited": "GitHub 访问受限，请稍后再试",
             }.get(kind, "检查更新失败")
             self.update_status_label.setText(text)

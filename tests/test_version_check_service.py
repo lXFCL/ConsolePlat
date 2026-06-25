@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.error
 
 import pytest
 
@@ -103,6 +104,32 @@ def test_proxy_config_normalizes_user_entered_proxy_url():
 
     assert proxy.address == "127.0.0.1:7890"
     assert proxy.url == "http://127.0.0.1:7890"
+
+
+def test_proxy_config_normalizes_user_entered_https_proxy_url():
+    proxy = UpdateProxyConfig(enabled=True, host="https://127.0.0.1", port=7890)
+
+    assert proxy.address == "127.0.0.1:7890"
+    assert proxy.url == "http://127.0.0.1:7890"
+
+
+def test_check_for_update_reports_missing_release_as_reachable_repo(monkeypatch):
+    def fake_fetch(timeout=8, proxy=None):
+        raise urllib.error.HTTPError(
+            url="https://api.github.com/repos/lXFCL/ConsolePlat/releases/latest",
+            code=404,
+            msg="Not Found",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
+
+    result = check_for_update(current="1.4.1", proxy=UpdateProxyConfig(enabled=True, host="https://127.0.0.1", port=7890))
+
+    assert result["ok"] is False
+    assert result["kind"] == "no_release"
+    assert "GitHub 已连通" in result["message"]
 
 
 def test_check_for_update_reports_proxy_connection_failure(monkeypatch):

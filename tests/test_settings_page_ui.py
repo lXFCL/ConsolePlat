@@ -221,6 +221,29 @@ def test_settings_page_applies_successful_update_check_result(tmp_path, monkeypa
     page.close()
 
 
+def test_settings_page_shows_missing_release_update_result(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page._apply_update_check_result(
+        {
+            "ok": False,
+            "kind": "no_release",
+            "message": "GitHub 已连通，但仓库还没有发布 Release",
+        }
+    )
+
+    assert page.update_status_label.text() == "GitHub 已连通，但仓库还没有发布 Release"
+    assert page.download_update_button.isEnabled() is False
+    assert page.skip_version_button.isEnabled() is False
+
+    page.close()
+
+
 def test_settings_page_putaway_panel_contains_putaway_paths(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
     SettingsStore(path).save(AppSettings())

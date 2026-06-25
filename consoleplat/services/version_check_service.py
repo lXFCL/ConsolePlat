@@ -134,6 +134,12 @@ def check_for_update(
     try:
         release = fetch_latest_release(timeout=timeout, proxy=proxy)
     except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return {
+                "ok": False,
+                "kind": "no_release",
+                "message": "GitHub 已连通，但仓库还没有发布 Release",
+            }
         kind = "rate_limited" if exc.code in (403, 429) else "error"
         return {"ok": False, "kind": kind, "message": f"GitHub 返回 {exc.code}"}
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
