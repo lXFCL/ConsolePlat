@@ -102,7 +102,9 @@ def _pick_asset(assets: list[dict]) -> tuple[str, str]:
     return "", ""
 
 
-def _build_opener(proxy: UpdateProxyConfig | None = None):
+def _build_opener(proxy: UpdateProxyConfig | None = None, *, disable_env_proxy: bool = False):
+    if disable_env_proxy:
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}))
     if not proxy or not proxy.enabled:
         return urllib.request.build_opener()
     return urllib.request.build_opener(
@@ -172,7 +174,7 @@ def check_for_update(
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         if proxy and proxy.enabled and _should_retry_without_proxy(exc):
             try:
-                release = fetch_latest_release(timeout=timeout, proxy=None)
+                release = fetch_latest_release_without_proxy(timeout=timeout)
             except urllib.error.HTTPError as inner_exc:
                 return _http_error_result(inner_exc)
             except (urllib.error.URLError, TimeoutError, OSError) as inner_exc:
@@ -209,6 +211,35 @@ def check_for_update(
             "published_at": release.published_at,
         },
     }
+
+
+def fetch_latest_release_without_proxy(timeout: int = HTTP_TIMEOUT) -> ReleaseInfo:
+    request = urllib.request.Request(
+        RELEASES_API,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    opener = _build_opener(disable_env_proxy=True)
+    with opener.open(request, timeout=timeout) as response:  # noqa: S310 - fixed official HTTPS API
+        payload = json.loads(response.read().decode("utf-8"))
+
+    tag = str(payload.get("tag_name") or "")
+    raw_assets = payload.get("assets") or []
+    assets = raw_assets if isinstance(raw_assets, list) else []
+    download_url, asset_name = _pick_asset(assets)
+    html_url = str(payload.get("html_url") or RELEASES_PAGE)
+    return ReleaseInfo(
+        version=".".join(str(part) for part in parse_version(tag)),
+        tag_name=tag,
+        name=str(payload.get("name") or tag),
+        body=str(payload.get("body") or ""),
+        html_url=html_url,
+        download_url=download_url or html_url,
+        asset_name=asset_name,
+        published_at=str(payload.get("published_at") or ""),
+    )
 
 
 def download_asset(

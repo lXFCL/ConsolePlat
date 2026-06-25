@@ -150,22 +150,25 @@ def test_check_for_update_retries_without_proxy_after_tls_proxy_handshake_error(
     calls = []
 
     class FakeRelease:
-        version = "1.5.1"
-        tag_name = "v1.5.1"
-        name = "ConsolePlat 1.5.1"
+        version = "1.5.2"
+        tag_name = "v1.5.2"
+        name = "ConsolePlat 1.5.2"
         body = "fix proxy fallback"
-        html_url = "https://github.com/lXFCL/ConsolePlat/releases/tag/v1.5.1"
-        download_url = "https://github.com/lXFCL/ConsolePlat/releases/download/v1.5.1/app.zip"
+        html_url = "https://github.com/lXFCL/ConsolePlat/releases/tag/v1.5.2"
+        download_url = "https://github.com/lXFCL/ConsolePlat/releases/download/v1.5.2/app.zip"
         asset_name = "app.zip"
         published_at = "2026-06-25T12:00:00Z"
 
     def fake_fetch(timeout=8, proxy=None):
         calls.append(proxy.url if proxy else None)
-        if proxy and proxy.enabled:
-            raise OSError("[ASN1: NOT_ENOUGH_DATA] not enough data (ssl.c:4178)")
+        raise OSError("[ASN1: NOT_ENOUGH_DATA] not enough data (ssl.c:4178)")
+
+    def fake_fetch_without_proxy(timeout=8):
+        calls.append("DIRECT")
         return FakeRelease()
 
     monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
+    monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release_without_proxy", fake_fetch_without_proxy)
 
     result = check_for_update(
         current="1.5.0",
@@ -174,5 +177,27 @@ def test_check_for_update_retries_without_proxy_after_tls_proxy_handshake_error(
 
     assert result["ok"] is True
     assert result["has_update"] is True
-    assert result["release"]["version"] == "1.5.1"
-    assert calls == ["http://127.0.0.1:7890", None]
+    assert result["release"]["version"] == "1.5.2"
+    assert calls == ["http://127.0.0.1:7890", "DIRECT"]
+
+
+def test_build_opener_without_proxy_bypasses_environment_proxy(monkeypatch):
+    captured = []
+
+    class FakeProxyHandler:
+        def __init__(self, proxies):
+            captured.append(proxies)
+
+    class FakeOpener:
+        pass
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.ProxyHandler", FakeProxyHandler)
+    monkeypatch.setattr(
+        "consoleplat.services.version_check_service.urllib.request.build_opener",
+        lambda *handlers: FakeOpener(),
+    )
+
+    opener = _build_opener(UpdateProxyConfig(enabled=False), disable_env_proxy=True)
+
+    assert isinstance(opener, FakeOpener)
+    assert captured == [{}]
