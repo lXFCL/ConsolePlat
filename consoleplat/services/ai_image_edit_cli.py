@@ -259,6 +259,7 @@ def split_collage_image_with_guides(
     x_guides: list[int] | None = None,
     y_guides: list[int] | None = None,
     original_image: str | Path | None = None,
+    drop_first: bool = False,
 ) -> list[str]:
     source = Path(source_image)
     target_dir = Path(output_dir)
@@ -277,7 +278,10 @@ def split_collage_image_with_guides(
         y_guides,
         enforce_exact_count=original_image is not None,
     )
-    for index, box in enumerate(boxes[: max(1, int(split_count or 1))], start=1):
+    selected_boxes = boxes[: max(1, int(split_count or 1))]
+    if drop_first and selected_boxes:
+        selected_boxes = selected_boxes[1:]
+    for index, box in enumerate(selected_boxes, start=1):
         target = target_dir / f"{source.stem}_part_{index:02d}.png"
         saved = _crop_and_save_part(image, box, target)
         if saved is not None:

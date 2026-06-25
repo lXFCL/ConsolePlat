@@ -35,6 +35,7 @@ from consoleplat.adapters.posaiimg_adapter import AIEditJob, LocalImageJob, PosA
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import AppSettings, DEFAULT_AI_EDIT_PROMPT, SettingsStore, resolve_project_dir
 from consoleplat.services.ai_edit_formalize_service import formalize_ai_edit_outputs
+from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.comfyui_service import ComfyUIService
 from consoleplat.services.posai_batch_service import build_batch_paths, suggest_next_start
 from consoleplat.services.publish_orchestrator import PublishStage, StageOrchestrator
@@ -101,6 +102,12 @@ def _image_files(folder: Path) -> list[Path]:
         [path for path in folder.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES],
         key=lambda path: path.name.lower(),
     )
+
+
+def _derive_ai_round_sources_from_outputs(outputs: list[str]) -> list[str]:
+    pngs = [str(path) for path in outputs if str(path).lower().endswith(".png")]
+    non_split = [path for path in pngs if "_part_" not in Path(path).stem.lower()]
+    return non_split or pngs
 
 
 def _extract_product_numbers(files: list[Path], prefix: str) -> set[int]:
@@ -356,9 +363,13 @@ class ProductPublishPage(QWidget):
         add_button = QPushButton("添加参考图")
         add_button.setObjectName("ghostButton")
         add_button.clicked.connect(self.add_reference_images)
+        self.clear_reference_button = QPushButton("清空参考图")
+        self.clear_reference_button.setObjectName("ghostButton")
+        self.clear_reference_button.clicked.connect(self.clear_reference_images)
         top.addWidget(self.reference_count_label)
         top.addStretch(1)
         top.addWidget(add_button)
+        top.addWidget(self.clear_reference_button)
         layout.addLayout(top)
 
         self.ai_prompt_edit = QTextEdit()
@@ -476,6 +487,14 @@ class ProductPublishPage(QWidget):
         )
         for file_path in files:
             self._add_reference_image(file_path)
+
+    def clear_reference_images(self) -> None:
+        if not self._reference_images:
+            self.reference_count_label.setText("参考图 0 张")
+            return
+        self._reference_images.clear()
+        self.reference_count_label.setText("参考图 0 张")
+        self._save_preferences()
 
     def _add_reference_image(self, image_path: str) -> None:
         path = Path(image_path)
@@ -661,7 +680,7 @@ class ProductPublishPage(QWidget):
         record.job_payload = self._ai_job_payload(job)
         record.output_dir = str(job.output_dir or "")
         self._sync_mirror_task(record)
-        self._start_process(record, *self.adapter.ai_edit_command(job), api_key=job.api_key)
+        self._start_process(record, *self.adapter.ai_edit_command(job), api_key=job.api_key, api_base=job.api_base)
 
     def _local_job_payload(self, job: LocalImageJob) -> dict[str, object]:
         return {
@@ -706,7 +725,10 @@ class ProductPublishPage(QWidget):
         args: list[str],
         cwd: Path,
         api_key: str = "",
+        api_base: str = "",
     ) -> None:
+        if record.generation_mode == "AI 改图" and api_base:
+            self._append_record_log(record, f"当前 AI 接口：{api_base}")
         self._append_record_log(record, f"启动命令：{program} {' '.join(args)}")
         self._append_record_log(record, f"工作目录：{cwd}")
         process = QProcess(self)
@@ -912,21 +934,37 @@ class ProductPublishPage(QWidget):
         if not final_transparent_dir:
             self._mark_record_failed(record, "缺少最终透明底目录，无法继续正式后处理。")
             return False
-        batch_dir = final_transparent_dir.parent
         settings = self.settings_store.load()
         product_dir = self._derive_ai_product_dir(record)
         xlsx_path = self._derive_ai_xlsx_path(record)
+        prepared_assets = prepare_ai_edit_print_assets(
+            source_paths=_derive_ai_round_sources_from_outputs(outputs),
+            final_transparent_dir=final_transparent_dir,
+            prefix=record.prefix.upper(),
+            start_number=record.start_number,
+            split_collage=bool(record.job_payload.get("split_collage", True)),
+            split_count=max(1, int(record.job_payload.get("split_count") or 1)),
+            x_guides=[],
+            y_guides=[],
+            drop_first_split=bool(settings.ai_edit_drop_first_per_round),
+        )
+        prepared_split_paths = [path for asset in prepared_assets for path in asset.split_paths]
+        if not prepared_split_paths:
+            self._mark_record_failed(record, "AI 改图没有生成可用于正式后处理的透明底结果。")
+            return False
         summary = formalize_ai_edit_outputs(
-            split_paths=split_paths,
+            split_paths=prepared_split_paths,
             final_transparent_dir=final_transparent_dir,
             final_product_dir=product_dir,
             xlsx_path=xlsx_path,
             putaway_data_dir=Path(settings.putaway_data_dir),
+            model_dir=Path(settings.posai_model_root),
             prefix=record.prefix.upper(),
             start_number=record.start_number,
             product_title=record.product_title,
             xlsx_batch_start_number=record.start_number,
             xlsx_batch_count=self._expected_output_count(record),
+            saturation_threshold=settings.ai_edit_grayscale_saturation_threshold,
         )
         if not summary.ok:
             self._mark_record_failed(record, summary.message)
@@ -939,6 +977,10 @@ class ProductPublishPage(QWidget):
         record.job_payload["final_transparent_dir"] = str(final_transparent_dir)
         record.job_payload["final_product_dir"] = str(product_dir)
         record.job_payload["outputs"] = list(summary.renamed_outputs)
+        record.outputs = list(summary.renamed_outputs)
+        transparent_rounds = [str(asset.transparent_path) for asset in prepared_assets if asset.transparent_path]
+        if transparent_rounds:
+            record.round_sources = transparent_rounds
         self._append_record_log(record, summary.message)
         if summary.putaway is not None and summary.putaway.message:
             self._append_record_log(record, summary.putaway.message)
@@ -947,7 +989,10 @@ class ProductPublishPage(QWidget):
 
     def _expected_output_count(self, record: ProductTaskRecord) -> int:
         if record.generation_mode == "AI 改图":
+            settings = self.settings_store.load()
             split_count = max(1, int(record.job_payload.get("split_count") or 25))
+            if settings.ai_edit_drop_first_per_round and split_count > 1:
+                split_count -= 1
             total_rounds = max(1, int(record.job_payload.get("total_return_count") or record.count or 1))
             return total_rounds * split_count
         return max(1, int(record.count or 1))
@@ -1375,7 +1420,7 @@ class ProductPublishPage(QWidget):
             "outputs": list(payload.get("outputs") or []),
             "failed": [],
             "warnings": [],
-            "round_sources": [],
+            "round_sources": _derive_ai_round_sources_from_outputs(list(payload.get("outputs") or [])),
             "collage_transparent_sources": [],
             "active_round_index": 0,
             "final_transparent_dir": str(payload.get("final_transparent_dir") or ""),

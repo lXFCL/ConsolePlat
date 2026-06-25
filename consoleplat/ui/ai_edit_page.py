@@ -121,6 +121,8 @@ class AIEditBackgroundWorker(QObject):
                 result = self._run_convert_current_round()
             elif self.action == "export_product_images":
                 result = self._run_export_product_images()
+            elif self.action == "backfill_colors":
+                result = self._run_backfill_colors()
             else:
                 raise ValueError(f"unsupported background action: {self.action}")
         except Exception as exc:
@@ -142,6 +144,7 @@ class AIEditBackgroundWorker(QObject):
             split_count=self.record.job.split_count,
             x_guides=list(self.record.split_profile.get("x_guides") or []),
             y_guides=list(self.record.split_profile.get("y_guides") or []),
+            drop_first_split=bool(self.settings.ai_edit_drop_first_per_round),
         )
         prepared_paths = [str(path) for asset in prepared_assets for path in asset.split_paths]
         transparent_rounds = [str(asset.transparent_path) for asset in prepared_assets if asset.transparent_path]
@@ -171,6 +174,7 @@ class AIEditBackgroundWorker(QObject):
                 product_title=product_title,
                 xlsx_batch_start_number=self.record.job.start_number,
                 xlsx_batch_count=max(1, len(split_paths)),
+                saturation_threshold=self.settings.ai_edit_grayscale_saturation_threshold,
             )
             if not formalize_summary.ok:
                 raise ValueError(formalize_summary.message)
@@ -248,6 +252,7 @@ class AIEditBackgroundWorker(QObject):
             final_product_dir=final_product_dir,
             product_title=product_title,
             model_dir=Path(self.settings.posai_model_root),
+            saturation_threshold=self.settings.ai_edit_grayscale_saturation_threshold,
         )
         if not product_outputs:
             raise ValueError("产品图生成失败：未生成有效产品图")
@@ -270,6 +275,24 @@ class AIEditBackgroundWorker(QObject):
             final_product_dir=str(final_product_dir),
             xlsx_path=str(xlsx_path),
             logs=[f"导出产品图完成：重贴 {len(product_outputs)} 张"],
+        )
+
+    def _run_backfill_colors(self) -> BackgroundTaskResult:
+        xlsx_path = Path(self.record.xlsx_path) if self.record.xlsx_path else None
+        final_transparent_dir = Path(self.record.final_transparent_dir) if self.record.final_transparent_dir else None
+        if xlsx_path is None or final_transparent_dir is None:
+            return BackgroundTaskResult(action=self.action, task_id=self.record.task_id)
+        updated = backfill_xlsx_colors_from_transparent_dir(
+            xlsx_path=xlsx_path,
+            final_transparent_dir=final_transparent_dir,
+            saturation_threshold=self.settings.ai_edit_grayscale_saturation_threshold,
+        )
+        logs = [f"已回填 xlsx 颜色 {updated} 行"] if updated else []
+        return BackgroundTaskResult(
+            action=self.action,
+            task_id=self.record.task_id,
+            xlsx_path=str(xlsx_path),
+            logs=logs,
         )
 
     def _derive_round_sources_from_outputs(self, outputs: list[str]) -> list[str]:
@@ -1231,8 +1254,12 @@ class AIEditPage(QWidget):
         self.image_actions_widget = QWidget()
         image_actions_layout = QHBoxLayout(self.image_actions_widget)
         image_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.clear_images_button = QPushButton("清空参考图")
+        self.clear_images_button.setObjectName("ghostButton")
+        self.clear_images_button.clicked.connect(self.clear_reference_images)
         self.image_list = QListWidget()
         self.image_list.currentItemChanged.connect(self._on_image_selection_changed)
+        image_actions_layout.addWidget(self.clear_images_button)
         image_layout.addWidget(self.image_actions_widget)
         image_layout.addWidget(self.image_list, stretch=1)
         layout.addWidget(self.image_panel)
@@ -1339,8 +1366,7 @@ class AIEditPage(QWidget):
         settings.local_image_test_mode = self.test_mode_check.isChecked()
         settings.ai_edit_prompt = self.prompt_edit.toPlainText().strip() or settings.ai_edit_prompt
         selected_images = self._selected_images()
-        if selected_images:
-            settings.ai_edit_reference_dir = str(selected_images[-1].parent)
+        settings.ai_edit_reference_dir = str(selected_images[-1].parent) if selected_images else ""
         self.settings_store.save(settings)
 
     def _update_split_count_hint(self, value: int) -> None:
@@ -1366,6 +1392,14 @@ class AIEditPage(QWidget):
         )
         for file_path in files:
             self._add_image_item(file_path)
+
+    def clear_reference_images(self) -> None:
+        if self.image_list.count() == 0:
+            self.selected_image_path_label.setText("--")
+            return
+        self.image_list.clear()
+        self.selected_image_path_label.setText("--")
+        self._save_preferences()
 
     def _add_image_item(self, image_path: str) -> None:
         path = Path(image_path)
@@ -1697,6 +1731,7 @@ class AIEditPage(QWidget):
             split_count=self.current_task.job.split_count,
             x_guides=list(self.current_task.split_profile.get("x_guides") or []),
             y_guides=list(self.current_task.split_profile.get("y_guides") or []),
+            drop_first_split=bool(self.settings_store.load().ai_edit_drop_first_per_round),
         )
         prepared_paths = [path for asset in prepared_assets for path in asset.split_paths]
         if not prepared_paths:
@@ -1735,6 +1770,7 @@ class AIEditPage(QWidget):
                 product_title=product_title,
                 xlsx_batch_start_number=self.current_task.job.start_number,
                 xlsx_batch_count=max(1, len(split_paths)),
+                saturation_threshold=settings.ai_edit_grayscale_saturation_threshold,
             )
         except Exception as exc:
             self._update_current_task(status="失败", stage_text="后处理失败", progress_percent=0)
@@ -1974,9 +2010,19 @@ class AIEditPage(QWidget):
             return inferred_index
         return 0
 
-    def _start_number_for_round_source(self, record: AIEditTaskRecord, source_path: str) -> int:
+    def _effective_count_per_round(self, record: AIEditTaskRecord) -> int:
         split_count = max(1, int(record.job.split_count or 1))
-        return int(record.job.start_number) + self._round_source_index(record, source_path) * split_count
+        if (
+            record.job.split_collage
+            and self.settings_store.load().ai_edit_drop_first_per_round
+            and split_count > 1
+        ):
+            return split_count - 1
+        return split_count
+
+    def _start_number_for_round_source(self, record: AIEditTaskRecord, source_path: str) -> int:
+        effective_count = self._effective_count_per_round(record)
+        return int(record.job.start_number) + self._round_source_index(record, source_path) * effective_count
 
     def _background_record_for_current_round(self, record: AIEditTaskRecord, source_path: str) -> AIEditTaskRecord:
         current_record = copy.deepcopy(record)
@@ -2058,6 +2104,7 @@ class AIEditPage(QWidget):
         if index < 0 or index >= len(ordered_tasks):
             return
         record = ordered_tasks[index]
+        self._start_background_job("backfill_colors", record)
         dialog = AIEditTaskDetailDialog(record, self)
         self.task_detail_dialog = dialog
         dialog.exec_()
@@ -2230,19 +2277,6 @@ class AIEditPage(QWidget):
             return
         self.task_store.save([self._task_to_dict(record) for record in self.tasks])
 
-    def _backfill_history_xlsx_colors(self, record: AIEditTaskRecord) -> None:
-        xlsx_path = Path(record.xlsx_path) if record.xlsx_path else None
-        final_transparent_dir = Path(record.final_transparent_dir) if record.final_transparent_dir else None
-        if xlsx_path is None or final_transparent_dir is None:
-            return
-        try:
-            backfill_xlsx_colors_from_transparent_dir(
-                xlsx_path=xlsx_path,
-                final_transparent_dir=final_transparent_dir,
-            )
-        except Exception:
-            return
-
     def _load_task_history(self) -> None:
         if self.task_store is None:
             return
@@ -2250,7 +2284,6 @@ class AIEditPage(QWidget):
             record = self._task_from_dict(payload)
             if record is None:
                 continue
-            self._backfill_history_xlsx_colors(record)
             self.tasks.append(record)
         self._rebuild_task_list()
         self._remember_tasks_file_mtime()
@@ -2269,7 +2302,6 @@ class AIEditPage(QWidget):
             record = self._task_from_dict(payload)
             if record is None:
                 continue
-            self._backfill_history_xlsx_colors(record)
             if current_task is not None and record.task_id == current_task_id:
                 records.append(current_task)
             else:

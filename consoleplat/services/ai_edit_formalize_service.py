@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import colorsys
 import random
 import re
 import shutil
@@ -45,6 +46,7 @@ DEFAULT_BLACK_MODEL_NAMES = ["主图1-黑.jpg", "主图2-黑.jpg"]
 WHITE_COLOR_NAME = "白"
 BLACK_COLOR_NAME = "黑"
 HEADER_ROW = ["店铺名称", "产品分类", "产品标题", "产品序列号", "颜色"]
+_PRINT_METRIC_CACHE: dict[tuple[str, int], tuple[float, float]] = {}
 
 
 @dataclass(frozen=True)
@@ -106,9 +108,19 @@ def choose_black_model(model_dir: Path) -> Path:
 
 
 def _subject_brightness(print_path: Path) -> float:
+    brightness, _saturation = _subject_metrics(print_path)
+    return brightness
+
+
+def _subject_metrics(print_path: Path) -> tuple[float, float]:
+    cache_key = (str(print_path.resolve()), int(print_path.stat().st_mtime_ns))
+    cached = _PRINT_METRIC_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     image = Image.open(print_path).convert("RGBA")
     pixels = image.load()
-    weighted_total = 0.0
+    brightness_total = 0.0
+    saturation_total = 0.0
     alpha_total = 0.0
     for y in range(image.height):
         for x in range(image.width):
@@ -116,12 +128,26 @@ def _subject_brightness(print_path: Path) -> float:
             if alpha <= 0:
                 continue
             brightness = red * 0.299 + green * 0.587 + blue * 0.114
+            _hue, saturation, _value = colorsys.rgb_to_hsv(red / 255.0, green / 255.0, blue / 255.0)
             weight = alpha / 255.0
-            weighted_total += brightness * weight
+            brightness_total += brightness * weight
+            saturation_total += saturation * weight
             alpha_total += weight
     if alpha_total <= 0:
-        return 255.0
-    return weighted_total / alpha_total
+        metrics = (255.0, 0.0)
+    else:
+        metrics = (brightness_total / alpha_total, saturation_total / alpha_total)
+    _PRINT_METRIC_CACHE[cache_key] = metrics
+    return metrics
+
+
+def _subject_saturation(print_path: Path) -> float:
+    _brightness, saturation = _subject_metrics(print_path)
+    return saturation
+
+
+def is_grayscale_print(print_path: Path, *, saturation_threshold: float) -> bool:
+    return _subject_saturation(print_path) < max(0.0, min(1.0, saturation_threshold))
 
 
 def choose_mockup_model_for_print(print_path: Path) -> str:
@@ -151,25 +177,37 @@ def choose_mockup_models_for_batch(
     *,
     model_dir: Path,
     assignment_seed: str,
+    saturation_threshold: float = 0.15,
 ) -> dict[Path, MockupAssignment]:
     if not print_paths:
         return {}
     black_pool, white_pool = _collect_model_pools(model_dir)
     ordered_paths = sorted(print_paths, key=lambda path: path.name.lower())
     rng = random.Random(_stable_seed_text(assignment_seed))
-    shuffled_indexes = list(range(len(ordered_paths)))
+    grayscale_paths: list[Path] = []
+    colorful_paths: list[Path] = []
+    for path in ordered_paths:
+        if is_grayscale_print(path, saturation_threshold=saturation_threshold):
+            grayscale_paths.append(path)
+        else:
+            colorful_paths.append(path)
+    shuffled_indexes = list(range(len(colorful_paths)))
     rng.shuffle(shuffled_indexes)
 
-    black_target = len(ordered_paths) // 2
-    white_target = len(ordered_paths) - black_target
+    black_target = len(colorful_paths) // 2
+    white_target = len(colorful_paths) - black_target
     color_slots = [BLACK_COLOR_NAME] * black_target + [WHITE_COLOR_NAME] * white_target
     rng.shuffle(color_slots)
 
     black_cycle = 0
     white_cycle = 0
     assignments: dict[Path, MockupAssignment] = {}
+    for print_path in grayscale_paths:
+        model_path = white_pool[white_cycle % len(white_pool)]
+        white_cycle += 1
+        assignments[print_path] = MockupAssignment(model_path=model_path, color_name=WHITE_COLOR_NAME)
     for order_index, shuffled_index in enumerate(shuffled_indexes):
-        print_path = ordered_paths[shuffled_index]
+        print_path = colorful_paths[shuffled_index]
         color_name = color_slots[order_index]
         if color_name == BLACK_COLOR_NAME:
             model_path = black_pool[black_cycle % len(black_pool)]
@@ -251,6 +289,7 @@ def build_product_images(
     final_product_dir: Path,
     product_title: str,
     model_dir: Path,
+    saturation_threshold: float = 0.15,
 ) -> tuple[list[Path], dict[str, str]]:
     if not model_dir.exists() or not model_dir.is_dir():
         raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
@@ -269,6 +308,7 @@ def build_product_images(
         print_paths,
         model_dir=model_dir,
         assignment_seed=f"{print_paths[0].stem}-{len(print_paths)}",
+        saturation_threshold=saturation_threshold,
     )
     outputs: list[Path] = []
     color_assignments: dict[str, str] = {}
@@ -305,6 +345,7 @@ def _build_product_images_balanced(
     final_product_dir: Path,
     product_title: str,
     model_dir: Path,
+    saturation_threshold: float = 0.15,
 ) -> tuple[list[Path], dict[str, str]]:
     if not model_dir.exists() or not model_dir.is_dir():
         raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
@@ -323,6 +364,7 @@ def _build_product_images_balanced(
         print_paths,
         model_dir=model_dir,
         assignment_seed=f"{print_paths[0].stem}-{len(print_paths)}",
+        saturation_threshold=saturation_threshold,
     )
     cloth_blend = composite_one.__globals__["cloth_blend"]
     outputs: list[Path] = []
@@ -379,14 +421,21 @@ def _load_existing_color_assignments(xlsx_path: Path) -> dict[str, str]:
         wb.close()
 
 
-def _collect_color_assignments_from_transparent_dir(final_transparent_dir: Path) -> dict[str, str]:
+def _collect_color_assignments_from_transparent_dir(
+    final_transparent_dir: Path,
+    *,
+    saturation_threshold: float = 0.15,
+) -> dict[str, str]:
     if not final_transparent_dir.exists():
         return {}
     assignments: dict[str, str] = {}
     for path in sorted(final_transparent_dir.glob("*.png")):
         if not path.is_file():
             continue
-        assignments[path.stem] = _assignment_to_color_name(choose_mockup_model_for_print(path))
+        assignments[path.stem] = WHITE_COLOR_NAME if is_grayscale_print(
+            path,
+            saturation_threshold=saturation_threshold,
+        ) else BLACK_COLOR_NAME
     return assignments
 
 
@@ -394,10 +443,14 @@ def backfill_xlsx_colors_from_transparent_dir(
     *,
     xlsx_path: Path,
     final_transparent_dir: Path,
+    saturation_threshold: float = 0.15,
 ) -> int:
     if not xlsx_path.exists() or not final_transparent_dir.exists():
         return 0
-    inferred_colors = _collect_color_assignments_from_transparent_dir(final_transparent_dir)
+    inferred_colors = _collect_color_assignments_from_transparent_dir(
+        final_transparent_dir,
+        saturation_threshold=saturation_threshold,
+    )
     if not inferred_colors:
         return 0
 
@@ -466,6 +519,7 @@ def formalize_ai_edit_outputs(
     product_title: str,
     xlsx_batch_start_number: int | None = None,
     xlsx_batch_count: int | None = None,
+    saturation_threshold: float = 0.15,
 ) -> AIEditFormalizeSummary:
     if not model_dir.exists() or not model_dir.is_dir():
         raise FileNotFoundError(f"模特底图目录不存在: {model_dir}")
@@ -480,6 +534,7 @@ def formalize_ai_edit_outputs(
         final_product_dir=final_product_dir,
         product_title=product_title,
         model_dir=model_dir,
+        saturation_threshold=saturation_threshold,
     )
     write_xlsx(
         xlsx_path=xlsx_path,

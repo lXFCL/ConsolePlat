@@ -26,6 +26,7 @@ def prepare_ai_edit_print_assets(
     split_count: int,
     x_guides: list[int] | None = None,
     y_guides: list[int] | None = None,
+    drop_first_split: bool = False,
 ) -> list[PreparedPrintAsset]:
     final_dir = Path(final_transparent_dir)
     final_dir.mkdir(parents=True, exist_ok=True)
@@ -51,6 +52,7 @@ def prepare_ai_edit_print_assets(
                     max(1, int(split_count or 1)),
                     list(x_guides or []),
                     list(y_guides or []),
+                    drop_first=drop_first_split,
                 )
             ]
         else:

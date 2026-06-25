@@ -137,6 +137,35 @@ def test_ai_edit_page_save_persists_prompt_and_reference_dir(tmp_path, monkeypat
     page.close()
 
 
+def test_ai_edit_page_can_clear_reference_images(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "refs" / "input.png"
+    image.parent.mkdir(parents=True, exist_ok=True)
+    image.write_bytes(b"fake")
+    page, path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_reference_dir=str(image.parent),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+
+    page._add_image_item(str(image))
+    page.clear_reference_images()
+
+    saved = SettingsStore(path).load()
+
+    assert page.image_list.count() == 0
+    assert page.selected_image_path_label.text() == "--"
+    assert page._selected_images() == []
+    assert saved.ai_edit_reference_dir == ""
+
+    page.close()
+
+
 def test_ai_edit_page_save_persists_ai_edit_controls(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -205,6 +234,87 @@ def test_ai_edit_page_restores_tasks_and_deletes_failed(tmp_path, monkeypatch):
     assert [record.title for record in page.tasks] == ["success"]
     saved = (tasks_dir / "ai_edit_tasks.json").read_text(encoding="utf-8")
     assert '"title": "failed"' not in saved
+
+    page.close()
+
+
+def test_ai_edit_page_load_history_does_not_backfill_colors_synchronously(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    settings_path = tmp_path / "settings.json"
+    program_data_dir = tmp_path / "ConsolePlatData"
+    SettingsStore(settings_path).save(AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(program_data_dir)))
+    tasks_dir = program_data_dir / "tasks"
+    tasks_dir.mkdir(parents=True)
+    (tasks_dir / "ai_edit_tasks.json").write_text(
+        '[{"task_id":"20260623120100","title":"success","status":"完成","stage_text":"已完成","progress_percent":100,"logs":[],'
+        '"output_dir":"E:/out/b","outputs":[],"failed":[],"warnings":[],"round_sources":[],"active_round_index":0,'
+        '"final_transparent_dir":"E:/gallery/final","final_product_dir":"","xlsx_path":"E:/gallery/batch.xlsx","split_profile":{},'
+        '"job":{"images":[],"prompt":"b","api_key":"","api_base":"https://api.openai.com/v1","model":"gpt-image-2",'
+        '"output_dir":"E:/out/b","size":"1024x1024","split_collage":true,"split_count":10,"total_return_count":2,'
+        '"prefix":"BO","start_number":1662,"test_mode":true,"gallery_root":"E:/gallery","mockup_root":"E:/mockup","xlsx_root":"E:/xlsx"}}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.SettingsStore", lambda: SettingsStore(settings_path))
+
+    called = {"count": 0}
+
+    def fake_backfill(*args, **kwargs):
+        called["count"] += 1
+        return 1
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.backfill_xlsx_colors_from_transparent_dir", fake_backfill)
+
+    page = AIEditPage()
+
+    assert page.task_list.count() == 1
+    assert called["count"] == 0
+
+    page.close()
+
+
+def test_ai_edit_page_show_task_detail_schedules_backfill_for_selected_task(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_drop_first_per_round=False,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623123002",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="prompt", prefix="BO", start_number=1661),
+        xlsx_path=str(tmp_path / "batch.xlsx"),
+        final_transparent_dir=str(tmp_path / "final-transparent"),
+    )
+    page.tasks = [record]
+    page._rebuild_task_list()
+
+    scheduled = {}
+
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["task_id"] = current_record.task_id
+
+    class FakeDialog:
+        def __init__(self, record_arg, parent):
+            self.record = record_arg
+            self.parent = parent
+
+        def exec_(self):
+            return 0
+
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.AIEditTaskDetailDialog", FakeDialog)
+
+    page.show_task_detail(page.task_list.item(0))
+
+    assert scheduled == {"action": "backfill_colors", "task_id": "20260623123002"}
 
     page.close()
 
@@ -321,7 +431,11 @@ def test_ai_edit_page_finalize_task_schedules_post_process_in_background(tmp_pat
     page, _path = _page_with_temp_store(
         tmp_path,
         monkeypatch,
-        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_drop_first_per_round=False,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
     )
     page.current_task = AIEditTaskRecord(
         task_id="20260623192000",
@@ -405,7 +519,11 @@ def test_ai_edit_page_split_current_round_keeps_full_round_list_for_detail_view(
     page, _path = _page_with_temp_store(
         tmp_path,
         monkeypatch,
-        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_drop_first_per_round=False,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
     )
     first_round = tmp_path / "edited_round_01_transparent.png"
     second_round = tmp_path / "edited_round_02_transparent.png"
@@ -448,13 +566,68 @@ def test_ai_edit_page_split_current_round_keeps_full_round_list_for_detail_view(
     page.close()
 
 
+def test_ai_edit_page_split_current_round_uses_effective_count_when_drop_first_enabled(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_drop_first_per_round=True,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    first_round = tmp_path / "edited_round_01_transparent.png"
+    second_round = tmp_path / "edited_round_02_transparent.png"
+    first_round.write_bytes(b"round1")
+    second_round.write_bytes(b"round2")
+    record = AIEditTaskRecord(
+        task_id="20260623192101x",
+        title="AI 改图 SZW-3438",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=25,
+            prefix="SZW",
+            start_number=3438,
+        ),
+        output_dir=str(tmp_path),
+        round_sources=[str(first_round), str(second_round)],
+    )
+
+    scheduled = {}
+
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["round_sources"] = list(current_record.round_sources)
+        scheduled["start_number"] = current_record.job.start_number
+
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
+
+    page.split_current_round(record, str(second_round))
+
+    assert scheduled == {
+        "action": "split_current_round",
+        "round_sources": [str(second_round)],
+        "start_number": 3462,
+    }
+
+    page.close()
+
+
 def test_ai_edit_page_split_current_round_uses_recovered_second_round_start_number(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
     page, _path = _page_with_temp_store(
         tmp_path,
         monkeypatch,
-        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_drop_first_per_round=False,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
     )
     output_dir = tmp_path / "output"
     output_dir.mkdir(parents=True)
@@ -636,7 +809,11 @@ def test_ai_edit_page_background_split_result_preserves_rounds_and_updates_secon
     page, _path = _page_with_temp_store(
         tmp_path,
         monkeypatch,
-        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_drop_first_per_round=True,
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
     )
     record = AIEditTaskRecord(
         task_id="20260623192351",
@@ -668,9 +845,9 @@ def test_ai_edit_page_background_split_result_preserves_rounds_and_updates_secon
     page._on_background_job_finished(result)
 
     assert record.round_sources == [str(first_round), str(second_round)]
-    assert record.outputs == [str(final_transparent_dir / "SZW-3440.png"), str(final_transparent_dir / "SZW-3441.png")]
-    assert (final_transparent_dir / "SZW-3440.png").read_bytes() == b"new-second-a"
-    assert (final_transparent_dir / "SZW-3441.png").read_bytes() == b"new-second-b"
+    assert record.outputs == [str(final_transparent_dir / "SZW-3439.png"), str(final_transparent_dir / "SZW-3440.png")]
+    assert (final_transparent_dir / "SZW-3439.png").read_bytes() == b"new-second-a"
+    assert (final_transparent_dir / "SZW-3440.png").read_bytes() == b"new-second-b"
 
     page.close()
 
@@ -1497,7 +1674,7 @@ def test_ai_edit_page_repairs_short_saved_round_sources_from_batch_rounds(tmp_pa
     page.close()
 
 
-def test_ai_edit_page_backfills_xlsx_colors_when_restoring_history(tmp_path, monkeypatch):
+def test_ai_edit_page_backfills_xlsx_colors_when_opening_task_detail(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
     settings_path = tmp_path / "settings.json"
@@ -1565,11 +1742,13 @@ def test_ai_edit_page_backfills_xlsx_colors_when_restoring_history(tmp_path, mon
     monkeypatch.setattr("consoleplat.ui.ai_edit_page.SettingsStore", lambda: SettingsStore(settings_path))
 
     page = AIEditPage()
+    worker = AIEditBackgroundWorker("backfill_colors", page.tasks[0], SettingsStore(settings_path).load())
+    worker._run_backfill_colors()
 
     wb = load_workbook(xlsx_path, read_only=True, data_only=True)
     ws = wb.active
     assert ws["E2"].value == "白"
-    assert ws["E3"].value == "黑"
+    assert ws["E3"].value == "白"
     wb.close()
 
     page.close()
@@ -2294,7 +2473,7 @@ def test_ai_edit_background_export_product_images_rebuilds_from_transparent_and_
     )
     captured = {}
 
-    def fake_build_product_images(*, print_paths, final_product_dir, product_title, model_dir):
+    def fake_build_product_images(*, print_paths, final_product_dir, product_title, model_dir, **kwargs):
         captured["print_paths"] = [path.name for path in print_paths]
         captured["final_product_dir"] = final_product_dir
         captured["product_title"] = product_title

@@ -197,6 +197,8 @@ class AppSettings:
     ai_edit_split_count: int = 10
     ai_edit_total_return_count: int = 10
     ai_edit_reference_dir: str = ""
+    ai_edit_drop_first_per_round: bool = True
+    ai_edit_grayscale_saturation_threshold: float = 0.15
     posai_gallery_root: str = ""
     posai_mockup_root: str = ""
     posai_xlsx_root: str = ""
@@ -321,6 +323,11 @@ class SettingsStore:
             ai_edit_split_count=max(1, int(data.get("ai_edit_split_count") or 10)),
             ai_edit_total_return_count=max(1, int(data.get("ai_edit_total_return_count") or 10)),
             ai_edit_reference_dir=str(data.get("ai_edit_reference_dir") or ""),
+            ai_edit_drop_first_per_round=bool(data.get("ai_edit_drop_first_per_round", True)),
+            ai_edit_grayscale_saturation_threshold=max(
+                0.0,
+                min(1.0, float(data.get("ai_edit_grayscale_saturation_threshold") or 0.15)),
+            ),
             posai_gallery_root=str(data.get("posai_gallery_root") or ""),
             posai_mockup_root=str(data.get("posai_mockup_root") or ""),
             posai_xlsx_root=str(data.get("posai_xlsx_root") or ""),
@@ -393,6 +400,11 @@ class SettingsStore:
             "ai_edit_split_count": max(1, int(settings.ai_edit_split_count or 10)),
             "ai_edit_total_return_count": max(1, int(settings.ai_edit_total_return_count or 10)),
             "ai_edit_reference_dir": settings.ai_edit_reference_dir or "",
+            "ai_edit_drop_first_per_round": bool(settings.ai_edit_drop_first_per_round),
+            "ai_edit_grayscale_saturation_threshold": max(
+                0.0,
+                min(1.0, float(settings.ai_edit_grayscale_saturation_threshold or 0.15)),
+            ),
             "posai_gallery_root": settings.posai_gallery_root or "",
             "posai_mockup_root": settings.posai_mockup_root or "",
             "posai_xlsx_root": settings.posai_xlsx_root or "",

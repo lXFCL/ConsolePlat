@@ -453,6 +453,28 @@ def test_split_collage_image_uses_original_boxes_and_falls_back_to_5x5_grid(tmp_
     assert len(boxes_seen) == 25
 
 
+def test_split_collage_image_with_guides_can_drop_first_part(tmp_path):
+    source = tmp_path / "collage.png"
+    _make_collage_png(source)
+    transparent = Path(ai_image_edit_cli.convert_image_to_transparent_background(source))
+
+    outputs = [
+        Path(path)
+        for path in ai_image_edit_cli.split_collage_image_with_guides(
+            transparent,
+            tmp_path / "split",
+            2,
+            drop_first=True,
+        )
+    ]
+
+    assert [path.name for path in outputs] == [
+        "collage_transparent_part_01.png",
+    ]
+    first = Image.open(outputs[0]).convert("RGBA")
+    assert first.getpixel((first.width // 2, first.height // 2))[2] > 150
+
+
 def base64_bytes(text: str) -> str:
     import base64
 

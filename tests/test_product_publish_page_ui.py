@@ -1,5 +1,7 @@
+import json
 from pathlib import Path
 
+from PIL import Image
 from PyQt5.QtWidgets import QApplication, QListWidget, QMessageBox
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, LocalImageJob
@@ -113,6 +115,33 @@ def test_product_publish_page_batch_delete_toggle_matches_ai_page_pattern(tmp_pa
 
     assert page.task_list.selectionMode() == QListWidget.SingleSelection
     assert page.batch_delete_button.isEnabled() is False
+
+    page.close()
+
+
+def test_product_publish_page_can_clear_reference_images(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    image = tmp_path / "reference.png"
+    image.write_bytes(b"fake")
+    page, path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            ai_edit_api_key="stored-key",
+            ai_edit_reference_dir=str(tmp_path),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+
+    page._add_reference_image(str(image))
+    page.clear_reference_images()
+
+    saved = SettingsStore(path).load()
+
+    assert page.reference_count_label.text() == "参考图 0 张"
+    assert page._reference_images == []
+    assert saved.publish_ai_reference_images == []
 
     page.close()
 
@@ -544,6 +573,177 @@ def test_product_publish_page_finish_ai_generation_auto_formalizes_and_handoffs(
     page.close()
 
 
+def test_product_publish_page_formalize_ai_outputs_prepares_transparent_outputs_before_formalize(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+            publish_handoff_delay_seconds=0,
+            publish_pause_before_putaway=False,
+            publish_test_mode=False,
+        ),
+    )
+    record = ProductTaskRecord(
+        task_id="20260622124600",
+        task_name="SZW publish task",
+        prefix="SZW",
+        start_number=3213,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+        test_mode=False,
+    )
+    record.job_payload = {
+        "images": [str(tmp_path / "ref.png")],
+        "prompt": "keep subject",
+        "api_base": "https://api.openai.com/v1",
+        "model": "gpt-image-2",
+        "output_dir": str(tmp_path / "gallery" / "SZW" / "2026" / "6月" / "AI改图_SZW-3213-SZW-3262_2026.0622.2040.30" / "临时输出"),
+        "final_transparent_dir": str(tmp_path / "gallery" / "SZW" / "2026" / "6月" / "AI改图_SZW-3213-SZW-3262_2026.0622.2040.30" / "最终透明底"),
+        "size": "1024x1024",
+        "split_collage": True,
+        "split_count": 25,
+        "total_return_count": 2,
+    }
+
+    transparent_dir = Path(record.job_payload["final_transparent_dir"])
+    transparent_dir.mkdir(parents=True, exist_ok=True)
+    raw_round = tmp_path / "gallery" / "SZW" / "2026" / "6月" / "AI改图_SZW-3213-SZW-3262_2026.0622.2040.30" / "edited_round_01.png"
+    raw_round.parent.mkdir(parents=True, exist_ok=True)
+    raw_round.write_bytes(b"round")
+    split_part_a = raw_round.parent / "edited_round_01_split" / "edited_round_01_part_01.png"
+    split_part_b = raw_round.parent / "edited_round_01_split" / "edited_round_01_part_02.png"
+    split_part_a.parent.mkdir(parents=True, exist_ok=True)
+    split_part_a.write_bytes(b"a")
+    split_part_b.write_bytes(b"b")
+
+    called = {}
+
+    def fake_prepare_ai_edit_print_assets(**kwargs):
+        called["source_paths"] = [str(path) for path in kwargs["source_paths"]]
+        called["final_transparent_dir"] = str(kwargs["final_transparent_dir"])
+
+        class Asset:
+            transparent_path = raw_round.with_name("edited_round_01_transparent.png")
+            split_paths = [Path(record.job_payload["final_transparent_dir"]) / "SZW-3213.png", Path(record.job_payload["final_transparent_dir"]) / "SZW-3214.png"]
+
+        return [Asset()]
+
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.prepare_ai_edit_print_assets", fake_prepare_ai_edit_print_assets)
+
+    def fake_formalize_ai_edit_outputs(**kwargs):
+        called["formalize_outputs"] = [str(path) for path in kwargs["split_paths"]]
+
+        class Summary:
+            ok = True
+            renamed_outputs = [str(Path(record.job_payload["final_transparent_dir"]) / "SZW-3213.png"), str(Path(record.job_payload["final_transparent_dir"]) / "SZW-3214.png")]
+            product_outputs = [str(tmp_path / "products" / "fixed.png")]
+            xlsx_path = str(tmp_path / "batch.xlsx")
+            putaway = None
+            message = "formalize done"
+
+        return Summary()
+
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.formalize_ai_edit_outputs", fake_formalize_ai_edit_outputs)
+
+    class AISummary:
+        ok = True
+        output_dir = str(raw_round.parent)
+        outputs = [
+            str(raw_round),
+            str(split_part_a),
+            str(split_part_b),
+        ]
+        failed = []
+        warnings = []
+        message = "AI 改图完成"
+
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.PosAiImgAdapter.parse_ai_edit_result", lambda *_args, **_kwargs: AISummary())
+
+    ok = page._formalize_ai_outputs(record, [str(raw_round), str(split_part_a), str(split_part_b)])
+
+    assert ok is True
+    assert called["source_paths"] == [str(raw_round)]
+    assert called["final_transparent_dir"] == str(transparent_dir)
+    assert called["formalize_outputs"] == [str(Path(record.job_payload["final_transparent_dir"]) / "SZW-3213.png"), str(Path(record.job_payload["final_transparent_dir"]) / "SZW-3214.png")]
+
+    page.close()
+
+
+def test_product_publish_page_formalize_ai_outputs_passes_model_dir_from_settings(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    model_root = tmp_path / "models"
+    final_transparent_dir = tmp_path / "gallery" / "final"
+    split_path = tmp_path / "gallery" / "output" / "edited_round_01_part_01.png"
+    final_transparent_dir.mkdir(parents=True, exist_ok=True)
+    split_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (32, 32), (255, 255, 255, 255)).save(split_path)
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            posai_model_root=str(model_root),
+            putaway_data_dir=str(tmp_path / "putaway-data"),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+    record = ProductTaskRecord(
+        task_id="20260624194000",
+        task_name="ai publish",
+        prefix="SZW",
+        start_number=3363,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+        test_mode=False,
+    )
+    record.job_payload = {
+        "final_transparent_dir": str(final_transparent_dir),
+        "split_count": 25,
+        "total_return_count": 2,
+    }
+
+    captured = {}
+
+    def fake_formalize_ai_edit_outputs(**kwargs):
+        captured["model_dir"] = kwargs["model_dir"]
+
+        class Summary:
+            ok = True
+            renamed_outputs = [str(final_transparent_dir / "SZW-3363.png")]
+            product_outputs = [str(tmp_path / "products" / "fixed.png")]
+            xlsx_path = str(tmp_path / "batch.xlsx")
+            putaway = None
+            message = "formalize done"
+
+        return Summary()
+
+    def fake_prepare_ai_edit_print_assets(**kwargs):
+        captured["prepare_sources"] = [str(path) for path in kwargs["source_paths"]]
+
+        class Asset:
+            transparent_path = split_path.with_name("edited_round_01_transparent.png")
+            split_paths = [final_transparent_dir / "SZW-3363.png"]
+
+        return [Asset()]
+
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.prepare_ai_edit_print_assets", fake_prepare_ai_edit_print_assets)
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.formalize_ai_edit_outputs", fake_formalize_ai_edit_outputs)
+
+    ok = page._formalize_ai_outputs(record, [str(split_path)])
+
+    assert ok is True
+    assert captured["prepare_sources"] == [str(split_path)]
+    assert captured["model_dir"] == model_root
+
+    page.close()
+
+
 def test_product_publish_page_syncs_mirror_task_store_for_local_and_ai(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -600,6 +800,12 @@ def test_product_publish_page_syncs_mirror_task_store_for_local_and_ai(tmp_path,
             "gallery_root": "E:/gallery",
             "mockup_root": "E:/mockup",
             "xlsx_root": "E:/xlsx",
+            "outputs": [
+                "E:/ai/output/edited_round_01.png",
+                "E:/ai/output/edited_round_01_split/edited_round_01_part_01.png",
+                "E:/ai/output/edited_round_02.png",
+                "E:/ai/output/edited_round_02_split/edited_round_02_part_01.png",
+            ],
         },
     )
 
@@ -609,9 +815,14 @@ def test_product_publish_page_syncs_mirror_task_store_for_local_and_ai(tmp_path,
     program_data_dir = Path(SettingsStore(path).load().program_data_dir)
     local_saved = (program_data_dir / "tasks" / "local_image_tasks.json").read_text(encoding="utf-8")
     ai_saved = (program_data_dir / "tasks" / "ai_edit_tasks.json").read_text(encoding="utf-8")
+    ai_payload = json.loads(ai_saved)
 
     assert "20260622130000" in local_saved
     assert "20260622130100" in ai_saved
+    assert ai_payload[0]["round_sources"] == [
+        "E:/ai/output/edited_round_01.png",
+        "E:/ai/output/edited_round_02.png",
+    ]
 
     page.close()
 
@@ -870,6 +1081,71 @@ def test_product_publish_page_local_generation_waits_for_comfyui(tmp_path, monke
     page.close()
 
 
+def test_product_publish_page_start_process_logs_current_ai_api_base(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    record = ProductTaskRecord(
+        task_id="20260624190000",
+        task_name="ai publish",
+        prefix="SZW",
+        start_number=3363,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+    )
+
+    class FakeSignal:
+        def __init__(self):
+            self.callbacks = []
+
+        def connect(self, callback):
+            self.callbacks.append(callback)
+
+    class FakeProcess:
+        Running = 2
+        Starting = 1
+
+        def __init__(self, *_args, **_kwargs):
+            self.readyReadStandardOutput = FakeSignal()
+            self.readyReadStandardError = FakeSignal()
+            self.finished = FakeSignal()
+            self.errorOccurred = FakeSignal()
+            self.started = FakeSignal()
+
+        def setProgram(self, program):
+            self.program = program
+
+        def setArguments(self, arguments):
+            self.arguments = list(arguments)
+
+        def setWorkingDirectory(self, cwd):
+            self.cwd = cwd
+
+        def setProcessEnvironment(self, env):
+            self.env = env
+
+        def processId(self):
+            return 12345
+
+        def start(self):
+            return None
+
+    monkeypatch.setattr("consoleplat.ui.product_publish_page.QProcess", FakeProcess)
+    page._start_process(
+        record,
+        "python",
+        ["-u", "-m", "consoleplat.services.ai_image_edit_cli"],
+        tmp_path,
+        api_key="stored-key",
+        api_base="https://api.example.test/v1",
+    )
+
+    assert any("当前 AI 接口：https://api.example.test/v1" in line for line in record.logs)
+
+    page.close()
+
+
 def test_product_publish_page_debounces_progress_persistence_and_updates_item(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -920,18 +1196,18 @@ def test_product_publish_page_debounces_text_preference_saves(tmp_path, monkeypa
     original_save = page.settings_store.save
     monkeypatch.setattr(page.settings_store, "save", lambda settings: save_calls.append(settings.publish_task_name))
 
-    page.task_name_edit.setText("task A")
-    page.task_name_edit.setText("task AB")
+    page.task_name_edit.setText("任务 A")
+    page.task_name_edit.setText("任务 AB")
     page.ai_prompt_edit.setPlainText("prompt one")
     page.ai_prompt_edit.setPlainText("prompt two")
 
     assert save_calls == []
-    assert page.settings.publish_task_name == "task AB"
+    assert page.settings.publish_task_name == "任务 AB"
     assert page.settings.publish_ai_prompt == "prompt two"
 
     page._flush_preference_save()
 
-    assert save_calls == ["task AB"]
+    assert save_calls == ["任务 AB"]
 
     monkeypatch.setattr(page.settings_store, "save", original_save)
     page.close()

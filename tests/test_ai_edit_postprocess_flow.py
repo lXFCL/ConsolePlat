@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from openpyxl import Workbook, load_workbook
 from PIL import Image
 from PyQt5.QtWidgets import QApplication
 
@@ -9,7 +10,9 @@ from consoleplat.services.ai_edit_formalize_service import (
     AIEditFormalizeSummary,
     BLACK_COLOR_NAME,
     WHITE_COLOR_NAME,
+    backfill_xlsx_colors_from_transparent_dir,
     choose_mockup_models_for_batch,
+    is_grayscale_print,
     fit_print_within_safe_box,
     rename_split_outputs,
 )
@@ -118,7 +121,7 @@ def test_ai_edit_page_formal_mode_converts_and_splits_before_formalize(tmp_path,
         called["convert_output_dir"] = str(output_dir) if output_dir is not None else None
         return str(converted)
 
-    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None):
+    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None, **kwargs):
         part_a.parent.mkdir(parents=True, exist_ok=True)
         part_a.write_bytes(b"a")
         part_b.write_bytes(b"b")
@@ -178,7 +181,7 @@ def test_prepare_ai_edit_print_assets_renames_split_outputs_into_final_transpare
         Image.new("RGBA", (64, 64), (0, 0, 0, 0)).save(converted)
         return str(converted)
 
-    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None):
+    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None, **kwargs):
         split_dir.mkdir(parents=True, exist_ok=True)
         Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(raw_part_a)
         Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(raw_part_b)
@@ -222,6 +225,44 @@ def test_prepare_ai_edit_print_assets_keeps_existing_final_transparent_files(tmp
     assert assets[0].transparent_path == transparent_source
     assert assets[0].split_paths == [source]
     assert source.exists() is True
+
+
+def test_prepare_ai_edit_print_assets_can_drop_first_split_output(tmp_path, monkeypatch):
+    source = tmp_path / "edited_round_01.png"
+    Image.new("RGBA", (64, 64), (255, 255, 255, 255)).save(source)
+
+    converted = tmp_path / "edited_round_01_transparent.png"
+    split_dir = tmp_path / "edited_round_01_transparent_split"
+    raw_part_a = split_dir / "edited_round_01_transparent_part_01.png"
+    raw_part_b = split_dir / "edited_round_01_transparent_part_02.png"
+    captured = {}
+
+    def fake_convert(path, output_dir=None):
+        Image.new("RGBA", (64, 64), (0, 0, 0, 0)).save(converted)
+        return str(converted)
+
+    def fake_split(path, output_dir, split_count, x_guides=None, y_guides=None, original_image=None, drop_first=False):
+        captured["drop_first"] = drop_first
+        split_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(raw_part_a)
+        Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(raw_part_b)
+        return [str(raw_part_b)] if drop_first else [str(raw_part_a), str(raw_part_b)]
+
+    monkeypatch.setattr("consoleplat.services.ai_edit_postprocess_service.convert_image_to_transparent_background", fake_convert)
+    monkeypatch.setattr("consoleplat.services.ai_edit_postprocess_service.split_collage_image_with_guides", fake_split)
+
+    assets = prepare_ai_edit_print_assets(
+        source_paths=[source],
+        final_transparent_dir=tmp_path / "final-transparent",
+        prefix="BO",
+        start_number=1661,
+        split_collage=True,
+        split_count=2,
+        drop_first_split=True,
+    )
+
+    assert captured["drop_first"] is True
+    assert [path.name for path in assets[0].split_paths] == ["BO-1661.png"]
 
 
 def test_rename_split_outputs_keeps_existing_final_transparent_files(tmp_path):
@@ -295,6 +336,16 @@ def test_choose_mockup_models_for_batch_balances_black_and_white_for_even_count(
     assert colors.count(WHITE_COLOR_NAME) == 5
 
 
+def test_is_grayscale_print_detects_low_saturation_subject(tmp_path):
+    grayscale = tmp_path / "gray.png"
+    Image.new("RGBA", (40, 40), (160, 160, 160, 255)).save(grayscale)
+    colorful = tmp_path / "color.png"
+    Image.new("RGBA", (40, 40), (255, 0, 0, 255)).save(colorful)
+
+    assert is_grayscale_print(grayscale, saturation_threshold=0.15) is True
+    assert is_grayscale_print(colorful, saturation_threshold=0.15) is False
+
+
 def test_choose_mockup_models_for_batch_balances_black_and_white_for_odd_count(tmp_path):
     model_dir = tmp_path / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -320,6 +371,67 @@ def test_choose_mockup_models_for_batch_balances_black_and_white_for_odd_count(t
     white_count = colors.count(WHITE_COLOR_NAME)
     assert abs(black_count - white_count) == 1
     assert black_count + white_count == 25
+
+
+def test_choose_mockup_models_for_batch_forces_grayscale_prints_to_white(tmp_path):
+    model_dir = tmp_path / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("主图1-黑.jpg", "主图2-黑.png", "主图5-白.jpg", "主图6-白.jpg"):
+        mode = "RGB" if name.lower().endswith(".jpg") else "RGBA"
+        color = (255, 255, 255) if mode == "RGB" else (255, 255, 255, 255)
+        Image.new(mode, (40, 40), color).save(model_dir / name)
+
+    gray_one = tmp_path / "BO-1661.png"
+    gray_two = tmp_path / "BO-1662.png"
+    color_one = tmp_path / "BO-1663.png"
+    color_two = tmp_path / "BO-1664.png"
+    Image.new("RGBA", (60, 60), (150, 150, 150, 255)).save(gray_one)
+    Image.new("RGBA", (60, 60), (210, 210, 210, 255)).save(gray_two)
+    Image.new("RGBA", (60, 60), (255, 0, 0, 255)).save(color_one)
+    Image.new("RGBA", (60, 60), (0, 0, 255, 255)).save(color_two)
+
+    assignments = choose_mockup_models_for_batch(
+        [gray_one, gray_two, color_one, color_two],
+        model_dir=model_dir,
+        assignment_seed="BO-1661",
+        saturation_threshold=0.15,
+    )
+
+    assert assignments[gray_one].color_name == WHITE_COLOR_NAME
+    assert assignments[gray_two].color_name == WHITE_COLOR_NAME
+    color_names = [assignments[color_one].color_name, assignments[color_two].color_name]
+    assert color_names.count(BLACK_COLOR_NAME) == 1
+    assert color_names.count(WHITE_COLOR_NAME) == 1
+
+
+def test_backfill_xlsx_colors_from_transparent_dir_uses_grayscale_rule(tmp_path):
+    xlsx_path = tmp_path / "batch.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet["D1"] = "产品序列号"
+    sheet["E1"] = "颜色"
+    sheet["D2"] = "BO-1661"
+    sheet["D3"] = "BO-1662"
+    workbook.save(xlsx_path)
+    workbook.close()
+
+    final_transparent_dir = tmp_path / "final-transparent"
+    final_transparent_dir.mkdir(parents=True, exist_ok=True)
+    Image.new("RGBA", (40, 40), (180, 180, 180, 255)).save(final_transparent_dir / "BO-1661.png")
+    Image.new("RGBA", (40, 40), (255, 0, 0, 255)).save(final_transparent_dir / "BO-1662.png")
+
+    updated = backfill_xlsx_colors_from_transparent_dir(
+        xlsx_path=xlsx_path,
+        final_transparent_dir=final_transparent_dir,
+        saturation_threshold=0.15,
+    )
+
+    reloaded = load_workbook(xlsx_path)
+    sheet = reloaded.active
+    assert updated == 2
+    assert sheet["E2"].value == WHITE_COLOR_NAME
+    assert sheet["E3"].value == BLACK_COLOR_NAME
+    reloaded.close()
 
 
 def test_fit_print_within_safe_box_limits_tall_design_height():
