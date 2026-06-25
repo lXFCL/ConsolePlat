@@ -64,6 +64,78 @@ def test_main_window_startup_update_result_shows_clickable_status_pill(monkeypat
     window.close()
 
 
+def test_main_window_startup_update_check_uses_thread_worker(monkeypatch):
+    class FakeAutoUpdateSettingsStore:
+        def load(self):
+            return AppSettings(
+                startup_width=1280,
+                startup_height=820,
+                check_update_on_startup=True,
+                update_proxy_enabled=True,
+                update_proxy_host="127.0.0.1",
+                update_proxy_port=7890,
+            )
+
+    app = QApplication.instance() or QApplication([])
+    started = {}
+
+    class FakeThread:
+        def __init__(self, parent=None):
+            started["thread_parent"] = parent
+            self.started = FakeSignal()
+            self.finished = FakeSignal()
+
+        def start(self):
+            started["thread_started"] = True
+
+        def quit(self):
+            started["thread_quit"] = True
+
+        def deleteLater(self):
+            started["thread_deleted"] = True
+
+    class FakeSignal:
+        def __init__(self):
+            self.callbacks = []
+
+        def connect(self, callback):
+            self.callbacks.append(callback)
+
+    class FakeWorker:
+        def __init__(self, proxy):
+            started["proxy_url"] = proxy.url
+            self.finished = FakeSignal()
+
+        def moveToThread(self, thread):
+            started["moved_to_thread"] = thread
+
+        def run(self):
+            started["worker_run_connected"] = True
+
+        def deleteLater(self):
+            started["worker_deleted"] = True
+
+    class FailingProcess:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("Startup update check should not create QProcess")
+
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeAutoUpdateSettingsStore())
+    monkeypatch.setattr("consoleplat.ui.main_window.QThread", FakeThread)
+    monkeypatch.setattr("consoleplat.ui.main_window.UpdateCheckWorker", FakeWorker)
+    monkeypatch.setattr("consoleplat.ui.main_window.QProcess", FailingProcess)
+
+    window = MainWindow()
+    window._maybe_check_update_on_startup()
+
+    assert started["thread_parent"] is window
+    assert started["proxy_url"] == "http://127.0.0.1:7890"
+    assert started["thread_started"] is True
+    assert window._update_check_thread is not None
+    assert window._update_check_worker is not None
+
+    window.close()
+
+
 def test_main_window_startup_update_result_respects_skipped_version(monkeypatch):
     class FakeSkippedSettingsStore:
         def load(self):

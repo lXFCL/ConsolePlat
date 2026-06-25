@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
-import sys
 from functools import partial
 
-from PyQt5.QtCore import QProcess, QTimer, Qt
+from PyQt5.QtCore import QProcess, QThread, QTimer, Qt
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QFrame,
@@ -21,6 +19,7 @@ from consoleplat import APP_NAME, APP_VERSION
 from consoleplat.config import SettingsStore
 from consoleplat.models import DEFAULT_NAV_ITEMS, PAGE_TITLES, ShellState
 from consoleplat.paths import resource_path
+from consoleplat.services.version_check_service import UpdateCheckWorker, UpdateProxyConfig
 from consoleplat.ui.ai_edit_page import AIEditPage
 from consoleplat.ui.apply_goods_page import ApplyGoodsPage
 from consoleplat.ui.local_image_page import LocalImagePage
@@ -82,7 +81,8 @@ class MainWindow(QMainWindow):
         self.pages: dict[str, QWidget] = {}
         self._page_placeholders: dict[str, QWidget] = {}
         self._built: set[str] = set()
-        self._update_check_process: QProcess | None = None
+        self._update_check_thread: QThread | None = None
+        self._update_check_worker: UpdateCheckWorker | None = None
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(QIcon(str(resource_path("assets/images/app_icon.ico"))))
@@ -211,21 +211,33 @@ class MainWindow(QMainWindow):
 
     def _maybe_check_update_on_startup(self) -> None:
         settings = SettingsStore().load()
-        if not settings.check_update_on_startup or self._update_check_process is not None:
+        if not settings.check_update_on_startup or self._update_check_thread is not None:
             return
-        self._update_check_process = QProcess(self)
-        self._update_check_process.finished.connect(self._on_startup_check_finished)
-        self._update_check_process.start(sys.executable, ["-m", "consoleplat.services.version_check_cli"])
+        proxy = UpdateProxyConfig(
+            enabled=settings.update_proxy_enabled,
+            host=settings.update_proxy_host,
+            port=settings.update_proxy_port,
+        )
+        thread = QThread(self)
+        worker = UpdateCheckWorker(proxy)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_startup_check_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._cleanup_update_check_worker(thread, worker))
+        self._update_check_thread = thread
+        self._update_check_worker = worker
+        thread.start()
 
-    def _on_startup_check_finished(self, *args) -> None:
-        if self._update_check_process is None:
-            return
-        raw = bytes(self._update_check_process.readAllStandardOutput()).decode("utf-8", errors="ignore")
-        self._update_check_process = None
-        try:
-            result = json.loads(raw or "{}")
-        except ValueError:
-            return
+    def _cleanup_update_check_worker(self, thread: QThread, worker: UpdateCheckWorker) -> None:
+        if self._update_check_thread is thread:
+            self._update_check_thread = None
+        if self._update_check_worker is worker:
+            self._update_check_worker = None
+
+    def _on_startup_check_finished(self, result: dict) -> None:
         self._on_startup_update_result(result)
 
     def _on_startup_update_result(self, result: dict) -> None:

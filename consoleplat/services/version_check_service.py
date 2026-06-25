@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlsplit
 
+from PyQt5.QtCore import QObject, pyqtSignal
+
 from consoleplat import APP_VERSION
 
 GITHUB_OWNER = "lXFCL"
@@ -55,6 +57,17 @@ class UpdateProxyConfig:
     @property
     def hint(self) -> str:
         return f"{self.address}（HTTP 代理地址，不要填 https://）"
+
+
+class UpdateCheckWorker(QObject):
+    finished = pyqtSignal(dict)
+
+    def __init__(self, proxy: UpdateProxyConfig | None = None) -> None:
+        super().__init__()
+        self.proxy = proxy
+
+    def run(self) -> None:
+        self.finished.emit(check_for_update(proxy=self.proxy))
 
 
 def parse_version(text: str) -> tuple[int, ...]:

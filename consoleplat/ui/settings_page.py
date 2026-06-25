@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QObject, QProcess, QThread, Qt, QUrl, pyqtSignal
+from PyQt5.QtCore import QObject, QThread, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (
     QButtonGroup,
@@ -37,8 +35,10 @@ from consoleplat.config import (
     default_project_search_roots,
     resolve_project_dir,
 )
-from consoleplat.services.version_check_service import download_asset
+from consoleplat.services.version_check_service import UpdateCheckWorker, download_asset
 from consoleplat.services.version_check_service import UpdateProxyConfig
+
+_UpdateCheckWorker = UpdateCheckWorker
 
 
 class _DownloadWorker(QObject):
@@ -69,7 +69,8 @@ class SettingsPage(QWidget):
         self.tab_buttons: dict[str, QPushButton] = {}
         self._provider_records: list[AIProviderConfig] = []
         self._provider_loading = False
-        self._update_process: QProcess | None = None
+        self._update_thread: QThread | None = None
+        self._update_worker: UpdateCheckWorker | None = None
         self._latest_release: dict | None = None
         self._download_thread: QThread | None = None
         self._download_worker: _DownloadWorker | None = None
@@ -562,26 +563,33 @@ class SettingsPage(QWidget):
             self.activate_module(keys.index("update"))
 
     def check_for_update(self) -> None:
-        if self._update_process is not None:
+        if self._update_thread is not None:
             return
         self.check_update_button.setEnabled(False)
         self.update_status_label.setText("正在连接 GitHub…")
-        self._update_process = QProcess(self)
-        self._update_process.finished.connect(self._on_check_finished)
-        self._update_process.start(sys.executable, ["-m", "consoleplat.services.version_check_cli"])
+        proxy = self._proxy_config_from_settings(self.store.load())
+        thread = QThread(self)
+        worker = _UpdateCheckWorker(proxy)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_check_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._cleanup_update_worker(thread, worker))
+        self._update_thread = thread
+        self._update_worker = worker
+        thread.start()
 
-    def _on_check_finished(self, *args) -> None:
-        if self._update_process is None:
-            return
-        raw = bytes(self._update_process.readAllStandardOutput()).decode("utf-8", errors="ignore")
-        self._update_process = None
+    def _cleanup_update_worker(self, thread: QThread, worker: UpdateCheckWorker) -> None:
+        if self._update_thread is thread:
+            self._update_thread = None
+        if self._update_worker is worker:
+            self._update_worker = None
+
+    def _on_check_finished(self, result: dict) -> None:
         self.check_update_button.setEnabled(True)
         self._persist_last_check_time()
-        try:
-            result = json.loads(raw or "{}")
-        except ValueError:
-            self.update_status_label.setText("解析检查结果失败")
-            return
         self._apply_update_check_result(result)
 
     def _apply_update_check_result(self, result: dict) -> None:
