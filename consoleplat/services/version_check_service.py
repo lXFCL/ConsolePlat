@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from typing import Callable
 from urllib.parse import urlsplit
 
 from PyQt5.QtCore import QObject, pyqtSignal
+import certifi
 
 from consoleplat import APP_VERSION
 
@@ -102,18 +104,24 @@ def _pick_asset(assets: list[dict]) -> tuple[str, str]:
     return "", ""
 
 
+def _create_https_context() -> ssl.SSLContext:
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 def _build_opener(proxy: UpdateProxyConfig | None = None, *, disable_env_proxy: bool = False):
+    https_handler = urllib.request.HTTPSHandler(context=_create_https_context())
     if disable_env_proxy:
-        return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}), https_handler)
     if not proxy or not proxy.enabled:
-        return urllib.request.build_opener()
+        return urllib.request.build_opener(https_handler)
     return urllib.request.build_opener(
         urllib.request.ProxyHandler(
             {
                 "http": proxy.url,
                 "https": proxy.url,
             }
-        )
+        ),
+        https_handler,
     )
 
 

@@ -8,6 +8,7 @@ import pytest
 from consoleplat.services.version_check_service import (
     UpdateProxyConfig,
     _build_opener,
+    _create_https_context,
     _pick_asset,
     check_for_update,
     is_newer,
@@ -88,7 +89,8 @@ def test_build_opener_uses_proxy_for_http_and_https(monkeypatch):
         pass
 
     monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.ProxyHandler", FakeProxyHandler)
-    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.build_opener", lambda handler: FakeOpener())
+    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.HTTPSHandler", lambda context=None: ("https", context))
+    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.build_opener", lambda *handlers: FakeOpener())
 
     opener = _build_opener(UpdateProxyConfig(enabled=True, host="127.0.0.1", port=7890))
 
@@ -183,6 +185,7 @@ def test_check_for_update_retries_without_proxy_after_tls_proxy_handshake_error(
 
 def test_build_opener_without_proxy_bypasses_environment_proxy(monkeypatch):
     captured = []
+    handlers_seen = []
 
     class FakeProxyHandler:
         def __init__(self, proxies):
@@ -192,27 +195,29 @@ def test_build_opener_without_proxy_bypasses_environment_proxy(monkeypatch):
         pass
 
     monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.ProxyHandler", FakeProxyHandler)
+    monkeypatch.setattr("consoleplat.services.version_check_service.urllib.request.HTTPSHandler", lambda context=None: ("https", context))
     monkeypatch.setattr(
         "consoleplat.services.version_check_service.urllib.request.build_opener",
-        lambda *handlers: FakeOpener(),
+        lambda *handlers: handlers_seen.extend(handlers) or FakeOpener(),
     )
 
     opener = _build_opener(UpdateProxyConfig(enabled=False), disable_env_proxy=True)
 
     assert isinstance(opener, FakeOpener)
     assert captured == [{}]
+    assert any(isinstance(handler, tuple) and handler[0] == "https" for handler in handlers_seen)
 
 
 def test_check_for_update_without_proxy_uses_direct_fetch(monkeypatch):
     calls = []
 
     class FakeRelease:
-        version = "1.5.3"
-        tag_name = "v1.5.3"
-        name = "ConsolePlat 1.5.3"
+        version = "1.5.4"
+        tag_name = "v1.5.4"
+        name = "ConsolePlat 1.5.4"
         body = "direct fetch"
-        html_url = "https://github.com/lXFCL/ConsolePlat/releases/tag/v1.5.3"
-        download_url = "https://github.com/lXFCL/ConsolePlat/releases/download/v1.5.3/app.zip"
+        html_url = "https://github.com/lXFCL/ConsolePlat/releases/tag/v1.5.4"
+        download_url = "https://github.com/lXFCL/ConsolePlat/releases/download/v1.5.4/app.zip"
         asset_name = "app.zip"
         published_at = "2026-06-25T12:00:00Z"
 
@@ -234,5 +239,24 @@ def test_check_for_update_without_proxy_uses_direct_fetch(monkeypatch):
 
     assert result["ok"] is True
     assert result["has_update"] is True
-    assert result["release"]["version"] == "1.5.3"
+    assert result["release"]["version"] == "1.5.4"
     assert calls == [("direct", 8)]
+
+
+def test_create_https_context_uses_certifi_bundle(monkeypatch):
+    captured = {}
+
+    class FakeCertifi:
+        @staticmethod
+        def where():
+            return "C:/certifi/cacert.pem"
+
+    def fake_create_default_context(*, cafile=None):
+        captured["cafile"] = cafile
+        return "context"
+
+    monkeypatch.setattr("consoleplat.services.version_check_service.certifi", FakeCertifi)
+    monkeypatch.setattr("consoleplat.services.version_check_service.ssl.create_default_context", fake_create_default_context)
+
+    assert _create_https_context() == "context"
+    assert captured["cafile"] == "C:/certifi/cacert.pem"
