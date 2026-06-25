@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QTextEdit,
+    QWidget,
 )
 
 
@@ -151,6 +152,25 @@ def test_settings_page_update_panel_exposes_update_controls(tmp_path, monkeypatc
     assert page.findChild(QCheckBox, "updateProxyEnabledCheck").isChecked() is True
     assert page.findChild(QLineEdit, "updateProxyHostEdit").text() == "127.0.0.2"
     assert page.findChild(QSpinBox, "updateProxyPortSpin").value() == 10809
+
+    page.close()
+
+
+def test_settings_page_update_checks_share_one_option_row(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    option_row = page.findChild(QWidget, "updateOptionRow")
+    startup_check = page.findChild(QCheckBox, "checkUpdateOnStartupCheck")
+    proxy_check = page.findChild(QCheckBox, "updateProxyEnabledCheck")
+
+    assert option_row is not None
+    assert startup_check.parent() is option_row
+    assert proxy_check.parent() is option_row
 
     page.close()
 
