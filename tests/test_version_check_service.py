@@ -98,9 +98,16 @@ def test_build_opener_uses_proxy_for_http_and_https(monkeypatch):
     }
 
 
+def test_proxy_config_normalizes_user_entered_proxy_url():
+    proxy = UpdateProxyConfig(enabled=True, host="http://127.0.0.1", port=7890)
+
+    assert proxy.address == "127.0.0.1:7890"
+    assert proxy.url == "http://127.0.0.1:7890"
+
+
 def test_check_for_update_reports_proxy_connection_failure(monkeypatch):
     def fake_fetch(timeout=8, proxy=None):
-        raise OSError("connection refused")
+        raise OSError("[ASN1: NOT_ENOUGH_DATA] not enough data (ssl.c:4178)")
 
     monkeypatch.setattr("consoleplat.services.version_check_service.fetch_latest_release", fake_fetch)
 
@@ -109,3 +116,4 @@ def test_check_for_update_reports_proxy_connection_failure(monkeypatch):
     assert result["ok"] is False
     assert result["kind"] == "proxy_error"
     assert "127.0.0.1:7890" in result["message"]
+    assert "HTTP 代理" in result["message"]

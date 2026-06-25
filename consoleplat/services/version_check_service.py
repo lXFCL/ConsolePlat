@@ -7,6 +7,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit
 
 from consoleplat import APP_VERSION
 
@@ -38,11 +39,22 @@ class UpdateProxyConfig:
 
     @property
     def address(self) -> str:
-        return f"{self.host}:{self.port}"
+        host = (self.host or "").strip()
+        if "://" in host:
+            parsed = urlsplit(host)
+            host = parsed.hostname or host
+            if parsed.port:
+                return f"{host}:{parsed.port}"
+        host = host.rsplit(":", 1)[0] if host.count(":") == 1 and host.rsplit(":", 1)[1].isdigit() else host
+        return f"{host or '127.0.0.1'}:{self.port}"
 
     @property
     def url(self) -> str:
         return f"http://{self.address}"
+
+    @property
+    def hint(self) -> str:
+        return f"{self.address}（HTTP 代理地址，不要填 https://）"
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -126,7 +138,7 @@ def check_for_update(
         return {"ok": False, "kind": kind, "message": f"GitHub 返回 {exc.code}"}
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         if proxy and proxy.enabled:
-            return {"ok": False, "kind": "proxy_error", "message": f"代理连接失败，请检查 {proxy.address}：{exc}"}
+            return {"ok": False, "kind": "proxy_error", "message": f"代理连接失败，请检查 {proxy.hint}：{exc}"}
         return {"ok": False, "kind": "offline", "message": f"无法连接 GitHub：{exc}"}
     except (ValueError, KeyError, TypeError) as exc:
         return {"ok": False, "kind": "error", "message": f"解析 release 失败：{exc}"}

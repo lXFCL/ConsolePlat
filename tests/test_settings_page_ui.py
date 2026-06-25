@@ -429,6 +429,7 @@ def test_settings_page_panels_use_expected_fill_policy(tmp_path, monkeypatch):
     app.processEvents()
     image_panel = page.stack.widget(2)
     assert image_panel.widget().minimumHeight() >= image_panel.viewport().height()
+    assert page.stack.height() >= 500
 
     for index in (0, 1, 3, 4, 5, 6, 7, 8):
         page.activate_module(index)
@@ -436,7 +437,30 @@ def test_settings_page_panels_use_expected_fill_policy(tmp_path, monkeypatch):
         panel = page.stack.widget(index)
         assert panel.widgetResizable() is False
         assert panel.widget().minimumHeight() == 0
-        assert panel.widget().height() != panel.viewport().height()
+        assert page.stack.maximumHeight() <= panel.widget().sizeHint().height() + 4
+
+    page.close()
+
+
+def test_settings_page_shrink_wraps_non_image_panels_without_gray_tail(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+    page.resize(1180, 760)
+    page.show()
+    app.processEvents()
+
+    for index in (0, 1, 3, 4, 5, 6, 7, 8):
+        page.activate_module(index)
+        app.processEvents()
+        scroll = page.stack.widget(index)
+        content = scroll.widget()
+        assert content.height() == content.sizeHint().height()
+        assert content.width() == scroll.viewport().width()
+        assert page.stack.height() <= content.height() + 4
 
     page.close()
 

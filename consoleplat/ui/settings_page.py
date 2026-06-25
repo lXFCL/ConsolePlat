@@ -203,9 +203,8 @@ class SettingsPage(QWidget):
         actions.addStretch(1)
 
         root.addLayout(tabs)
-        root.addWidget(self.stack)
+        root.addWidget(self.stack, 1)
         root.addLayout(actions)
-        root.addStretch(1)
         self.activate_module(0)
 
     def _build_monitor_panel(self) -> QFrame:
@@ -514,6 +513,8 @@ class SettingsPage(QWidget):
                     elif widget is not None:
                         widget.setMinimumHeight(0)
                         widget.resize(scroll.viewport().width(), widget.sizeHint().height())
+                    if scroll is self.stack.currentWidget():
+                        self._sync_current_module_height()
                     break
         return super().eventFilter(watched, event)
 
@@ -525,6 +526,28 @@ class SettingsPage(QWidget):
             button.setProperty("active", "true" if is_active else "false")
             button.style().unpolish(button)
             button.style().polish(button)
+        self._sync_current_module_height()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._sync_current_module_height()
+
+    def _sync_current_module_height(self) -> None:
+        scroll = self.stack.currentWidget()
+        if not isinstance(scroll, QScrollArea):
+            self.stack.setMaximumHeight(16777215)
+            return
+        widget = scroll.widget()
+        if widget is None:
+            self.stack.setMaximumHeight(16777215)
+            return
+        if scroll.property("fillViewport") == "true":
+            self.stack.setMaximumHeight(16777215)
+            widget.setMinimumHeight(scroll.viewport().height())
+            return
+        widget.setMinimumHeight(0)
+        widget.resize(scroll.viewport().width(), widget.sizeHint().height())
+        self.stack.setMaximumHeight(widget.sizeHint().height() + 2)
 
     def activate_update_tab(self) -> None:
         keys = list(self.tab_buttons)
