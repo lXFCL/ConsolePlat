@@ -43,6 +43,7 @@ from consoleplat.services.ai_edit_formalize_service import (
     backfill_xlsx_colors_from_transparent_dir,
     build_product_images,
     formalize_ai_edit_outputs,
+    write_xlsx,
 )
 from consoleplat.services.ai_edit_postprocess_service import prepare_ai_edit_print_assets
 from consoleplat.services.ai_image_edit_cli import convert_image_to_transparent_background, split_collage_image_with_guides
@@ -122,6 +123,8 @@ class AIEditBackgroundWorker(QObject):
                 result = self._run_convert_current_round()
             elif self.action == "export_product_images":
                 result = self._run_export_product_images()
+            elif self.action == "renumber_outputs":
+                result = self._run_renumber_outputs()
             elif self.action == "backfill_colors":
                 result = self._run_backfill_colors()
             else:
@@ -277,6 +280,88 @@ class AIEditBackgroundWorker(QObject):
             final_product_dir=str(final_product_dir),
             xlsx_path=str(xlsx_path),
             logs=[f"导出产品图完成：重贴 {len(product_outputs)} 张"],
+        )
+
+    def _run_renumber_outputs(self) -> BackgroundTaskResult:
+        final_transparent_dir = Path(self.record.final_transparent_dir) if self.record.final_transparent_dir else None
+        final_product_dir = Path(self.record.final_product_dir) if self.record.final_product_dir else None
+        xlsx_path = Path(self.record.xlsx_path) if self.record.xlsx_path else None
+        if final_transparent_dir is None or not final_transparent_dir.exists():
+            raise ValueError(f"最终透明底目录不存在：{self.record.final_transparent_dir or '--'}")
+        if final_product_dir is None:
+            raise ValueError(f"最终产品图目录不存在：{self.record.final_product_dir or '--'}")
+        if xlsx_path is None:
+            raise ValueError(f"XLSX 不存在：{self.record.xlsx_path or '--'}")
+        source_prints = sorted(
+            [path for path in final_transparent_dir.iterdir() if path.is_file() and path.suffix.lower() == ".png"],
+            key=lambda path: path.name.lower(),
+        )
+        if not source_prints:
+            raise ValueError(f"最终透明底目录为空：{final_transparent_dir}")
+        temp_dir = final_transparent_dir / "_renumber_tmp"
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_paths: list[Path] = []
+        try:
+            for index, source in enumerate(source_prints):
+                target = temp_dir / f"{self.record.job.prefix}-{self.record.job.start_number + index}.png"
+                shutil.copy2(source, target)
+                temp_paths.append(target)
+            for source in source_prints:
+                source.unlink(missing_ok=True)
+            renamed_paths: list[Path] = []
+            for temp_path in temp_paths:
+                target = final_transparent_dir / temp_path.name
+                shutil.move(str(temp_path), str(target))
+                renamed_paths.append(target)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        product_title = (
+            self.settings.bo_product_title.strip()
+            if self.record.job.prefix == "BO"
+            else self.settings.szw_product_title.strip()
+        )
+        final_product_dir.mkdir(parents=True, exist_ok=True)
+        for old_product in final_product_dir.iterdir():
+            if old_product.is_file() and old_product.suffix.lower() in IMAGE_SUFFIXES:
+                old_product.unlink(missing_ok=True)
+        product_outputs, color_assignments = build_product_images(
+            print_paths=renamed_paths,
+            final_product_dir=final_product_dir,
+            product_title=product_title,
+            model_dir=Path(self.settings.posai_model_root),
+            saturation_threshold=self.settings.ai_edit_grayscale_saturation_threshold,
+        )
+        if not product_outputs:
+            raise ValueError("产品图生成失败：未生成有效产品图")
+        write_xlsx(
+            xlsx_path=xlsx_path,
+            prefix=self.record.job.prefix,
+            start_number=self.record.job.start_number,
+            count=len(renamed_paths),
+            product_title=product_title,
+            color_assignments=color_assignments,
+        )
+        sync_summary = sync_putaway_assets(
+            source_images_dir=final_product_dir,
+            source_xlsx_path=xlsx_path,
+            target_data_dir=Path(self.settings.putaway_data_dir),
+            force_replace=True,
+        )
+        if not sync_summary.ok:
+            raise ValueError(f"同步到上架 data 失败：{sync_summary.message}")
+        return BackgroundTaskResult(
+            action=self.action,
+            task_id=self.record.task_id,
+            outputs=[str(path) for path in product_outputs],
+            round_sources=[str(path) for path in renamed_paths],
+            final_transparent_dir=str(final_transparent_dir),
+            final_product_dir=str(final_product_dir),
+            xlsx_path=str(xlsx_path),
+            logs=[f"重新编号完成：{self.record.job.prefix}-{self.record.job.start_number} 起，共 {len(renamed_paths)} 张"],
+            warnings=[sync_summary.message] if sync_summary.message else [],
         )
 
     def _run_backfill_colors(self) -> BackgroundTaskResult:
@@ -702,6 +787,19 @@ class AIEditTaskDetailDialog(QDialog):
         self.meta_label.setWordWrap(True)
         layout.addWidget(self.meta_label)
 
+        start_row = QHBoxLayout()
+        start_row.addWidget(QLabel("起始货号"))
+        self.start_number_spin = NoWheelSpinBox()
+        self.start_number_spin.setRange(1, 999999)
+        self.start_number_spin.setValue(max(1, int(record.job.start_number or 1)))
+        self.apply_start_number_button = QPushButton("应用并同步重命名")
+        self.apply_start_number_button.setObjectName("ghostButton")
+        self.apply_start_number_button.clicked.connect(self.apply_start_number)
+        start_row.addWidget(self.start_number_spin)
+        start_row.addWidget(self.apply_start_number_button)
+        start_row.addStretch(1)
+        layout.addLayout(start_row)
+
         self.path_panel = QFrame()
         self.path_panel.setObjectName("panel")
         path_layout = QGridLayout(self.path_panel)
@@ -781,6 +879,9 @@ class AIEditTaskDetailDialog(QDialog):
 
     def refresh(self, record: AIEditTaskRecord) -> None:
         self.record = record
+        self.start_number_spin.blockSignals(True)
+        self.start_number_spin.setValue(max(1, int(record.job.start_number or 1)))
+        self.start_number_spin.blockSignals(False)
         self.meta_label.setText(
             f"状态: {record.status}    阶段: {record.stage_text}    前缀: {record.job.prefix}    起始: {record.job.start_number}    轮数: {record.job.total_return_count}"
         )
@@ -893,6 +994,10 @@ class AIEditTaskDetailDialog(QDialog):
     def edit_split_profile(self) -> None:
         if self._page is not None:
             self._page.edit_split_profile(self.record, self._find_split_source(self.record))
+
+    def apply_start_number(self) -> None:
+        if self._page is not None:
+            self._page.update_task_start_number(self.record, self.start_number_spin.value())
 
     def export_product_images(self) -> None:
         if self._page is not None:
@@ -2083,6 +2188,23 @@ class AIEditPage(QWidget):
             return
         self._append_log("开始后台切割当前轮...")
         self._start_background_job("split_current_round", self._background_record_for_current_round(record, source_path))
+
+    def update_task_start_number(self, record: AIEditTaskRecord, start_number: int) -> None:
+        new_start = max(1, int(start_number or 1))
+        if int(record.job.start_number or 0) == new_start:
+            self._refresh_task_detail_dialog()
+            return
+        old_sku = f"{record.job.prefix}-{record.job.start_number}"
+        new_sku = f"{record.job.prefix}-{new_start}"
+        record.job = replace(record.job, start_number=new_start)
+        if old_sku in record.title:
+            record.title = record.title.replace(old_sku, new_sku, 1)
+        record.stage_text = "重新编号中"
+        self._append_task_log(record.task_id, f"起始货号改为 {new_sku}，开始同步重命名透明底、产品图和 xlsx...")
+        self._touch_task(record)
+        self._save_task_history()
+        self._refresh_task_detail_dialog()
+        self._start_background_job("renumber_outputs", record)
 
     def _find_original_round_source(self, record: AIEditTaskRecord, source_path: str) -> str | None:
         source = Path(source_path)

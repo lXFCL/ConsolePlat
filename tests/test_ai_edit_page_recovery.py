@@ -425,6 +425,38 @@ def test_ai_edit_task_detail_uses_two_rows_of_four_action_buttons(tmp_path):
     dialog.close()
 
 
+def test_ai_edit_task_detail_can_apply_new_start_number(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    source = tmp_path / "edited_round_01_transparent.png"
+    source.write_bytes(b"image")
+    record = AIEditTaskRecord(
+        task_id="20260623223002",
+        title="AI 改图 SZW-3438",
+        job=AIEditJob(images=[], prompt="prompt", prefix="SZW", start_number=3438),
+        round_sources=[str(source)],
+    )
+
+    class _PageStub(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[tuple[AIEditTaskRecord, int]] = []
+
+        def update_task_start_number(self, current_record, start_number) -> None:
+            self.calls.append((current_record, start_number))
+
+    page = _PageStub()
+    dialog = AIEditTaskDetailDialog(record, parent=page)
+    dialog.start_number_spin.setValue(4500)
+    dialog.apply_start_number()
+
+    assert len(page.calls) == 1
+    assert page.calls[0][0] is record
+    assert page.calls[0][1] == 4500
+
+    dialog.close()
+
+
 def test_ai_edit_page_finalize_task_schedules_post_process_in_background(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -660,6 +692,143 @@ def test_ai_edit_background_worker_split_current_round_passes_drop_first_setting
 
     assert captured == {"drop_first": True, "x_guides": [500], "y_guides": [500]}
     assert result.outputs == [str(final_dir / "BO-1661.png")]
+
+
+def test_ai_edit_background_worker_renumbers_outputs_and_syncs(tmp_path, monkeypatch):
+    final_transparent_dir = tmp_path / "final-transparent"
+    final_transparent_dir.mkdir()
+    old_a = final_transparent_dir / "SZW-3438.png"
+    old_b = final_transparent_dir / "SZW-3439.png"
+    old_a.write_bytes(b"old-a")
+    old_b.write_bytes(b"old-b")
+    final_product_dir = tmp_path / "final-product"
+    final_product_dir.mkdir()
+    old_product = final_product_dir / "SZW-3438_SZW fixed title.png"
+    old_product.write_bytes(b"old-product")
+    xlsx_path = tmp_path / "batch.xlsx"
+    xlsx_path.write_bytes(b"old-xlsx")
+    model_dir = tmp_path / "models"
+    model_dir.mkdir()
+    putaway_dir = tmp_path / "putaway"
+    record = AIEditTaskRecord(
+        task_id="20260623192101z",
+        title="AI 改图 SZW-3438",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=2,
+            prefix="SZW",
+            start_number=4500,
+            test_mode=False,
+        ),
+        output_dir=str(tmp_path),
+        outputs=[str(final_product_dir / "SZW-3438_title.png")],
+        round_sources=[str(old_a), str(old_b)],
+        final_transparent_dir=str(final_transparent_dir),
+        final_product_dir=str(final_product_dir),
+        xlsx_path=str(xlsx_path),
+    )
+    captured = {}
+
+    def fake_build_product_images(*, print_paths, final_product_dir, product_title, model_dir, **kwargs):
+        captured["print_paths"] = [path.name for path in print_paths]
+        outputs = []
+        for print_path in print_paths:
+            output = final_product_dir / f"{print_path.stem}_{product_title}.png"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(print_path.read_bytes())
+            outputs.append(output)
+        return outputs, {path.stem: "黑" for path in print_paths}
+
+    def fake_write_xlsx(**kwargs):
+        captured["xlsx_prefix"] = kwargs["prefix"]
+        captured["xlsx_start_number"] = kwargs["start_number"]
+        captured["xlsx_count"] = kwargs["count"]
+        kwargs["xlsx_path"].write_bytes(b"new-xlsx")
+        return kwargs["xlsx_path"]
+
+    def fake_sync_putaway_assets(**kwargs):
+        captured["sync_source_images_dir"] = kwargs["source_images_dir"]
+        captured["sync_source_xlsx_path"] = kwargs["source_xlsx_path"]
+        captured["sync_target_data_dir"] = kwargs["target_data_dir"]
+        captured["sync_force_replace"] = kwargs["force_replace"]
+        return PutawaySyncSummary(ok=True, message="synced")
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.build_product_images", fake_build_product_images)
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.write_xlsx", fake_write_xlsx)
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.sync_putaway_assets", fake_sync_putaway_assets)
+
+    worker = AIEditBackgroundWorker(
+        "renumber_outputs",
+        record,
+        AppSettings(
+            szw_product_title="SZW fixed title",
+            posai_model_root=str(model_dir),
+            putaway_data_dir=str(putaway_dir),
+        ),
+    )
+
+    result = worker._run_renumber_outputs()
+
+    assert sorted(path.name for path in final_transparent_dir.glob("*.png")) == ["SZW-4500.png", "SZW-4501.png"]
+    assert (final_transparent_dir / "SZW-4500.png").read_bytes() == b"old-a"
+    assert captured["print_paths"] == ["SZW-4500.png", "SZW-4501.png"]
+    assert captured["xlsx_prefix"] == "SZW"
+    assert captured["xlsx_start_number"] == 4500
+    assert captured["xlsx_count"] == 2
+    assert captured["sync_source_images_dir"] == final_product_dir
+    assert captured["sync_source_xlsx_path"] == xlsx_path
+    assert captured["sync_target_data_dir"] == putaway_dir
+    assert captured["sync_force_replace"] is True
+    assert result.outputs == [
+        str(final_product_dir / "SZW-4500_SZW fixed title.png"),
+        str(final_product_dir / "SZW-4501_SZW fixed title.png"),
+    ]
+    assert result.round_sources == [
+        str(final_transparent_dir / "SZW-4500.png"),
+        str(final_transparent_dir / "SZW-4501.png"),
+    ]
+    assert old_product.exists() is False
+    assert any("重新编号完成" in line for line in result.logs)
+
+
+def test_ai_edit_page_update_start_number_schedules_renumber_and_persists_record(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(ai_edit_api_key="stored-key", program_data_dir=str(tmp_path / "ConsolePlatData")),
+    )
+    record = AIEditTaskRecord(
+        task_id="20260623192101w",
+        title="AI 改图 SZW-3438\n2 轮 · 正式模式",
+        job=AIEditJob(images=[], prompt="keep subject", prefix="SZW", start_number=3438),
+        output_dir=str(tmp_path),
+    )
+    page.tasks = [record]
+    scheduled = {}
+
+    def fake_start_background_job(action, current_record):
+        scheduled["action"] = action
+        scheduled["start_number"] = current_record.job.start_number
+        scheduled["title"] = current_record.title
+
+    monkeypatch.setattr(page, "_start_background_job", fake_start_background_job)
+
+    page.update_task_start_number(record, 4500)
+
+    assert record.job.start_number == 4500
+    assert "SZW-4500" in record.title
+    assert "重新编号中" == record.stage_text
+    assert scheduled == {
+        "action": "renumber_outputs",
+        "start_number": 4500,
+        "title": record.title,
+    }
+
+    page.close()
 
 
 def test_ai_edit_page_split_current_round_uses_recovered_second_round_start_number(tmp_path, monkeypatch):

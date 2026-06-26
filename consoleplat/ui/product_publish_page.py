@@ -1524,10 +1524,10 @@ class ProductPublishPage(QWidget):
         self.prefix_combo.setCurrentText(getattr(settings, "publish_prefix", "") or "BO")
         self.task_name_edit.setText(str(getattr(settings, "publish_task_name", "") or "默认产品发布任务"))
         saved_start = max(0, int(getattr(settings, "publish_start_number", 0) or 0))
-        if saved_start:
-            self.start_spin.setValue(saved_start)
-        else:
-            self._refresh_start_number(self.prefix_combo.currentText())
+        fallback = saved_start or (1421 if self.prefix_combo.currentText() == "BO" else 3113)
+        self.start_spin.setValue(
+            suggest_next_start(self.prefix_combo.currentText(), settings.posai_gallery_root, fallback)
+        )
         saved_mode = str(getattr(settings, "publish_generation_mode", "") or "本地生图")
         self.generation_mode_combo.setCurrentText(saved_mode if saved_mode in {"本地生图", "AI 改图"} else "本地生图")
         self._saved_local_count = max(1, int(getattr(settings, "publish_local_count", 10) or 10))

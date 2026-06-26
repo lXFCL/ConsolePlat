@@ -119,6 +119,29 @@ def test_product_publish_page_batch_delete_toggle_matches_ai_page_pattern(tmp_pa
     page.close()
 
 
+def test_product_publish_page_refreshes_start_even_when_saved_value_is_stale(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    gallery_root = tmp_path / "gallery"
+    existing = gallery_root / "SZW" / "2026" / "6月" / "batch" / "最终透明底"
+    existing.mkdir(parents=True)
+    Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(existing / "SZW-4000.png")
+
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            publish_prefix="SZW",
+            publish_start_number=3438,
+            posai_gallery_root=str(gallery_root),
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+        ),
+    )
+
+    assert page.prefix_combo.currentText() == "SZW"
+    assert page.start_spin.value() == 4001
+
+    page.close()
+
 def test_product_publish_page_can_clear_reference_images(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
