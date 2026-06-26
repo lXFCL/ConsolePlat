@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import QProcess, QProcessEnvironment, QTimer, Qt
+from PyQt5.QtCore import QProcess, QProcessEnvironment, QTimer, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -165,6 +165,8 @@ def validate_publish_outputs(
 
 
 class ProductPublishPage(QWidget):
+    request_prepare_putaway_import = pyqtSignal(object)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.settings_store = SettingsStore()
@@ -437,7 +439,9 @@ class ProductPublishPage(QWidget):
         self.task_list = QListWidget()
         self.task_list.setObjectName("eventList")
         self.task_list.setSelectionMode(QListWidget.SingleSelection)
+        self.task_list.setCursor(Qt.PointingHandCursor)
         self.task_list.itemSelectionChanged.connect(self._on_task_selection_changed)
+        self.task_list.itemDoubleClicked.connect(self._on_task_double_clicked)
         layout.addWidget(self.task_list, stretch=1)
 
         self.output_label = QLabel("输出路径：--")
@@ -1322,6 +1326,47 @@ class ProductPublishPage(QWidget):
             return self.tasks[0] if self.tasks else None
         task_id = items[0].data(Qt.UserRole)
         return next((record for record in self.tasks if record.task_id == task_id), None)
+
+    def _record_for_item(self, item: QListWidgetItem | None) -> ProductTaskRecord | None:
+        if item is None:
+            return None
+        task_id = item.data(Qt.UserRole)
+        return next((record for record in self.tasks if record.task_id == task_id), None)
+
+    def _on_task_double_clicked(self, item: QListWidgetItem) -> None:
+        record = self._record_for_item(item)
+        if record is None:
+            return
+        if not self._record_can_prepare_putaway_import(record):
+            QMessageBox.information(
+                self,
+                "暂不能进入上架",
+                "需要先完成校验并同步投放目录，才能清空并导入上架产品数据。",
+            )
+            return
+        confirmed = QMessageBox.question(
+            self,
+            "确认进入上架数据导入",
+            (
+                f"任务：{record.task_name}\n"
+                f"货号：{record.prefix}-{record.start_number}\n"
+                f"XLSX：{record.xlsx_path or '--'}\n\n"
+                "同意后会切到“上架”页，清空 PutawayAiRobot 产品数据，并导入最新Excel。\n"
+                "只会准备上架产品数据，不会点击真实发布按钮。"
+            ),
+        )
+        if confirmed != QMessageBox.Yes:
+            return
+        record.status = "handoff"
+        record.stage_text = "已确认上架"
+        record.progress_percent = 100
+        self._append_record_log(record, "已确认进入上架数据导入")
+        self._save_and_refresh(record)
+        self._flush_persist()
+        self.request_prepare_putaway_import.emit(record)
+
+    def _record_can_prepare_putaway_import(self, record: ProductTaskRecord) -> bool:
+        return record.status == "synced" or record.stage_text == "待确认上架"
 
     def _select_record(self, record: ProductTaskRecord) -> None:
         for index in range(self.task_list.count()):

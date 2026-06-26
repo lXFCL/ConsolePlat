@@ -99,6 +99,14 @@ class SettingsPage(QWidget):
         self.interval_spin.setSuffix(" 秒")
 
         self.purchase_export_dir_edit = self._line_edit("purchaseExportDirEdit", "留空则自动使用 SendGoods/outputs")
+        self.print_gallery_source_combo = QComboBox()
+        self.print_gallery_source_combo.setObjectName("printGallerySourceCombo")
+        self.print_gallery_source_combo.addItems(["本地图集中采集", "来自 GitHub"])
+        self.print_gallery_local_dir_edit = self._line_edit("printGalleryLocalDirEdit", "留空则自动使用 PosAiImg/图库")
+        self.print_gallery_github_raw_base_edit = self._line_edit(
+            "printGalleryGithubRawBaseEdit",
+            "例如 https://raw.githubusercontent.com/owner/repo/main/gallery",
+        )
         self.posai_gallery_root_edit = self._line_edit("posaiGalleryRootEdit", "留空则自动探测 PosAiImg/图库")
         self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "留空则自动探测 PosAiImg/批量贴图结果")
         self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "留空则自动探测 PosAiImg/衣物对应的xlsx")
@@ -219,6 +227,9 @@ class SettingsPage(QWidget):
         form.addRow("Chrome 调试地址", self.cdp_edit)
         form.addRow("刷新间隔", self.interval_spin)
         form.addRow("拿货表导出目录", self._browse_row(self.purchase_export_dir_edit, self.choose_export_dir))
+        form.addRow("印花来源", self.print_gallery_source_combo)
+        form.addRow("本地图集目录", self._browse_row(self.print_gallery_local_dir_edit, self.choose_print_gallery_local_dir))
+        form.addRow("GitHub Raw 目录", self.print_gallery_github_raw_base_edit)
         layout.addLayout(form)
         return self._wrap_scroll_panel(panel, fill_viewport=False)
 
@@ -813,6 +824,11 @@ class SettingsPage(QWidget):
         self.cdp_edit.setText(settings.cdp_endpoint)
         self.interval_spin.setValue(settings.refresh_interval_seconds)
         self.purchase_export_dir_edit.setText(settings.purchase_export_dir)
+        self.print_gallery_source_combo.setCurrentText(
+            "来自 GitHub" if settings.print_gallery_source == "github" else "本地图集中采集"
+        )
+        self.print_gallery_local_dir_edit.setText(settings.print_gallery_local_dir)
+        self.print_gallery_github_raw_base_edit.setText(settings.print_gallery_github_raw_base_url)
 
         self.posai_gallery_root_edit.setText(settings.posai_gallery_root)
         self.posai_mockup_root_edit.setText(settings.posai_mockup_root)
@@ -869,6 +885,11 @@ class SettingsPage(QWidget):
             cdp_endpoint=self.cdp_edit.text().strip() or "http://127.0.0.1:9222",
             refresh_interval_seconds=self.interval_spin.value(),
             purchase_export_dir=self.purchase_export_dir_edit.text().strip(),
+            print_gallery_source=(
+                "github" if self.print_gallery_source_combo.currentText() == "来自 GitHub" else "local"
+            ),
+            print_gallery_local_dir=self.print_gallery_local_dir_edit.text().strip(),
+            print_gallery_github_raw_base_url=self.print_gallery_github_raw_base_edit.text().strip(),
             local_image_auto_start_comfyui=old_settings.local_image_auto_start_comfyui,
             local_image_keep_comfyui=old_settings.local_image_keep_comfyui,
             local_image_test_mode=old_settings.local_image_test_mode,
@@ -985,6 +1006,9 @@ class SettingsPage(QWidget):
 
     def choose_export_dir(self) -> None:
         self._choose_directory_for(self.purchase_export_dir_edit, "选择拿货表导出目录")
+
+    def choose_print_gallery_local_dir(self) -> None:
+        self._choose_directory_for(self.print_gallery_local_dir_edit, "选择印花图集目录")
 
     def choose_posai_gallery_root(self) -> None:
         self._choose_directory_for(self.posai_gallery_root_edit, "选择图库目录")

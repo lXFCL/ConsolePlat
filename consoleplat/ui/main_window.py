@@ -173,7 +173,9 @@ class MainWindow(QMainWindow):
             page.request_open_publish.connect(self._open_publish_from_monitor)
             return page
         if key == "publish":
-            return ProductPublishPage()
+            page = ProductPublishPage()
+            page.request_prepare_putaway_import.connect(self._prepare_putaway_import_from_publish)
+            return page
         if key == "local_image":
             return LocalImagePage()
         if key == "ai_edit":
@@ -208,6 +210,12 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
         self.refresh_task_badges()
+
+    def _prepare_putaway_import_from_publish(self, record: object) -> None:
+        self.activate_page("putaway")
+        page = self.pages.get("putaway")
+        if isinstance(page, PutawayPage):
+            page.prepare_product_import_from_publish(record)
 
     def _maybe_check_update_on_startup(self) -> None:
         settings = SettingsStore().load()

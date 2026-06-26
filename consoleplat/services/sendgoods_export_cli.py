@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 from consoleplat.config import SettingsStore
+from consoleplat.config import resolve_project_dir
+from consoleplat.services.print_gallery_service import collect_print_gallery
 
 
 SENDGOODS_DIR = Path("E:/1PythonProject/SendGoods")
@@ -30,9 +32,13 @@ def export_purchase_sheet() -> dict:
     from temu_reader import TemuReader
 
     settings = SettingsStore().load()
-    output_dir = Path(settings.purchase_export_dir or SENDGOODS_DIR / "outputs")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_root = Path(settings.purchase_export_dir or SENDGOODS_DIR / "outputs")
+    batch_dir = output_root / timestamp
+    xlsx_dir = batch_dir / "xlsx"
+    print_gallery_dir = batch_dir / "印花图集"
     image_dir = SENDGOODS_DIR / "downloads" / "images"
-    output_path = output_dir / f"备货单_{settings.active_shop}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    output_path = xlsx_dir / f"备货单_{settings.active_shop}_{timestamp}.xlsx"
 
     logs: list[str] = []
     reader = TemuReader(
@@ -41,6 +47,15 @@ def export_purchase_sheet() -> dict:
         logger=logs.append,
     )
     records = reader.collect()
+    product_skus = sorted({str(record.product_sku or "").strip() for record in records if str(record.product_sku or "").strip()})
+    local_gallery_dir = _resolve_print_gallery_local_dir(settings)
+    print_summary = collect_print_gallery(
+        skus=product_skus,
+        source=settings.print_gallery_source,
+        local_dir=local_gallery_dir,
+        github_raw_base_url=settings.print_gallery_github_raw_base_url,
+        target_dir=print_gallery_dir,
+    )
     summary = write_purchase_sheet(
         records,
         SENDGOODS_DIR / "1.cleaned.xlsx",
@@ -49,7 +64,13 @@ def export_purchase_sheet() -> dict:
         logger=logs.append,
     )
     return {
+        "batch_dir": str(batch_dir),
+        "xlsx_dir": str(xlsx_dir),
         "output_path": summary.output_path,
+        "print_gallery_dir": str(print_gallery_dir),
+        "print_gallery_copied": print_summary.copied,
+        "missing_print_skus": print_summary.missing_skus,
+        "print_gallery_warnings": print_summary.warnings,
         "total_records": summary.total_records,
         "black_rows": summary.black_rows,
         "white_rows": summary.white_rows,
@@ -57,6 +78,18 @@ def export_purchase_sheet() -> dict:
         "warnings": summary.warnings,
         "logs": logs[-20:],
     }
+
+
+def _resolve_print_gallery_local_dir(settings) -> Path:
+    configured = str(getattr(settings, "print_gallery_local_dir", "") or "").strip()
+    if configured:
+        return Path(configured)
+    if str(getattr(settings, "posai_gallery_root", "") or "").strip():
+        return Path(settings.posai_gallery_root)
+    posai_dir = resolve_project_dir("posaiimg")
+    if posai_dir:
+        return posai_dir / "图库"
+    return Path("E:/1PythonProject/PosAiImg/图库")
 
 
 def _write(payload: dict) -> None:

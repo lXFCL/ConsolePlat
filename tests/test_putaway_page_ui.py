@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget
+from PyQt5.QtWidgets import QApplication, QLabel, QLineEdit, QTabWidget, QWidget
 
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.putaway_page import PutawayPage
@@ -94,5 +94,39 @@ def test_putaway_page_shows_import_error_when_embed_load_fails(tmp_path, monkeyp
     assert page._embed_loaded is True
     assert not page.error_label.isHidden()
     assert "missing putaway dependency" in page.error_label.text()
+
+    page.close()
+
+
+def test_putaway_page_prepare_product_import_switches_tab_and_imports_latest_excel(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    class FakeEmbeddedWidget(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.tabs = QTabWidget(self)
+            self.tabs.addTab(QWidget(), "自动化")
+            self.tabs.addTab(QWidget(), "产品数据")
+            self.latest_excel_dir_input = QLineEdit(self)
+
+        def clear_product_rows(self):
+            calls.append("clear")
+
+        def import_from_latest_excel(self):
+            calls.append("import")
+
+    def fake_build(self, parent=None):
+        return FakeEmbeddedWidget(parent)
+
+    monkeypatch.setattr("consoleplat.ui.putaway_page.PutawayAdapter.build_embedded_widget", fake_build, raising=False)
+    page = _page_with_temp_store(tmp_path, monkeypatch)
+
+    page.prepare_product_import_from_publish(object())
+
+    assert page.embedded_widget.tabs.tabText(page.embedded_widget.tabs.currentIndex()) == "产品数据"
+    assert page.embedded_widget.latest_excel_dir_input.text() == "E:/1PythonProject/PutawayAiRobot/data"
+    assert calls == ["clear", "import"]
+    assert "已从发布任务进入产品数据导入" in page.status_label.text()
 
     page.close()

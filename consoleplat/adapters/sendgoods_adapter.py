@@ -18,7 +18,11 @@ class SendGoodsAdapter:
         return sys.executable, ["-m", "consoleplat.services.sendgoods_export_cli"]
 
     def export_dir(self, payload: dict[str, Any] | None = None) -> Path:
-        output_path = str(((payload or {}).get("summary") or {}).get("output_path") or "")
+        summary = (payload or {}).get("summary") or {}
+        batch_dir = str(summary.get("batch_dir") or "")
+        if batch_dir:
+            return Path(batch_dir)
+        output_path = str(summary.get("output_path") or "")
         if output_path:
             return Path(output_path).parent
         settings = SettingsStore().load()
@@ -33,7 +37,12 @@ class SendGoodsAdapter:
             total = int(summary.get("total_records") or 0)
             output_path = str(summary.get("output_path") or "")
             skipped = int(summary.get("skipped_records") or 0)
-            message = f"导出备货单完成：{total} 条，跳过 {skipped} 条，文件 {output_path}"
+            print_copied = int(summary.get("print_gallery_copied") or 0)
+            missing_prints = len(summary.get("missing_print_skus") or [])
+            message = (
+                f"导出备货单完成：{total} 条，跳过 {skipped} 条，"
+                f"印花 {print_copied} 张，缺失 {missing_prints} 个货号，文件 {output_path}"
+            )
             level = "ok"
         event = MonitorEvent(datetime.now().strftime("%H:%M:%S"), level, message)
         return MonitorSnapshot(

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from PIL import Image
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QListWidget, QMessageBox
 
 from consoleplat.adapters.posaiimg_adapter import AIEditJob, LocalImageJob
@@ -119,6 +120,119 @@ def test_product_publish_page_batch_delete_toggle_matches_ai_page_pattern(tmp_pa
     page.close()
 
 
+def test_product_publish_page_event_list_has_pointer_cursor(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+
+    assert page.task_list.cursor().shape() == Qt.PointingHandCursor
+
+    page.close()
+
+
+def test_product_publish_page_double_click_synced_task_confirms_putaway_import(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, path = _page_with_temp_store(tmp_path, monkeypatch)
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    emitted = []
+    page.request_prepare_putaway_import.connect(lambda record: emitted.append(record))
+    record = ProductTaskRecord(
+        task_id="20260626215558",
+        task_name="默认产品发布任务",
+        prefix="SZW",
+        start_number=3438,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+        test_mode=False,
+        status="synced",
+        stage_text="待确认上架",
+        progress_percent=90,
+        xlsx_path="E:/1PythonProject/PutawayAiRobot/data/AI改图_SZW-3438-SZW-3439.xlsx",
+    )
+    page.tasks = [record]
+    page._rebuild_task_list()
+
+    page._on_task_double_clicked(page.task_list.item(0))
+
+    assert emitted == [record]
+    assert record.status == "handoff"
+    assert record.stage_text == "已确认上架"
+    assert record.progress_percent == 100
+    assert "已确认进入上架数据导入" in "\n".join(record.logs)
+    saved = (Path(SettingsStore(path).load().program_data_dir) / "tasks" / "product_publish_tasks.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"progress_percent": 100' in saved
+    assert "已确认上架" in saved
+
+    page.close()
+
+
+def test_product_publish_page_double_click_unsynced_task_shows_hint_without_import(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: warnings.append(args))
+    emitted = []
+    page.request_prepare_putaway_import.connect(lambda record: emitted.append(record))
+    record = ProductTaskRecord(
+        task_id="20260626210000",
+        task_name="生成中任务",
+        prefix="SZW",
+        start_number=3438,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+        status="generating",
+        stage_text="生图中",
+        progress_percent=30,
+        xlsx_path="E:/1PythonProject/PutawayAiRobot/data/AI改图_SZW-3438-SZW-3439.xlsx",
+    )
+    page.tasks = [record]
+    page._rebuild_task_list()
+
+    page._on_task_double_clicked(page.task_list.item(0))
+
+    assert emitted == []
+    assert warnings
+    assert "需要先完成校验并同步投放目录" in warnings[0][2]
+
+    page.close()
+
+
+def test_product_publish_page_double_click_cancel_does_not_request_import(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+
+    page, _path = _page_with_temp_store(tmp_path, monkeypatch)
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.No)
+    emitted = []
+    page.request_prepare_putaway_import.connect(lambda record: emitted.append(record))
+    record = ProductTaskRecord(
+        task_id="20260626215558",
+        task_name="默认产品发布任务",
+        prefix="SZW",
+        start_number=3438,
+        count=2,
+        generation_mode="AI 改图",
+        product_title="fixed title",
+        status="synced",
+        stage_text="待确认上架",
+        progress_percent=90,
+        xlsx_path="E:/1PythonProject/PutawayAiRobot/data/AI改图_SZW-3438-SZW-3439.xlsx",
+    )
+    page.tasks = [record]
+    page._rebuild_task_list()
+
+    page._on_task_double_clicked(page.task_list.item(0))
+
+    assert emitted == []
+
+    page.close()
+
+
 def test_product_publish_page_refreshes_start_even_when_saved_value_is_stale(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     gallery_root = tmp_path / "gallery"
@@ -141,6 +255,7 @@ def test_product_publish_page_refreshes_start_even_when_saved_value_is_stale(tmp
     assert page.start_spin.value() == 4001
 
     page.close()
+
 
 def test_product_publish_page_can_clear_reference_images(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])

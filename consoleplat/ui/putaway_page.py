@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import QEvent, Qt, QTimer
-from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QStackedWidget, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QMessageBox, QStackedWidget, QVBoxLayout, QWidget
 
 from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import SettingsStore, resolve_project_dir
@@ -127,3 +127,44 @@ class PutawayPage(QWidget):
             self.status_label.setText("已加载 PutawayAiRobot 内嵌界面")
             self.error_label.hide()
             self.container_panel.layout().addWidget(self.embedded_widget, stretch=1)
+
+    def prepare_product_import_from_publish(self, record: object) -> None:
+        self._load_embedded()
+        if self.embedded_widget is None:
+            return
+        try:
+            self._activate_product_data_tab()
+            self._set_latest_excel_dir()
+            self._call_embedded_method("clear_product_rows", "清空产品数据")
+            self._call_embedded_method("import_from_latest_excel", "导入最新Excel")
+        except Exception as exc:
+            self.error_label.setText(str(exc))
+            self.error_label.show()
+            QMessageBox.critical(self, "上架数据导入失败", str(exc))
+            return
+        task_name = str(getattr(record, "task_name", "") or "发布任务")
+        self.error_label.hide()
+        self.status_label.setText(f"已从发布任务进入产品数据导入：{task_name}")
+
+    def _activate_product_data_tab(self) -> None:
+        tabs = getattr(self.embedded_widget, "tabs", None)
+        if tabs is None:
+            raise AttributeError("PutawayAiRobot 内嵌界面缺少 tabs，无法切换到产品数据页。")
+        for index in range(tabs.count()):
+            if tabs.tabText(index) == "产品数据":
+                tabs.setCurrentIndex(index)
+                return
+        raise ValueError("PutawayAiRobot 内嵌界面未找到“产品数据”标签。")
+
+    def _set_latest_excel_dir(self) -> None:
+        input_widget = getattr(self.embedded_widget, "latest_excel_dir_input", None)
+        if input_widget is None:
+            return
+        data_dir = str(self.settings.putaway_data_dir or self.adapter.data_dir_path)
+        input_widget.setText(data_dir)
+
+    def _call_embedded_method(self, method_name: str, action_name: str) -> None:
+        method = getattr(self.embedded_widget, method_name, None)
+        if method is None or not callable(method):
+            raise AttributeError(f"PutawayAiRobot 内嵌界面缺少“{action_name}”方法。")
+        method()

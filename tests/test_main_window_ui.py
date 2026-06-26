@@ -306,6 +306,31 @@ def test_main_window_putaway_page_contains_embedded_widget(monkeypatch):
     window.close()
 
 
+def test_main_window_routes_publish_import_request_to_putaway_page(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+    calls = []
+
+    def fake_prepare(self, record):
+        calls.append((self, record))
+
+    monkeypatch.setattr(PutawayPage, "prepare_product_import_from_publish", fake_prepare, raising=False)
+
+    window = MainWindow()
+    window.activate_page("publish")
+    publish_page = window.pages["publish"]
+    record = object()
+
+    publish_page.request_prepare_putaway_import.emit(record)
+
+    assert window.state.active_page == "putaway"
+    assert len(calls) == 1
+    assert calls[0][0] is window.pages["putaway"]
+    assert calls[0][1] is record
+
+    window.close()
+
+
 def test_main_window_nav_badge_reflects_running_page(monkeypatch):
     monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
     app = QApplication.instance() or QApplication([])

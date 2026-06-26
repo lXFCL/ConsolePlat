@@ -394,6 +394,8 @@ class MonitorPage(QWidget):
         return {
             "shop_name": self._active_shop_name(),
             "output_path": str(summary.get("output_path") or ""),
+            "batch_dir": str(summary.get("batch_dir") or ""),
+            "print_gallery_dir": str(summary.get("print_gallery_dir") or ""),
             "total_records": int(summary.get("total_records") or 0),
         }
 

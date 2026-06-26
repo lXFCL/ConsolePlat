@@ -37,6 +37,23 @@ def test_settings_store_persists_purchase_export_dir(tmp_path):
     assert loaded.purchase_export_dir == "E:/exports/purchase"
 
 
+def test_settings_store_persists_print_gallery_preferences(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        print_gallery_source="github",
+        print_gallery_local_dir="E:/prints/cache",
+        print_gallery_github_raw_base_url="https://raw.githubusercontent.com/demo/gallery/main",
+    )
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.print_gallery_source == "github"
+    assert loaded.print_gallery_local_dir == "E:/prints/cache"
+    assert loaded.print_gallery_github_raw_base_url == "https://raw.githubusercontent.com/demo/gallery/main"
+
+
 def test_settings_store_persists_startup_window_size(tmp_path):
     path = tmp_path / "settings.json"
     store = SettingsStore(path)

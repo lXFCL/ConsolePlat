@@ -183,6 +183,9 @@ class AppSettings:
     cdp_endpoint: str = "http://127.0.0.1:9222"
     refresh_interval_seconds: int = 5
     purchase_export_dir: str = ""
+    print_gallery_source: str = "local"
+    print_gallery_local_dir: str = ""
+    print_gallery_github_raw_base_url: str = ""
     local_image_auto_start_comfyui: bool = True
     local_image_keep_comfyui: bool = True
     local_image_test_mode: bool = True
@@ -240,6 +243,9 @@ class AppSettings:
     accounts: dict[str, ShopAccount] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.print_gallery_source not in {"local", "github"}:
+            self.print_gallery_source = "local"
+        self.print_gallery_github_raw_base_url = (self.print_gallery_github_raw_base_url or "").rstrip("/")
         providers = _normalize_providers(list(self.ai_providers or []))
         self.ai_providers = providers
         provider_ids = {provider.provider_id for provider in providers}
@@ -318,6 +324,13 @@ class SettingsStore:
             cdp_endpoint=str(data.get("cdp_endpoint") or "http://127.0.0.1:9222"),
             refresh_interval_seconds=int(data.get("refresh_interval_seconds") or 5),
             purchase_export_dir=str(data.get("purchase_export_dir") or ""),
+            print_gallery_source=(
+                str(data.get("print_gallery_source") or "local")
+                if str(data.get("print_gallery_source") or "local") in {"local", "github"}
+                else "local"
+            ),
+            print_gallery_local_dir=str(data.get("print_gallery_local_dir") or ""),
+            print_gallery_github_raw_base_url=str(data.get("print_gallery_github_raw_base_url") or ""),
             local_image_auto_start_comfyui=bool(data.get("local_image_auto_start_comfyui", True)),
             local_image_keep_comfyui=bool(data.get("local_image_keep_comfyui", True)),
             local_image_test_mode=bool(data.get("local_image_test_mode", True)),
@@ -394,6 +407,11 @@ class SettingsStore:
             "cdp_endpoint": settings.cdp_endpoint,
             "refresh_interval_seconds": int(settings.refresh_interval_seconds or 5),
             "purchase_export_dir": settings.purchase_export_dir or "",
+            "print_gallery_source": (
+                settings.print_gallery_source if settings.print_gallery_source in {"local", "github"} else "local"
+            ),
+            "print_gallery_local_dir": settings.print_gallery_local_dir or "",
+            "print_gallery_github_raw_base_url": (settings.print_gallery_github_raw_base_url or "").rstrip("/"),
             "local_image_auto_start_comfyui": bool(settings.local_image_auto_start_comfyui),
             "local_image_keep_comfyui": bool(settings.local_image_keep_comfyui),
             "local_image_test_mode": bool(settings.local_image_test_mode),

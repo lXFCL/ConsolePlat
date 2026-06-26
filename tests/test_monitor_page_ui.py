@@ -107,7 +107,9 @@ def test_monitor_page_export_success_exposes_publish_handoff():
     payload = {
         "ok": True,
         "summary": {
+            "batch_dir": "E:/exports/20260627_103000",
             "output_path": "E:/exports/purchase.xlsx",
+            "print_gallery_dir": "E:/exports/20260627_103000/印花图集",
             "total_records": 12,
             "skipped_records": 1,
         },
@@ -120,6 +122,8 @@ def test_monitor_page_export_success_exposes_publish_handoff():
         {
             "shop_name": page.shop_combo.currentText(),
             "output_path": "E:/exports/purchase.xlsx",
+            "batch_dir": "E:/exports/20260627_103000",
+            "print_gallery_dir": "E:/exports/20260627_103000/印花图集",
             "total_records": 12,
         }
     ]

@@ -21,6 +21,21 @@ def test_sendgoods_adapter_returns_export_dir_from_settings():
     assert str(path).replace("\\", "/") == "E:/exports/purchase"
 
 
+def test_sendgoods_adapter_prefers_batch_dir_for_export_dir():
+    adapter = SendGoodsAdapter()
+
+    path = adapter.export_dir(
+        {
+            "summary": {
+                "batch_dir": "E:/exports/purchase/20260627_103000",
+                "output_path": "E:/exports/purchase/20260627_103000/xlsx/备货单.xlsx",
+            }
+        }
+    )
+
+    assert str(path).replace("\\", "/") == "E:/exports/purchase/20260627_103000"
+
+
 def test_sendgoods_adapter_formats_finished_event():
     snapshot = MonitorSnapshot.empty(shop_name="YUHOOBO")
     payload = {
@@ -41,3 +56,23 @@ def test_sendgoods_adapter_formats_finished_event():
     assert updated.events[-1].level == "ok"
     assert "导出备货单完成" in updated.events[-1].message
     assert "22 条" in updated.events[-1].message
+
+
+def test_sendgoods_adapter_export_event_includes_print_gallery_counts():
+    snapshot = MonitorSnapshot.empty(shop_name="YUHOOBO")
+    payload = {
+        "ok": True,
+        "summary": {
+            "output_path": "E:/exports/batch/xlsx/purchase.xlsx",
+            "total_records": 2,
+            "skipped_records": 0,
+            "print_gallery_copied": 1,
+            "missing_print_skus": ["BO-9999"],
+        },
+    }
+    adapter = SendGoodsAdapter()
+
+    updated = adapter.apply_export_result(snapshot, payload)
+
+    assert "印花 1 张" in updated.events[-1].message
+    assert "缺失 1 个货号" in updated.events[-1].message

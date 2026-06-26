@@ -31,6 +31,56 @@ def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):
     page.close()
 
 
+def test_settings_page_exposes_monitor_print_gallery_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            print_gallery_source="github",
+            print_gallery_local_dir="E:/prints/cache",
+            print_gallery_github_raw_base_url="https://raw.githubusercontent.com/demo/gallery/main",
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    monitor_panel = page.stack.widget(0)
+    edits = {edit.objectName(): edit.text() for edit in monitor_panel.findChildren(QLineEdit)}
+    combos = {combo.objectName(): combo.currentText() for combo in monitor_panel.findChildren(QComboBox)}
+    labels = [label.text() for label in monitor_panel.findChildren(QLabel)]
+
+    assert "印花来源" in labels
+    assert combos["printGallerySourceCombo"] == "来自 GitHub"
+    assert edits["printGalleryLocalDirEdit"] == "E:/prints/cache"
+    assert edits["printGalleryGithubRawBaseEdit"] == "https://raw.githubusercontent.com/demo/gallery/main"
+
+    page.close()
+
+
+def test_settings_page_save_persists_print_gallery_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page.findChild(QComboBox, "printGallerySourceCombo").setCurrentText("来自 GitHub")
+    page.findChild(QLineEdit, "printGalleryLocalDirEdit").setText("E:/prints/cache")
+    page.findChild(QLineEdit, "printGalleryGithubRawBaseEdit").setText(
+        "https://raw.githubusercontent.com/demo/gallery/main"
+    )
+    page.save_settings()
+    saved = SettingsStore(path).load()
+
+    assert saved.print_gallery_source == "github"
+    assert saved.print_gallery_local_dir == "E:/prints/cache"
+    assert saved.print_gallery_github_raw_base_url == "https://raw.githubusercontent.com/demo/gallery/main"
+
+    page.close()
+
+
 def test_settings_page_has_module_tabs(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
     SettingsStore(path).save(AppSettings())
