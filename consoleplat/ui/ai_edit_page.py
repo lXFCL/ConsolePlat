@@ -13,6 +13,7 @@ from pathlib import Path
 from PyQt5.QtCore import QProcess, Qt, QThread, QObject, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -199,6 +200,7 @@ class AIEditBackgroundWorker(QObject):
             list(self.record.split_profile.get("x_guides") or []),
             list(self.record.split_profile.get("y_guides") or []),
             original_image=self._find_original_round_source(source_path, self.record.outputs),
+            drop_first=bool(self.settings.ai_edit_drop_first_per_round),
         )
         final_outputs = self._copy_split_outputs_to_final_gallery(self.record, [Path(path) for path in split_paths])
         return BackgroundTaskResult(
@@ -906,6 +908,14 @@ class AIEditTaskDetailDialog(QDialog):
 
 
 class SplitProfileEditorDialog(QDialog):
+    BASE_DIALOG_SIZE = (980, 720)
+    BASE_PREVIEW_SIZE = 480
+    ZOOM_FACTORS = {
+        "1x": 1.0,
+        "1.5x": 1.5,
+        "2x": 2.0,
+    }
+
     def __init__(self, record: AIEditTaskRecord, source_path: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.record = record
@@ -913,7 +923,7 @@ class SplitProfileEditorDialog(QDialog):
         self._image_size = self._load_image_size(source_path)
         self._syncing_fields = False
         self.setWindowTitle("手动切割线")
-        self.resize(980, 720)
+        self.resize(*self.BASE_DIALOG_SIZE)
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(source_path))
@@ -936,8 +946,12 @@ class SplitProfileEditorDialog(QDialog):
         side_layout.addWidget(self.stats_label)
 
         form = QFormLayout()
+        self.zoom_combo = NoWheelComboBox()
+        self.zoom_combo.addItems(list(self.ZOOM_FACTORS.keys()))
+        self.zoom_combo.setCurrentText("1x")
         self.x_guides_edit = QLineEdit(",".join(str(value) for value in x_guides))
         self.y_guides_edit = QLineEdit(",".join(str(value) for value in y_guides))
+        form.addRow("预览倍率", self.zoom_combo)
         form.addRow("纵向分割线", self.x_guides_edit)
         form.addRow("横向分割线", self.y_guides_edit)
         side_layout.addLayout(form)
@@ -954,6 +968,7 @@ class SplitProfileEditorDialog(QDialog):
         self.preview.guidesChanged.connect(self._sync_guide_fields)
         self.x_guides_edit.editingFinished.connect(self._apply_text_guides_to_preview)
         self.y_guides_edit.editingFinished.connect(self._apply_text_guides_to_preview)
+        self.zoom_combo.currentTextChanged.connect(self._apply_zoom_multiplier)
 
         actions = QHBoxLayout()
         self.reset_button = QPushButton("恢复默认 5x5")
@@ -967,6 +982,21 @@ class SplitProfileEditorDialog(QDialog):
         actions.addWidget(self.save_button)
         actions.addWidget(self.cancel_button)
         layout.addLayout(actions)
+
+    def _apply_zoom_multiplier(self, text: str) -> None:
+        factor = self.ZOOM_FACTORS.get(text, 1.0)
+        self.preview.set_zoom_multiplier(factor)
+        width = round(self.BASE_DIALOG_SIZE[0] * factor)
+        height = round(self.BASE_DIALOG_SIZE[1] * factor)
+        max_width, max_height = self._available_dialog_size()
+        self.resize(min(width, max_width), min(height, max_height))
+
+    def _available_dialog_size(self) -> tuple[int, int]:
+        screen = QApplication.screenAt(self.pos()) or QApplication.primaryScreen()
+        if screen is None:
+            return 1920, 1080
+        available = screen.availableGeometry()
+        return max(self.BASE_DIALOG_SIZE[0], available.width() - 40), max(self.BASE_DIALOG_SIZE[1], available.height() - 40)
 
     def _load_image_size(self, source_path: str) -> tuple[int, int]:
         try:
@@ -1016,6 +1046,7 @@ class SplitProfileEditorDialog(QDialog):
 
 class SplitGuidePreviewWidget(QWidget):
     guidesChanged = pyqtSignal(list, list)
+    BASE_MINIMUM_SIZE = 480
 
     def __init__(self, source_path: str, x_guides: list[int], y_guides: list[int], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1025,9 +1056,16 @@ class SplitGuidePreviewWidget(QWidget):
         self._selected_axis: str | None = None
         self._selected_index: int = -1
         self._dragging = False
-        self.setMinimumSize(480, 480)
+        self.setMinimumSize(self.BASE_MINIMUM_SIZE, self.BASE_MINIMUM_SIZE)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.set_guides(x_guides, y_guides)
+
+    def set_zoom_multiplier(self, factor: float) -> None:
+        safe_factor = max(1.0, float(factor or 1.0))
+        size = round(self.BASE_MINIMUM_SIZE * safe_factor)
+        self.setMinimumSize(size, size)
+        self.updateGeometry()
+        self.update()
 
     def set_guides(self, x_guides: list[int], y_guides: list[int]) -> None:
         self._x_guides = sorted(set(int(value) for value in x_guides))

@@ -617,6 +617,51 @@ def test_ai_edit_page_split_current_round_uses_effective_count_when_drop_first_e
     page.close()
 
 
+def test_ai_edit_background_worker_split_current_round_passes_drop_first_setting(tmp_path, monkeypatch):
+    source = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(source)
+    final_dir = tmp_path / "final-transparent"
+    record = AIEditTaskRecord(
+        task_id="20260623192101y",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(
+            images=[],
+            prompt="keep subject",
+            split_collage=True,
+            split_count=2,
+            prefix="BO",
+            start_number=1661,
+        ),
+        output_dir=str(tmp_path),
+        round_sources=[str(source)],
+        final_transparent_dir=str(final_dir),
+        split_profile={"x_guides": [500], "y_guides": [500]},
+    )
+    captured = {}
+
+    def fake_split(source_image, output_dir, split_count, x_guides=None, y_guides=None, original_image=None, drop_first=False):
+        captured["drop_first"] = drop_first
+        captured["x_guides"] = list(x_guides or [])
+        captured["y_guides"] = list(y_guides or [])
+        target = Path(output_dir) / "edited_round_01_transparent_part_02.png"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"part2")
+        return [str(target)]
+
+    monkeypatch.setattr("consoleplat.ui.ai_edit_page.split_collage_image_with_guides", fake_split)
+
+    worker = AIEditBackgroundWorker(
+        "split_current_round",
+        record,
+        AppSettings(ai_edit_drop_first_per_round=True),
+    )
+
+    result = worker._run_split_current_round()
+
+    assert captured == {"drop_first": True, "x_guides": [500], "y_guides": [500]}
+    assert result.outputs == [str(final_dir / "BO-1661.png")]
+
+
 def test_ai_edit_page_split_current_round_uses_recovered_second_round_start_number(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
 
@@ -1178,6 +1223,62 @@ def test_split_profile_editor_dialog_updates_text_fields_when_guides_change(tmp_
 
     assert dialog.x_guides_edit.text() == "210,420,620,810"
     assert dialog.y_guides_edit.text() == "190,390,610,805"
+
+    dialog.close()
+
+
+def test_split_profile_editor_dialog_defaults_to_current_preview_size(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(image_path)
+    record = AIEditTaskRecord(
+        task_id="20260623170201",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25),
+        split_profile={"x_guides": [210, 420], "y_guides": [190, 390]},
+    )
+
+    from consoleplat.ui.ai_edit_page import SplitProfileEditorDialog
+
+    dialog = SplitProfileEditorDialog(record, str(image_path))
+
+    assert dialog.zoom_combo.currentText() == "1x"
+    assert dialog.preview.minimumWidth() == 480
+    assert dialog.preview.minimumHeight() == 480
+    assert dialog.size().width() == 980
+    assert dialog.size().height() == 720
+
+    dialog.close()
+
+
+def test_split_profile_editor_dialog_zoom_resizes_preview_and_dialog_without_changing_guides(tmp_path):
+    app = QApplication.instance() or QApplication([])
+
+    image_path = tmp_path / "edited_round_01_transparent.png"
+    Image.new("RGBA", (1000, 1000), (0, 0, 0, 0)).save(image_path)
+    record = AIEditTaskRecord(
+        task_id="20260623170202",
+        title="AI 改图 BO-1661",
+        job=AIEditJob(images=[], prompt="保留主体", split_collage=True, split_count=25),
+        split_profile={"x_guides": [210, 420], "y_guides": [190, 390]},
+    )
+
+    from consoleplat.ui.ai_edit_page import SplitProfileEditorDialog
+
+    dialog = SplitProfileEditorDialog(record, str(image_path))
+
+    dialog.zoom_combo.setCurrentText("1.5x")
+    assert dialog.preview.minimumWidth() == 720
+    assert dialog.preview.minimumHeight() == 720
+    assert dialog.size().width() > 980
+    assert dialog.size().height() > 720
+    assert dialog.parsed_guides() == ([210, 420], [190, 390])
+
+    dialog.zoom_combo.setCurrentText("2x")
+    assert dialog.preview.minimumWidth() == 960
+    assert dialog.preview.minimumHeight() == 960
+    assert dialog.parsed_guides() == ([210, 420], [190, 390])
 
     dialog.close()
 
