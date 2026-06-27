@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from consoleplat.services.print_gallery_service import collect_print_gallery, pull_random_github_print
+from consoleplat.services.version_check_service import UpdateProxyConfig
 
 
 def test_print_gallery_copies_exact_local_sku_match(tmp_path):
@@ -192,3 +193,91 @@ def test_pull_random_github_print_removes_empty_file_after_download_failure(tmp_
     expected = tmp_path / "gallery" / "github拉取" / "SZW" / "2026" / "6月" / "最终透明底" / "SZW-3163.png"
     assert result.ok is False
     assert not expected.exists()
+
+
+def test_pull_random_github_print_retries_without_proxy_after_tls_proxy_error(tmp_path, monkeypatch):
+    calls = []
+
+    def fetch_json(url, proxy=None):
+        calls.append(("json", proxy.url if proxy and proxy.enabled else "DIRECT", url))
+        if proxy and proxy.enabled:
+            raise OSError("[ASN1: NOT_ENOUGH_DATA] not enough data (ssl.c:4178)")
+        if url == "https://api.github.com/repos/demo/gallery":
+            return {"default_branch": "main"}
+        return [
+            {
+                "type": "file",
+                "name": "BO-1616.png",
+                "download_url": "https://raw.githubusercontent.com/demo/gallery/main/prints/BO-1616.png",
+            }
+        ]
+
+    def downloader(url, dest, proxy=None):
+        calls.append(("download", proxy.url if proxy and proxy.enabled else "DIRECT", url))
+        Path(dest).write_bytes(b"downloaded")
+        return True
+
+    result = pull_random_github_print(
+        github_url="https://github.com/demo/gallery",
+        local_gallery_dir=tmp_path / "gallery",
+        fetch_json=fetch_json,
+        downloader=downloader,
+        chooser=lambda items: items[0],
+        now=lambda: datetime(2026, 6, 27, 10, 0, 0),
+        proxy=UpdateProxyConfig(enabled=True, host="127.0.0.1", port=7890),
+    )
+
+    assert result.ok is True
+    assert calls[0][1] == "http://127.0.0.1:7890"
+    assert ("json", "DIRECT", "https://api.github.com/repos/demo/gallery") in calls
+    assert calls[-1][0] == "download"
+    assert calls[-1][1] == "DIRECT"
+
+
+def test_pull_random_github_print_reports_proxy_error_without_tls_marker(tmp_path):
+    def fetch_json(_url, proxy=None):
+        raise OSError("proxy down")
+
+    result = pull_random_github_print(
+        github_url="https://github.com/demo/gallery",
+        local_gallery_dir=tmp_path / "gallery",
+        fetch_json=fetch_json,
+        proxy=UpdateProxyConfig(enabled=True, host="127.0.0.1", port=7890),
+    )
+
+    assert result.ok is False
+    assert "代理连接失败" in result.message
+    assert "127.0.0.1:7890" in result.message
+
+
+def test_pull_random_github_print_passes_disabled_proxy_to_fetch_and_download(tmp_path):
+    calls = []
+
+    def fetch_json(url, proxy=None):
+        calls.append(("json", proxy.enabled if proxy else None))
+        if url == "https://api.github.com/repos/demo/gallery":
+            return {"default_branch": "main"}
+        return [
+            {
+                "type": "file",
+                "name": "SZW-3163.png",
+                "download_url": "https://raw.githubusercontent.com/demo/gallery/main/prints/SZW-3163.png",
+            }
+        ]
+
+    def downloader(_url, dest, proxy=None):
+        calls.append(("download", proxy.enabled if proxy else None))
+        Path(dest).write_bytes(b"downloaded")
+        return True
+
+    result = pull_random_github_print(
+        github_url="https://github.com/demo/gallery",
+        local_gallery_dir=tmp_path / "gallery",
+        fetch_json=fetch_json,
+        downloader=downloader,
+        now=lambda: datetime(2026, 6, 27, 10, 0, 0),
+        proxy=UpdateProxyConfig(enabled=False, host="127.0.0.1", port=7890),
+    )
+
+    assert result.ok is True
+    assert calls == [("json", False), ("json", False), ("download", False)]

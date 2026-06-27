@@ -113,9 +113,11 @@ def test_settings_page_test_print_gallery_uses_current_form_values(tmp_path, mon
             self.callbacks.append(callback)
 
     class FakeWorker:
-        def __init__(self, github_url, local_gallery_dir):
+        def __init__(self, github_url, local_gallery_dir, proxy=None):
             started["github_url"] = github_url
             started["local_gallery_dir"] = local_gallery_dir
+            started["proxy_enabled"] = proxy.enabled
+            started["proxy_url"] = proxy.url
             self.finished = FakeSignal()
 
         def moveToThread(self, thread):
@@ -133,12 +135,17 @@ def test_settings_page_test_print_gallery_uses_current_form_values(tmp_path, mon
     page = SettingsPage()
     page.findChild(QLineEdit, "printGalleryLocalDirEdit").setText(str(tmp_path / "current-gallery"))
     page.findChild(QLineEdit, "printGalleryGithubRawBaseEdit").setText("https://github.com/demo/gallery")
+    page.findChild(QCheckBox, "updateProxyEnabledCheck").setChecked(False)
+    page.findChild(QLineEdit, "updateProxyHostEdit").setText("127.0.0.9")
+    page.findChild(QSpinBox, "updateProxyPortSpin").setValue(10809)
     page.test_print_gallery_github()
 
     assert started["thread_parent"] is page
     assert started["thread_started"] is True
     assert started["github_url"] == "https://github.com/demo/gallery"
     assert started["local_gallery_dir"] == str(tmp_path / "current-gallery")
+    assert started["proxy_enabled"] is False
+    assert started["proxy_url"] == "http://127.0.0.9:10809"
     assert page.findChild(QPushButton, "testPrintGalleryGithubButton").isEnabled() is False
 
     page.close()

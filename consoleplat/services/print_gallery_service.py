@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import random
 import shutil
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -10,10 +11,17 @@ from pathlib import Path
 from typing import Callable, Sequence
 from urllib.parse import quote, unquote, urlparse
 
+from consoleplat.services.version_check_service import (
+    PROXY_TLS_FALLBACK_MARKERS,
+    USER_AGENT,
+    UpdateProxyConfig,
+    _build_opener,
+)
+
 
 PRINT_IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 Downloader = Callable[[str, Path], bool]
-JsonFetcher = Callable[[str], object]
+JsonFetcher = Callable[..., object]
 Chooser = Callable[[Sequence[dict]], dict]
 
 
@@ -87,6 +95,7 @@ def pull_random_github_print(
     downloader: Downloader | None = None,
     chooser: Chooser | None = None,
     now: Callable[[], datetime] | None = None,
+    proxy: UpdateProxyConfig | None = None,
 ) -> GithubPrintTestResult:
     clean_url = str(github_url or "").strip()
     if not clean_url:
@@ -98,11 +107,24 @@ def pull_random_github_print(
     except Exception as exc:  # noqa: BLE001 - UI needs a readable error instead of a traceback.
         return GithubPrintTestResult(False, f"本地图集目录无法创建：{exc}")
 
+    fetch = fetch_json or _fetch_json
+    download = downloader or _download_file
+    active_proxy = proxy
     try:
-        repo = _parse_github_gallery_url(clean_url, fetch_json or _fetch_json)
-        files = _list_github_print_files(repo, fetch_json or _fetch_json)
+        repo, files = _load_github_print_listing(clean_url, fetch, active_proxy)
     except ValueError as exc:
         return GithubPrintTestResult(False, str(exc))
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        if proxy and proxy.enabled and _should_retry_without_proxy(exc):
+            active_proxy = UpdateProxyConfig(enabled=False, host=proxy.host, port=proxy.port)
+            try:
+                repo, files = _load_github_print_listing(clean_url, fetch, active_proxy)
+            except Exception as inner_exc:  # noqa: BLE001 - surface a concise UI message.
+                return GithubPrintTestResult(False, f"代理连接失败，请检查 {proxy.hint} ：{inner_exc}")
+        elif proxy and proxy.enabled:
+            return GithubPrintTestResult(False, f"代理连接失败，请检查 {proxy.hint} ：{exc}")
+        else:
+            return GithubPrintTestResult(False, f"GitHub 图集访问失败：{exc}")
     except Exception as exc:  # noqa: BLE001 - network/API failures should be shown as UI text.
         return GithubPrintTestResult(False, f"GitHub 图集访问失败：{exc}")
 
@@ -132,13 +154,30 @@ def pull_random_github_print(
         / "最终透明底"
         / filename
     )
-    download = downloader or _download_file
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        ok = download(source_url, destination)
+        ok = _call_downloader(download, source_url, destination, active_proxy)
         if not ok or not destination.exists() or destination.stat().st_size <= 0:
             destination.unlink(missing_ok=True)
             return GithubPrintTestResult(False, "下载失败或文件为空", source_url=source_url)
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        destination.unlink(missing_ok=True)
+        if proxy and proxy.enabled and active_proxy and active_proxy.enabled and _should_retry_without_proxy(exc):
+            direct_proxy = UpdateProxyConfig(enabled=False, host=proxy.host, port=proxy.port)
+            try:
+                ok = _call_downloader(download, source_url, destination, direct_proxy)
+                if ok and destination.exists() and destination.stat().st_size > 0:
+                    return GithubPrintTestResult(
+                        True,
+                        f"已下载：{destination}",
+                        saved_path=str(destination),
+                        source_url=source_url,
+                    )
+            except Exception as inner_exc:  # noqa: BLE001 - report below.
+                return GithubPrintTestResult(False, f"代理连接失败，请检查 {proxy.hint} ：{inner_exc}", source_url=source_url)
+        if proxy and proxy.enabled:
+            return GithubPrintTestResult(False, f"代理连接失败，请检查 {proxy.hint} ：{exc}", source_url=source_url)
+        return GithubPrintTestResult(False, f"下载失败：{exc}", source_url=source_url)
     except Exception as exc:  # noqa: BLE001 - clean up partial files and report in UI.
         destination.unlink(missing_ok=True)
         return GithubPrintTestResult(False, f"下载失败：{exc}", source_url=source_url)
@@ -158,6 +197,15 @@ def _unique_skus(skus: list[str]) -> list[str]:
     return result
 
 
+def _load_github_print_listing(
+    clean_url: str,
+    fetch_json: JsonFetcher,
+    proxy: UpdateProxyConfig | None,
+) -> tuple[_GithubGalleryRepo, list[dict]]:
+    repo = _parse_github_gallery_url(clean_url, fetch_json, proxy)
+    return repo, _list_github_print_files(repo, fetch_json, proxy)
+
+
 @dataclass(frozen=True)
 class _GithubGalleryRepo:
     owner: str
@@ -166,7 +214,11 @@ class _GithubGalleryRepo:
     path: str
 
 
-def _parse_github_gallery_url(url: str, fetch_json: JsonFetcher) -> _GithubGalleryRepo:
+def _parse_github_gallery_url(
+    url: str,
+    fetch_json: JsonFetcher,
+    proxy: UpdateProxyConfig | None = None,
+) -> _GithubGalleryRepo:
     parsed = urlparse(url)
     host = parsed.netloc.lower()
     parts = [unquote(part) for part in parsed.path.strip("/").split("/") if part]
@@ -180,7 +232,7 @@ def _parse_github_gallery_url(url: str, fetch_json: JsonFetcher) -> _GithubGalle
             branch = parts[3]
             gallery_path = "/".join(parts[4:]) or "prints"
         if not branch:
-            branch = _fetch_default_branch(owner, repo, fetch_json)
+            branch = _fetch_default_branch(owner, repo, fetch_json, proxy)
         return _GithubGalleryRepo(owner=owner, repo=repo, branch=branch, path=gallery_path.strip("/") or "prints")
 
     if host == "raw.githubusercontent.com":
@@ -193,8 +245,13 @@ def _parse_github_gallery_url(url: str, fetch_json: JsonFetcher) -> _GithubGalle
     raise ValueError("仅支持 github.com 仓库地址或 raw.githubusercontent.com Raw 地址")
 
 
-def _fetch_default_branch(owner: str, repo: str, fetch_json: JsonFetcher) -> str:
-    data = fetch_json(f"https://api.github.com/repos/{quote(owner)}/{quote(repo)}")
+def _fetch_default_branch(
+    owner: str,
+    repo: str,
+    fetch_json: JsonFetcher,
+    proxy: UpdateProxyConfig | None = None,
+) -> str:
+    data = _call_fetch_json(fetch_json, f"https://api.github.com/repos/{quote(owner)}/{quote(repo)}", proxy)
     if isinstance(data, dict):
         branch = str(data.get("default_branch") or "").strip()
         if branch:
@@ -202,13 +259,17 @@ def _fetch_default_branch(owner: str, repo: str, fetch_json: JsonFetcher) -> str
     return "main"
 
 
-def _list_github_print_files(repo: _GithubGalleryRepo, fetch_json: JsonFetcher) -> list[dict]:
+def _list_github_print_files(
+    repo: _GithubGalleryRepo,
+    fetch_json: JsonFetcher,
+    proxy: UpdateProxyConfig | None = None,
+) -> list[dict]:
     path = "/".join(quote(part) for part in repo.path.split("/") if part)
     url = (
         f"https://api.github.com/repos/{quote(repo.owner)}/{quote(repo.repo)}"
         f"/contents/{path}?ref={quote(repo.branch)}"
     )
-    data = fetch_json(url)
+    data = _call_fetch_json(fetch_json, url, proxy)
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
     if isinstance(data, dict) and data.get("message"):
@@ -223,6 +284,34 @@ def _classify_print_filename(filename: str) -> str:
     if stem.startswith("SZW-"):
         return "SZW"
     return "通用素材"
+
+
+def _should_retry_without_proxy(exc: BaseException) -> bool:
+    text = str(exc).upper()
+    return any(marker in text for marker in PROXY_TLS_FALLBACK_MARKERS)
+
+
+def _call_fetch_json(fetch_json: JsonFetcher, url: str, proxy: UpdateProxyConfig | None) -> object:
+    try:
+        return fetch_json(url, proxy=proxy)
+    except TypeError as exc:
+        if "proxy" not in str(exc):
+            raise
+        return fetch_json(url)
+
+
+def _call_downloader(
+    downloader: Callable[..., bool],
+    url: str,
+    destination: Path,
+    proxy: UpdateProxyConfig | None,
+) -> bool:
+    try:
+        return downloader(url, destination, proxy=proxy)
+    except TypeError as exc:
+        if "proxy" not in str(exc):
+            raise
+        return downloader(url, destination)
 
 
 def _find_local_print(local_dir: Path | None, sku: str, warnings: list[str]) -> Path | None:
@@ -262,11 +351,12 @@ def _download_github_print(
     return None
 
 
-def _download_file(url: str, destination: Path) -> bool:
+def _download_file(url: str, destination: Path, proxy: UpdateProxyConfig | None = None) -> bool:
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "ConsolePlat/print-gallery"})
-        with urllib.request.urlopen(request, timeout=20) as response:
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        opener = _build_opener(proxy, disable_env_proxy=bool(proxy is not None and not proxy.enabled))
+        with opener.open(request, timeout=20) as response:
             if getattr(response, "status", 200) != 200:
                 return False
             destination.write_bytes(response.read())
@@ -275,9 +365,10 @@ def _download_file(url: str, destination: Path) -> bool:
         return False
 
 
-def _fetch_json(url: str) -> object:
-    request = urllib.request.Request(url, headers={"User-Agent": "ConsolePlat/print-gallery"})
-    with urllib.request.urlopen(request, timeout=20) as response:
+def _fetch_json(url: str, proxy: UpdateProxyConfig | None = None) -> object:
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    opener = _build_opener(proxy, disable_env_proxy=bool(proxy is not None and not proxy.enabled))
+    with opener.open(request, timeout=20) as response:
         if getattr(response, "status", 200) != 200:
             raise ValueError(f"HTTP {getattr(response, 'status', '?')}")
         return json.loads(response.read().decode("utf-8"))

@@ -65,15 +65,17 @@ class _DownloadWorker(QObject):
 class _PrintGalleryGithubTestWorker(QObject):
     finished = pyqtSignal(object)
 
-    def __init__(self, github_url: str, local_gallery_dir: str) -> None:
+    def __init__(self, github_url: str, local_gallery_dir: str, proxy: UpdateProxyConfig | None = None) -> None:
         super().__init__()
         self.github_url = github_url
         self.local_gallery_dir = local_gallery_dir
+        self.proxy = proxy
 
     def run(self) -> None:
         result = _PrintGalleryGithubTest(
             github_url=self.github_url,
             local_gallery_dir=self.local_gallery_dir,
+            proxy=self.proxy,
         )
         self.finished.emit(result)
 
@@ -619,7 +621,7 @@ class SettingsPage(QWidget):
         self.print_gallery_github_test_status_label.setText("正在从 GitHub 随机拉取印花…")
 
         thread = QThread(self)
-        worker = _PrintGalleryGithubTestWorker(github_url, local_gallery_dir)
+        worker = _PrintGalleryGithubTestWorker(github_url, local_gallery_dir, self._proxy_config_from_form())
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(self._on_print_gallery_test_finished)
