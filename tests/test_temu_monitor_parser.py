@@ -206,7 +206,7 @@ def test_monitor_source_attempts_to_set_page_size_to_100():
 
         def evaluate(self, script):
             self.scripts.append(script)
-            return len(self.scripts) in {2, 3}
+            return len(self.scripts) in {2, 3, 4}
 
         def wait_for_timeout(self, _ms):
             self.waits.append(_ms)
@@ -217,10 +217,11 @@ def test_monitor_source_attempts_to_set_page_size_to_100():
     source._ensure_page_size_100(page)
 
     assert page.waits == [700, 1500]
-    assert len(page.scripts) == 3
+    assert len(page.scripts) == 4
     assert "scrollTo" not in page.scripts[0]
     assert any("scrollTo" in script for script in page.scripts)
     assert any("100" in script for script in page.scripts)
+    assert "isPageSize100" in page.scripts[-1]
 
 
 def test_monitor_source_does_not_scroll_when_page_size_is_already_100():
@@ -315,6 +316,51 @@ def test_page_size_script_handles_right_bottom_page_size_text_variants():
     assert "pointerdown" in combined
     assert "itemPerPage100" in combined
     assert "pageChar" in combined
+
+
+def test_page_size_script_prefers_beast_select_over_sticky_bottom_wrapper():
+    class FakePage:
+        def __init__(self):
+            self.scripts = []
+            self.waits = []
+
+        def evaluate(self, script):
+            self.scripts.append(script)
+            if len(self.scripts) == 1:
+                return False
+            if len(self.scripts) == 2:
+                return (
+                    'data-testid="beast-core-select"' in script
+                    and 'data-testid="beast-core-select-header"' in script
+                    and "PGT_sizeSelect" in script
+                )
+            if len(self.scripts) == 3:
+                return (
+                    'data-testid="beast-core-portal"' in script
+                    and 'li[role="option"]' in script
+                    and "text === '100'" in script
+                )
+            if len(self.scripts) == 4:
+                return (
+                    "isPageSize100" in script
+                    and 'data-testid="beast-core-select"' in script
+                    and "PGT_sizeSelect" in script
+                )
+            return False
+
+        def wait_for_timeout(self, _ms):
+            self.waits.append(_ms)
+
+    source = object.__new__(TemuMonitorSource)
+    page = FakePage()
+
+    source._ensure_page_size_100(page)
+
+    assert page.waits == [700, 1500]
+    assert len(page.scripts) == 4
+    assert "beast-core-select" in page.scripts[1]
+    assert "beast-core-portal" in page.scripts[2]
+    assert "isPageSize100" in page.scripts[3]
 
 
 def test_auth_gateway_detection_handles_region_center_page():

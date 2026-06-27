@@ -830,6 +830,40 @@ class TemuMonitorSource:
       || /100\s*\/\s*page/i.test(clean)
       || new RegExp(pageText + '\\s*100\\s*' + itemText).test(clean);
   };
+  const findBeastPageSizeTrigger = () => {
+    const paginationRoots = Array.from(document.querySelectorAll('div,ul,li')).filter(el => {
+      if (!visible(el)) return false;
+      const rect = el.getBoundingClientRect();
+      const text = norm(el.innerText || el.textContent);
+      const cls = String(el.className || '');
+      return rect.y > window.innerHeight * 0.45
+        && (
+          cls.includes('pagination')
+          || cls.includes('sticky-table-bottom')
+          || text.includes(pageText)
+          || text.includes(itemText)
+        );
+    }).sort((a, b) => scoreBottomRight(a) - scoreBottomRight(b));
+    const root = paginationRoots[0] || document;
+    const selectors = [
+      '[data-testid="beast-core-select"]',
+      '[data-testid="beast-core-select-header"]',
+      '[class*="PGT_sizeSelect"]',
+      '[class*="PGT_sizeChanger"] [data-testid="beast-core-select"]',
+      '[class*="PGT_sizeChanger"] [data-testid="beast-core-select-header"]'
+    ];
+    for (const selector of selectors) {
+      const candidates = Array.from(root.querySelectorAll(selector)).filter(el => {
+        if (!visible(el)) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.y > window.innerHeight * 0.45;
+      }).sort((a, b) => scoreBottomRight(a) - scoreBottomRight(b));
+      const candidate = candidates[0];
+      if (!candidate) continue;
+      return candidate.querySelector('[data-testid="beast-core-select-header"]') || candidate;
+    }
+    return null;
+  };
   const findPageSizeTrigger = () => {
     const controls = Array.from(document.querySelectorAll('button,[role="button"],div,span,[aria-haspopup="listbox"],[aria-haspopup="menu"]')).filter(el => {
       if (!visible(el)) return false;
@@ -859,7 +893,7 @@ class TemuMonitorSource:
     return true;
   }
 
-  const trigger = findPageSizeTrigger();
+  const trigger = findBeastPageSizeTrigger() || findPageSizeTrigger();
   if (!trigger) return false;
   return fireClick(trigger);
 }
@@ -899,11 +933,23 @@ class TemuMonitorSource:
   };
   const item100 = '100 ' + String.fromCharCode(0x6761);
   const itemPerPage100 = '100' + String.fromCharCode(0x6761, 0x002f, 0x9875);
-  const options = Array.from(document.querySelectorAll('li,div,span,button,[role="option"],[role="menuitem"]')).filter(el => {
-    if (!visible(el)) return false;
-    const text = norm(el.innerText || el.textContent);
-    return text === '100' || text === item100 || text === itemPerPage100 || /100\s*\/\s*page/i.test(text);
-  }).sort((a, b) => {
+  const optionSelectors = [
+    '[data-testid="beast-core-portal"] li[role="option"]',
+    '[data-testid="beast-core-portal"] [role="option"]',
+    '[data-testid="beast-core-portal"] li',
+    'li[role="option"]',
+    'li,div,span,button,[role="option"],[role="menuitem"]'
+  ];
+  let options = [];
+  for (const selector of optionSelectors) {
+    options = Array.from(document.querySelectorAll(selector)).filter(el => {
+      if (!visible(el)) return false;
+      const text = norm(el.innerText || el.textContent);
+      return text === '100' || text === item100 || text === itemPerPage100 || /100\s*\/\s*page/i.test(text);
+    });
+    if (options.length) break;
+  }
+  options = options.sort((a, b) => {
     const ar = a.getBoundingClientRect();
     const br = b.getBoundingClientRect();
     return (br.y - ar.y) || ((ar.width * ar.height) - (br.width * br.height));
@@ -915,7 +961,36 @@ class TemuMonitorSource:
 """
             )
             page.wait_for_timeout(1500)
-            return True
+            return bool(
+                page.evaluate(
+                    r"""
+() => {
+  const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  const everyPage = String.fromCharCode(0x6bcf, 0x9875);
+  const item = String.fromCharCode(0x6761);
+  const page = String.fromCharCode(0x9875);
+  const isPageSize100 = text => {
+    const clean = norm(text);
+    return new RegExp(everyPage + '\\s*100\\s*' + item).test(clean)
+      || new RegExp('100\\s*' + item + '\\s*/\\s*' + page).test(clean)
+      || /100\s*\/\s*page/i.test(clean)
+      || clean === '100';
+  };
+  const visible = el => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+  };
+  return Array.from(document.querySelectorAll('[data-testid="beast-core-select"],[data-testid="beast-core-select-header"],[class*="PGT_sizeSelect"],button,[role="button"],div,span,select')).some(el => {
+    if (!visible(el)) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.y < window.innerHeight * 0.45) return false;
+    return isPageSize100(el.innerText || el.textContent || el.value || '');
+  });
+}
+"""
+                )
+            )
         except Exception:
             return False
 
