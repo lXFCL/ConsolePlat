@@ -35,6 +35,8 @@ from consoleplat.config import (
     default_project_search_roots,
     resolve_project_dir,
 )
+from consoleplat.paths import default_download_dir, default_prints_dir
+from consoleplat.services.posai_resource_downloader import PosAiResourceDefinition, install_posai_resource
 from consoleplat.services.version_check_service import UpdateCheckWorker, download_asset
 from consoleplat.services.version_check_service import UpdateProxyConfig
 from consoleplat.services.print_gallery_service import GithubPrintTestResult, pull_random_github_print
@@ -80,6 +82,31 @@ class _PrintGalleryGithubTestWorker(QObject):
         self.finished.emit(result)
 
 
+class _PosAiResourceDownloadWorker(QObject):
+    progress = pyqtSignal(int, int)
+    finished = pyqtSignal(object)
+
+    def __init__(self, resource: PosAiResourceDefinition, download_dir: str, resources_dir: str) -> None:
+        super().__init__()
+        self.resource = resource
+        self.download_dir = download_dir
+        self.resources_dir = resources_dir
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        result = install_posai_resource(
+            self.resource,
+            download_dir=self.download_dir,
+            resources_dir=self.resources_dir,
+            progress_cb=self.progress.emit,
+            should_cancel=lambda: self._cancelled,
+        )
+        self.finished.emit(result)
+
+
 class SettingsPage(QWidget):
     settings_saved = pyqtSignal(object)
 
@@ -96,6 +123,8 @@ class SettingsPage(QWidget):
         self._download_worker: _DownloadWorker | None = None
         self._print_gallery_test_thread: QThread | None = None
         self._print_gallery_test_worker: _PrintGalleryGithubTestWorker | None = None
+        self._posai_download_thread: QThread | None = None
+        self._posai_download_worker: _PosAiResourceDownloadWorker | None = None
         self._build_ui()
         self.load_settings()
 
@@ -140,6 +169,37 @@ class SettingsPage(QWidget):
         self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "留空则自动探测 PosAiImg/批量贴图结果")
         self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "留空则自动探测 PosAiImg/衣物对应的xlsx")
         self.posai_model_root_edit = self._line_edit("posaiModelRootEdit", "留空则自动探测 PosAiImg/模特图-干净")
+        self.posai_comfyui_dir_edit = self._line_edit("posaiComfyuiDirEdit", "留空则自动使用 PosAiImg/ComfyUI")
+        self.posai_resource_download_dir_edit = self._line_edit(
+            "posaiResourceDownloadDirEdit",
+            "留空则使用 runtime/downloads/posai",
+        )
+        self.posai_comfyui_download_url_edit = self._line_edit("posaiComfyuiDownloadUrlEdit", "ComfyUI zip 下载地址")
+        self.posai_models_download_url_edit = self._line_edit("posaiModelsDownloadUrlEdit", "PosAiImg 模型 zip 下载地址")
+        self.download_posai_comfyui_button = QPushButton("下载 / 安装 ComfyUI")
+        self.download_posai_comfyui_button.setObjectName("downloadPosaiComfyuiButton")
+        self.download_posai_comfyui_button.setCursor(Qt.PointingHandCursor)
+        self.download_posai_comfyui_button.clicked.connect(self.download_posai_comfyui)
+        self.download_posai_models_button = QPushButton("下载 / 安装模型")
+        self.download_posai_models_button.setObjectName("downloadPosaiModelsButton")
+        self.download_posai_models_button.setCursor(Qt.PointingHandCursor)
+        self.download_posai_models_button.clicked.connect(self.download_posai_models)
+        self.detect_posai_resources_button = QPushButton("重新检测资源")
+        self.detect_posai_resources_button.setObjectName("detectPosaiResourcesButton")
+        self.detect_posai_resources_button.setCursor(Qt.PointingHandCursor)
+        self.detect_posai_resources_button.clicked.connect(self.detect_posai_resources)
+        self.clear_posai_resources_button = QPushButton("清除资源路径")
+        self.clear_posai_resources_button.setObjectName("clearPosaiResourcesButton")
+        self.clear_posai_resources_button.setCursor(Qt.PointingHandCursor)
+        self.clear_posai_resources_button.clicked.connect(self.clear_posai_resources)
+        self.posai_resource_download_progress = QProgressBar()
+        self.posai_resource_download_progress.setObjectName("posaiResourceDownloadProgress")
+        self.posai_resource_download_progress.setRange(0, 100)
+        self.posai_resource_download_progress.setValue(0)
+        self.posai_resource_download_progress.hide()
+        self.posai_resource_status_label = QLabel("")
+        self.posai_resource_status_label.setObjectName("posaiResourceStatusLabel")
+        self.posai_resource_status_label.setWordWrap(True)
 
         self.ai_provider_combo = QComboBox()
         self.ai_provider_combo.setObjectName("aiProviderCombo")
@@ -289,9 +349,36 @@ class SettingsPage(QWidget):
         path_form.addRow("图库目录", self._browse_row(self.posai_gallery_root_edit, self.choose_posai_gallery_root))
         path_form.addRow("产品图目录", self._browse_row(self.posai_mockup_root_edit, self.choose_posai_mockup_root))
         path_form.addRow("XLSX 目录", self._browse_row(self.posai_xlsx_root_edit, self.choose_posai_xlsx_root))
-        path_form.addRow("模特底图目录", self._browse_row(self.posai_model_root_edit, self.choose_posai_model_root))
         path_form.addRow("PosAiImg 状态", self._path_status_label("posaiimg"))
         layout.addLayout(path_form)
+
+        resource_panel = QFrame()
+        resource_panel.setObjectName("subPanel")
+        resource_layout = QVBoxLayout(resource_panel)
+        resource_layout.setContentsMargins(12, 10, 12, 10)
+        resource_layout.setSpacing(8)
+        resource_layout.addWidget(QLabel("PosAiImg 资源"))
+        resource_form = QFormLayout()
+        resource_form.setLabelAlignment(Qt.AlignRight)
+        resource_form.addRow("ComfyUI 安装目录", self._browse_row(self.posai_comfyui_dir_edit, self.choose_posai_comfyui_dir))
+        resource_form.addRow("模型目录", self._browse_row(self.posai_model_root_edit, self.choose_posai_model_root))
+        resource_form.addRow(
+            "下载目录",
+            self._browse_row(self.posai_resource_download_dir_edit, self.choose_posai_resource_download_dir),
+        )
+        resource_form.addRow("ComfyUI 下载地址", self.posai_comfyui_download_url_edit)
+        resource_form.addRow("模型下载地址", self.posai_models_download_url_edit)
+        resource_layout.addLayout(resource_form)
+        resource_actions = QHBoxLayout()
+        resource_actions.addWidget(self.download_posai_comfyui_button)
+        resource_actions.addWidget(self.download_posai_models_button)
+        resource_actions.addWidget(self.detect_posai_resources_button)
+        resource_actions.addWidget(self.clear_posai_resources_button)
+        resource_actions.addStretch(1)
+        resource_layout.addLayout(resource_actions)
+        resource_layout.addWidget(self.posai_resource_download_progress)
+        resource_layout.addWidget(self.posai_resource_status_label)
+        layout.addWidget(resource_panel)
 
         provider_panel = QFrame()
         provider_panel.setObjectName("subPanel")
@@ -643,7 +730,7 @@ class SettingsPage(QWidget):
         posai_dir = resolve_project_dir("posaiimg")
         if posai_dir:
             return posai_dir / "图库"
-        return Path("E:/1PythonProject/PosAiImg/图库")
+        return default_prints_dir()
 
     def _cleanup_print_gallery_test_worker(self, thread: QThread, worker: _PrintGalleryGithubTestWorker) -> None:
         if self._print_gallery_test_thread is thread:
@@ -804,6 +891,94 @@ class SettingsPage(QWidget):
             if partial.exists():
                 partial.unlink(missing_ok=True)
 
+    def download_posai_comfyui(self) -> None:
+        resource = PosAiResourceDefinition(
+            key="comfyui",
+            label="ComfyUI",
+            url=self.posai_comfyui_download_url_edit.text().strip(),
+            install_dir_name="ComfyUI",
+            min_free_bytes=5 * 1024 * 1024 * 1024,
+        )
+        self._start_posai_resource_download(resource)
+
+    def download_posai_models(self) -> None:
+        resource = PosAiResourceDefinition(
+            key="posai_models",
+            label="PosAiImg 模型",
+            url=self.posai_models_download_url_edit.text().strip(),
+            install_dir_name="models",
+            min_free_bytes=5 * 1024 * 1024 * 1024,
+        )
+        self._start_posai_resource_download(resource)
+
+    def _start_posai_resource_download(self, resource: PosAiResourceDefinition) -> None:
+        if self._posai_download_thread is not None:
+            self.posai_resource_status_label.setText("已有 PosAiImg 资源下载任务正在运行")
+            return
+        if not resource.url.strip():
+            self.posai_resource_status_label.setText(f"{resource.label} 下载地址待配置")
+            return
+        download_dir = self._posai_download_dir()
+        resources_dir = self._posai_resources_dir()
+        self.posai_resource_download_progress.show()
+        self.posai_resource_download_progress.setRange(0, 100)
+        self.posai_resource_download_progress.setValue(0)
+        self.download_posai_comfyui_button.setEnabled(False)
+        self.download_posai_models_button.setEnabled(False)
+        self.posai_resource_status_label.setText(f"正在下载 {resource.label}...")
+        thread = QThread(self)
+        worker = _PosAiResourceDownloadWorker(resource, str(download_dir), str(resources_dir))
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(self._on_posai_resource_progress)
+        worker.finished.connect(self._on_posai_resource_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._cleanup_posai_resource_worker(thread, worker))
+        self._posai_download_thread = thread
+        self._posai_download_worker = worker
+        thread.start()
+
+    def _cleanup_posai_resource_worker(self, thread: QThread, worker: _PosAiResourceDownloadWorker) -> None:
+        if self._posai_download_thread is thread:
+            self._posai_download_thread = None
+        if self._posai_download_worker is worker:
+            self._posai_download_worker = None
+
+    def _on_posai_resource_progress(self, received: int, total: int) -> None:
+        if total <= 0:
+            self.posai_resource_download_progress.setRange(0, 0)
+            return
+        self.posai_resource_download_progress.setRange(0, 100)
+        self.posai_resource_download_progress.setValue(min(100, int(received * 100 / total)))
+
+    def _on_posai_resource_finished(self, result) -> None:
+        self.download_posai_comfyui_button.setEnabled(True)
+        self.download_posai_models_button.setEnabled(True)
+        self.posai_resource_download_progress.setRange(0, 100)
+        self.posai_resource_download_progress.setValue(100 if result.ok else 0)
+        self.posai_resource_status_label.setText(result.message)
+        if result.ok and result.installed_path:
+            path = Path(result.installed_path)
+            if path.name.lower() == "comfyui":
+                self.posai_comfyui_dir_edit.setText(str(path))
+            else:
+                self.posai_model_root_edit.setText(str(path))
+
+    def _posai_download_dir(self) -> Path:
+        configured = self.posai_resource_download_dir_edit.text().strip()
+        path = Path(configured) if configured else default_download_dir("posai")
+        self.posai_resource_download_dir_edit.setText(str(path))
+        return path
+
+    def _posai_resources_dir(self) -> Path:
+        posai = resolve_project_dir("posaiimg", self._configured_posai_project_dir())
+        if posai:
+            return posai
+        model_text = self.posai_model_root_edit.text().strip()
+        return Path(model_text).parent if model_text else Path.cwd()
+
     def skip_current_version(self) -> None:
         release = self._latest_release or {}
         version = str(release.get("version") or "")
@@ -921,6 +1096,10 @@ class SettingsPage(QWidget):
         self.posai_mockup_root_edit.setText(settings.posai_mockup_root)
         self.posai_xlsx_root_edit.setText(settings.posai_xlsx_root)
         self.posai_model_root_edit.setText(settings.posai_model_root)
+        self.posai_comfyui_dir_edit.setText(settings.posai_comfyui_dir)
+        self.posai_resource_download_dir_edit.setText(settings.posai_resource_download_dir)
+        self.posai_comfyui_download_url_edit.setText(settings.posai_comfyui_download_url)
+        self.posai_models_download_url_edit.setText(settings.posai_models_download_url)
         self._load_providers(settings)
         self.ai_edit_prompt_edit.setPlainText(settings.ai_edit_prompt or DEFAULT_AI_EDIT_PROMPT)
 
@@ -995,6 +1174,10 @@ class SettingsPage(QWidget):
             posai_mockup_root=self.posai_mockup_root_edit.text().strip(),
             posai_xlsx_root=self.posai_xlsx_root_edit.text().strip(),
             posai_model_root=self.posai_model_root_edit.text().strip(),
+            posai_comfyui_dir=self.posai_comfyui_dir_edit.text().strip(),
+            posai_resource_download_dir=self.posai_resource_download_dir_edit.text().strip(),
+            posai_comfyui_download_url=self.posai_comfyui_download_url_edit.text().strip(),
+            posai_models_download_url=self.posai_models_download_url_edit.text().strip(),
             putaway_project_dir=self.putaway_project_dir_edit.text().strip(),
             putaway_data_dir=self.putaway_data_dir_edit.text().strip(),
             putaway_log_dir=self.putaway_log_dir_edit.text().strip(),
@@ -1063,6 +1246,7 @@ class SettingsPage(QWidget):
             self.posai_mockup_root_edit,
             self.posai_xlsx_root_edit,
             self.posai_model_root_edit,
+            self.posai_comfyui_dir_edit,
         ):
             path = Path(edit.text().strip())
             if path.parts:
@@ -1076,6 +1260,10 @@ class SettingsPage(QWidget):
             self.posai_mockup_root_edit.setText(str(posai / "批量贴图结果"))
             self.posai_xlsx_root_edit.setText(str(posai / "衣物对应的xlsx"))
             self.posai_model_root_edit.setText(str(posai / "模特图-干净"))
+        if posai and not self.posai_comfyui_dir_edit.text().strip():
+            self.posai_comfyui_dir_edit.setText(str(posai / "ComfyUI"))
+        if posai and not self.posai_resource_download_dir_edit.text().strip():
+            self.posai_resource_download_dir_edit.setText(str(default_download_dir("posai")))
         putaway = resolve_project_dir("putaway", self.putaway_project_dir_edit.text())
         if putaway and not self.putaway_project_dir_edit.text().strip():
             self.putaway_project_dir_edit.setText(str(putaway))
@@ -1085,6 +1273,23 @@ class SettingsPage(QWidget):
         if applygoods and not self.applygoods_project_dir_edit.text().strip():
             self.applygoods_project_dir_edit.setText(str(applygoods))
         self._refresh_path_status_labels()
+
+    def detect_posai_resources(self) -> None:
+        posai = resolve_project_dir("posaiimg", self._configured_posai_project_dir())
+        if posai:
+            self.posai_comfyui_dir_edit.setText(str(posai / "ComfyUI"))
+            if not self.posai_model_root_edit.text().strip():
+                self.posai_model_root_edit.setText(str(posai / "models"))
+            if not self.posai_resource_download_dir_edit.text().strip():
+                self.posai_resource_download_dir_edit.setText(str(default_download_dir("posai")))
+            self.posai_resource_status_label.setText(f"已按 PosAiImg 目录检测资源：{posai}")
+        else:
+            self.posai_resource_status_label.setText("未找到 PosAiImg 目录，请先选择模块目录或下载资源")
+
+    def clear_posai_resources(self) -> None:
+        self.posai_comfyui_dir_edit.clear()
+        self.posai_model_root_edit.clear()
+        self.posai_resource_status_label.setText("已清除 PosAiImg 资源路径")
 
     def _choose_directory_for(self, edit: QLineEdit, title: str) -> None:
         path = QFileDialog.getExistingDirectory(self, title, edit.text())
@@ -1108,6 +1313,12 @@ class SettingsPage(QWidget):
 
     def choose_posai_model_root(self) -> None:
         self._choose_directory_for(self.posai_model_root_edit, "选择模特底图目录")
+
+    def choose_posai_comfyui_dir(self) -> None:
+        self._choose_directory_for(self.posai_comfyui_dir_edit, "选择 ComfyUI 目录")
+
+    def choose_posai_resource_download_dir(self) -> None:
+        self._choose_directory_for(self.posai_resource_download_dir_edit, "选择 PosAiImg 资源下载目录")
 
     def choose_putaway_project_dir(self) -> None:
         self._choose_directory_for(self.putaway_project_dir_edit, "选择 Putaway 项目目录")

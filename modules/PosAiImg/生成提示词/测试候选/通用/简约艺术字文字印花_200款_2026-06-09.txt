@@ -1,0 +1,201 @@
+简约艺术字文字印花 200 款：主体只保留文字，辅以少量下划线、点、细框、角标。
+001. japanese: ほっと
+002. korean: 웃자
+003. chinese: 冬夜
+004. japanese: はじまり
+005. chinese: 月光
+006. japanese: 空
+007. english: LIGHTLY
+008. japanese: ねむい
+009. english: DAILY
+010. japanese: こころ
+011. japanese: 余白
+012. korean: 새벽
+013. chinese: 认真
+014. korean: 조용히
+015. korean: 좋아
+016. chinese: 慢慢来
+017. korean: 산책
+018. chinese: 咖啡
+019. korean: 햇살
+020. japanese: 日常
+021. chinese: 简单点
+022. english: PURE TYPE
+023. korean: 소소
+024. english: EASY WALK
+025. japanese: 花
+026. japanese: 春
+027. korean: 미니
+028. korean: 온기
+029. english: CALM DOWN
+030. korean: 순간
+031. korean: 미소
+032. chinese: 夏天
+033. chinese: 远方
+034. english: HELLO
+035. korean: 파도
+036. english: SUNNY
+037. japanese: 星
+038. korean: 느긋
+039. korean: 꽃길
+040. japanese: 休日
+041. korean: 바람
+042. chinese: 软软
+043. english: WARM NOTE
+044. korean: 하루
+045. korean: 주말
+046. japanese: 夏
+047. japanese: 朝
+048. japanese: 水色
+049. japanese: 月夜
+050. english: SOFT LINE
+051. english: SMALL JOY
+052. japanese: 今日
+053. korean: 평온
+054. chinese: 呼吸
+055. korean: 별빛
+056. english: GOOD DAY
+057. english: GOOD AIR
+058. japanese: 音
+059. korean: 귤빛
+060. chinese: 今天很好
+061. korean: 달빛
+062. english: CAFE HOUR
+063. chinese: 早安
+064. chinese: 留白
+065. english: REST MODE
+066. korean: 맑음
+067. korean: 봄날
+068. japanese: 晴れ
+069. english: SOFT MOOD
+070. japanese: 夜
+071. english: DREAM ON
+072. chinese: 微风
+073. korean: 작은
+074. japanese: 静か
+075. chinese: 小日子
+076. chinese: 山海
+077. korean: 고요
+078. chinese: 向阳
+079. korean: 편안
+080. japanese: 風景
+081. english: LITTLE SUN
+082. japanese: 線
+083. chinese: 山野
+084. japanese: 雲
+085. chinese: 去看海
+086. japanese: まどろみ
+087. chinese: 晚安
+088. korean: 밤공기
+089. english: BRIGHT
+090. japanese: ゆっくり
+091. english: COZY
+092. korean: 구름
+093. english: FRESH AIR
+094. korean: 빛나
+095. chinese: 春日
+096. chinese: 片刻
+097. english: AFTERNOON
+098. japanese: 小さな
+099. japanese: きもち
+100. english: SLOWLY
+101. japanese: さんぽ
+102. korean: 가볍게
+103. chinese: 不赶路
+104. english: DAY OFF
+105. english: SLOW DAY
+106. japanese: 手紙
+107. english: NO RUSH
+108. english: MORNING
+109. korean: 담담
+110. japanese: 明日
+111. english: LOW KEY
+112. english: HALF PACE
+113. korean: 다시
+114. japanese: そよ風
+115. korean: 우리
+116. korean: 꿈
+117. japanese: 森
+118. chinese: 好好睡
+119. japanese: 余韻
+120. english: MILD SUN
+121. korean: 여름
+122. english: TAKE TIME
+123. chinese: 温柔
+124. korean: 오늘
+125. japanese: 喫茶
+126. japanese: ことば
+127. chinese: 晴天
+128. japanese: 淡い
+129. english: FREE TIME
+130. japanese: 光
+131. chinese: 安静
+132. japanese: 秋
+133. chinese: 有光
+134. korean: 기록
+135. korean: 안녕
+136. japanese: 海
+137. english: EASY NOW
+138. korean: 휴식
+139. english: GOOD NIGHT
+140. english: MOON NOTE
+141. korean: 모래
+142. chinese: 悠悠
+143. japanese: 冬
+144. chinese: 秋风
+145. chinese: 你好
+146. english: SOFT ROAD
+147. chinese: 云朵
+148. korean: 낮잠
+149. english: FEEL GOOD
+150. english: NEAR HOME
+151. japanese: いい日
+152. chinese: 自由
+153. japanese: きらり
+154. japanese: 旅
+155. english: TINY JOY
+156. japanese: 日々
+157. english: STILL HERE
+158. english: STAY SOFT
+159. english: OPEN SKY
+160. chinese: 小岛
+161. english: NICE DAY
+162. japanese: 柔らか
+163. korean: 천천히
+164. english: WEEKEND
+165. chinese: 小确幸
+166. chinese: 去散步
+167. chinese: 慢生活
+168. chinese: 好天气
+169. korean: 커피
+170. korean: 마음
+171. chinese: 平常心
+172. japanese: まるい
+173. korean: 초록
+174. english: WALK SLOW
+175. chinese: 日常
+176. english: KIND WORD
+177. chinese: 一起
+178. english: SOFT WAVE
+179. chinese: 松弛感
+180. japanese: ひと息
+181. korean: 선물
+182. korean: 로컬
+183. chinese: 慢半拍
+184. chinese: 花开
+185. chinese: 自在
+186. chinese: 旧时光
+187. english: SIMPLE
+188. chinese: 微甜
+189. korean: 여유
+190. japanese: 純白
+191. english: QUIETLY
+192. chinese: 放空
+193. english: LOCAL DAY
+194. chinese: 轻轻
+195. korean: 낭만
+196. english: ONE DAY
+197. japanese: 青空
+198. chinese: 慢热
+199. korean: 산들
+200. japanese: 夢

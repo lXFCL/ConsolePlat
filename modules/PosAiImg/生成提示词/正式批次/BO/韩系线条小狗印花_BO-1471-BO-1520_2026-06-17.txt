@@ -1,0 +1,54 @@
+韩系线条小狗印花_BO-1471-BO-1520_2026-06-17
+imgGen 生成线条小狗主体；本地后处理去白底并添加真实韩文手写风文字。
+韩文为真实文本叠加，避免模型伪字；最终透明 PNG 按 BO 货号命名。
+
+BO-1471	歪头小狗	나 안아...	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗_5款_20260617\最终透明底\line-dog-head-tilt.png
+BO-1472	趴趴小狗	쉬는 중	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗_5款_20260617\最终透明底\line-dog-lying.png
+BO-1473	举爪小狗	안녕!	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗_5款_20260617\最终透明底\line-dog-paws-up.png
+BO-1474	奔跑小狗	달려!	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗_5款_20260617\最终透明底\line-dog-running.png
+BO-1475	招手小狗	여기 봐	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗_5款_20260617\最终透明底\line-dog-wave.png
+BO-1476	弹吉他小狗	띵가띵가	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗生活动作_5款_20260617\最终透明底\line-dog-guitar.png
+BO-1477	喝水小狗	물 한잔	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗生活动作_5款_20260617\最终透明底\line-dog-drink-cup.png
+BO-1478	读书小狗	책 좋아	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗生活动作_5款_20260617\最终透明底\line-dog-reading.png
+BO-1479	画画小狗	그리는 중	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗生活动作_5款_20260617\最终透明底\line-dog-painting.png
+BO-1480	抱心小狗	좋아해	E:\1PythonProject\PosAiImg\图库\通用素材\2026\6月\线条小狗生活动作_5款_20260617\最终透明底\line-dog-hug-heart.png
+BO-1481	煎锅小狗	맛있다	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\11_cooking.png
+BO-1482	吃面小狗	후루룩	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\12_noodles.png
+BO-1483	雨伞小狗	비 와요	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\13_umbrella.png
+BO-1484	滑板小狗	씽씽	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\14_skateboard.png
+BO-1485	拍照小狗	찰칵	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\15_camera.png
+BO-1486	耳机小狗	둠칫	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\16_headphones-dance.png
+BO-1487	浇花小狗	쑥쑥	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\17_watering-plant.png
+BO-1488	抱枕小狗	잘 자	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\18_pillow-sleep.png
+BO-1489	刷牙小狗	양치중	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\19_toothbrush.png
+BO-1490	气球小狗	둥실	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\20_balloon.png
+BO-1491	背包小狗	산책 가자	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\21_backpack.png
+BO-1492	电脑小狗	집중	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\22_laptop.png
+BO-1493	打鼓小狗	쿵쿵	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\23_drum.png
+BO-1494	骑车小狗	바람 좋아	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\24_bicycle.png
+BO-1495	钓鱼小狗	기다려	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\25_fishing.png
+BO-1496	举哑铃小狗	힘내	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\26_dumbbell.png
+BO-1497	望远镜小狗	별 보자	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\27_telescope.png
+BO-1498	礼物小狗	선물!	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\28_gift-box.png
+BO-1499	扫地小狗	청소중	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\29_broom.png
+BO-1500	冰淇淋小狗	달콤해	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\30_ice-cream.png
+BO-1501	足球小狗	슛!	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\31_soccer.png
+BO-1502	魔法棒小狗	반짝	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\32_magic-wand.png
+BO-1503	风筝小狗	높이	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\33_kite.png
+BO-1504	烘焙小狗	빵 굽기	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\34_baking.png
+BO-1505	滑雪小狗	눈 좋아	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\35_skiing.png
+BO-1506	冲浪小狗	파도 타자	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\36_surfing.png
+BO-1507	打电话小狗	여보세요	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\37_phone.png
+BO-1508	拿花小狗	꽃 줄게	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\38_flower.png
+BO-1509	泡澡小狗	뽀송	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\39_bubble-bath.png
+BO-1510	开车小狗	부릉	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\40_toy-car.png
+BO-1511	瑜伽小狗	후우	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\41_yoga.png
+BO-1512	提灯小狗	따뜻해	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\42_lantern.png
+BO-1513	纸杯糕小狗	축하해	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\43_cupcake.png
+BO-1514	购物袋小狗	장보는 중	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\44_shopping-bag.png
+BO-1515	照镜小狗	예쁘다	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\45_mirror-brush.png
+BO-1516	送信小狗	편지 왔어	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\46_mail.png
+BO-1517	水坑小狗	첨벙	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\47_puddle.png
+BO-1518	抱星小狗	내 별	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\48_star.png
+BO-1519	棒球小狗	홈런	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\49_baseball.png
+BO-1520	抱玩偶小狗	꼬옥	E:\1PythonProject\PosAiImg\图库\BO\2026\6月\韩系线条小狗印花_BO-1471-BO-1520_2026-06-17\测试\白底原图\50_teddy.png

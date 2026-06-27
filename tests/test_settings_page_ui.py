@@ -790,3 +790,74 @@ def test_settings_page_save_persists_posai_model_root(tmp_path, monkeypatch):
     assert saved.posai_model_root == "E:/1PythonProject/PosAiImg/custom-models"
 
     page.close()
+
+
+def test_settings_page_exposes_posai_resource_download_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            posai_comfyui_dir="E:/ConsolePlat/modules/PosAiImg/ComfyUI",
+            posai_resource_download_dir="E:/ConsolePlat/runtime/downloads/posai",
+            posai_comfyui_download_url="https://example.invalid/comfyui.zip",
+            posai_models_download_url="https://example.invalid/models.zip",
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    image_panel = page.stack.widget(2)
+    edits = {edit.objectName(): edit.text() for edit in image_panel.findChildren(QLineEdit)}
+
+    assert edits["posaiComfyuiDirEdit"] == "E:/ConsolePlat/modules/PosAiImg/ComfyUI"
+    assert edits["posaiResourceDownloadDirEdit"] == "E:/ConsolePlat/runtime/downloads/posai"
+    assert edits["posaiComfyuiDownloadUrlEdit"] == "https://example.invalid/comfyui.zip"
+    assert edits["posaiModelsDownloadUrlEdit"] == "https://example.invalid/models.zip"
+    assert page.findChild(QPushButton, "downloadPosaiComfyuiButton") is not None
+    assert page.findChild(QPushButton, "downloadPosaiModelsButton") is not None
+    assert page.findChild(QPushButton, "detectPosaiResourcesButton") is not None
+    assert page.findChild(QPushButton, "clearPosaiResourcesButton") is not None
+    assert page.findChild(QProgressBar, "posaiResourceDownloadProgress") is not None
+    assert page.findChild(QLabel, "posaiResourceStatusLabel") is not None
+
+    page.close()
+
+
+def test_settings_page_save_persists_posai_resource_download_controls(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    page.findChild(QLineEdit, "posaiComfyuiDirEdit").setText("E:/portable/ComfyUI")
+    page.findChild(QLineEdit, "posaiResourceDownloadDirEdit").setText("E:/portable/downloads")
+    page.findChild(QLineEdit, "posaiComfyuiDownloadUrlEdit").setText("https://example.invalid/comfyui.zip")
+    page.findChild(QLineEdit, "posaiModelsDownloadUrlEdit").setText("https://example.invalid/models.zip")
+    page.save_settings()
+    saved = SettingsStore(path).load()
+
+    assert saved.posai_comfyui_dir == "E:/portable/ComfyUI"
+    assert saved.posai_resource_download_dir == "E:/portable/downloads"
+    assert saved.posai_comfyui_download_url == "https://example.invalid/comfyui.zip"
+    assert saved.posai_models_download_url == "https://example.invalid/models.zip"
+
+    page.close()
+
+
+def test_settings_page_posai_download_requires_url_before_starting_thread(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(posai_comfyui_download_url=""))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+    page.findChild(QLineEdit, "posaiComfyuiDownloadUrlEdit").setText("")
+    page.download_posai_comfyui()
+
+    assert "待配置" in page.findChild(QLabel, "posaiResourceStatusLabel").text()
+    assert page._posai_download_thread is None
+
+    page.close()

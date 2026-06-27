@@ -1,0 +1,50 @@
+BO-906	海浪日落	retro surf travel badge, stylized ocean wave, small sun, simple cliff line, tiny abstract seabird marks
+BO-907	海边小舟	small boat coastal badge, simple boat silhouette, wave lines, sun disc, no people
+BO-908	山湖日落	mountain lake sunrise badge, pine trees, calm lake reflection, rising sun circle, simple hand drawn retro outdoor composition
+BO-909	露营炉火	camp stove fire badge, small camp stove, kettle silhouette, pine branch border, no people
+BO-910	露营月夜	night camp badge, crescent moon, tent silhouette, pine branches, tiny campfire glow, simple stars, circular layout
+BO-911	湖边帐篷	lakeside tent badge, tent by water, pine branch frame, calm reflection, vintage outdoor print
+BO-912	植物圆窗	botanical window badge, round window frame, fern and wildflower silhouettes, sun dot
+BO-913	篝火松树	campfire pine badge, small fire, pine silhouettes, moon dot, circular outdoor emblem
+BO-914	岛屿日落	small island sunset badge, palm-like abstract leaves, ocean line, warm orange sun
+BO-915	海边贝壳	seaside shell badge, shell, small wave, sun arc, sea grass, retro print layout
+BO-916	城市夜景	minimal retro city night badge, moon over rooftops, window light blocks, quiet street curve, geometric composition
+BO-917	海崖日出	sea cliff sunrise badge, cliff edge, wave curve, sun disc, minimal seabird marks
+BO-918	雨后森林	rainy forest badge, pine trees, small raindrops, puddle reflection, muted blue green
+BO-919	露营咖啡	camp coffee badge, enamel mug silhouette, pine branch, tiny sun, no steam text
+BO-920	山花日出	alpine flower sunrise badge, mountain flower, ridge line, sun disc, muted green
+BO-921	松林小径	pine forest trail badge, winding path, layered trees, small sunrise, muted green and cream
+BO-922	林中蘑菇	forest mushroom botanical badge, mushrooms, fern leaves, tiny sun, hand drawn natural style
+BO-923	冬日山林	winter pine badge, snowy trees, mountain line, pale sun, muted cream and slate
+BO-924	湖边芦苇	reeds by lake badge, reed silhouettes, water reflection, round sun, minimal frame
+BO-925	荒野日晕	wilderness sun halo badge, sun ring, pine trees, mountain layers, screen print grain
+BO-926	溪谷露营	valley camping badge, tent, stream curve, pine trees, sunrise, compact emblem
+BO-927	山脉罗盘	mountain compass badge, abstract compass circle, mountain peaks, pine line, no letters
+BO-928	植物花束	quiet botanical oval badge, wildflower bundle, fern leaves, small sun disc, hand drawn line art
+BO-929	野草圆环	meadow grass wreath badge, wild grasses, small flowers, sun dot and oval frame
+BO-930	星空营地	starry campsite badge, tent, star arc, pine trees and moon, no human figures
+BO-931	远山云海	distant mountain cloud sea badge, cloud layers, mountain silhouettes, sun halo
+BO-932	湖面月光	moonlit lake badge, moon reflection, pine silhouettes, quiet water lines
+BO-933	复古花园	retro garden badge, simple flower bed, sun disc, leaf frame, cream and terracotta
+BO-934	沙丘日落	desert dune sunset badge, dune curves, low sun, sparse grass marks, warm muted palette
+BO-935	海浪圆章	ocean wave circular badge, stylized wave, sun disc, shell-like arc, muted blue gray
+BO-936	山路日落	mountain road sunset badge, winding road, layered hills, pine marks, warm sun
+BO-937	雪山圆章	snow mountain round badge, layered mountain peaks, pine silhouettes, warm sun disc
+BO-938	野花圆牌	wildflower medallion, small flowers, fern, leaf wreath and tiny sun, quiet natural illustration
+BO-939	湖边松果	pinecone lakeside badge, pinecone, pine needles, lake line and small sun
+BO-940	溪流石径	forest stream badge, small stream, rounded stones, fern leaves, simple frame
+BO-941	森林湖心	forest lake badge, circular lake, pine ring, small sun reflection, vintage grain
+BO-942	松针月亮	pine needle moon badge, branch cluster, moon circle, star dots, oval frame
+BO-943	日出山脊	sunrise ridge badge, layered hills, rising sun, pine line, subtle grain
+BO-944	海岸灯塔	coastal lighthouse badge, simple lighthouse, wave line, sun circle, cliff shape, retro travel style
+BO-945	夜海月光	night sea moon badge, moon over wave, cliff line, small stars, muted cream and blue
+BO-946	秋日落叶	autumn leaf badge, maple-like leaves, small hill line, warm sun, simple oval frame
+BO-947	晨雾湖岸	misty lakeshore badge, lake reeds, soft hills, rising sun, minimal layered shapes
+BO-948	苔原小花	tundra flower badge, small wildflowers, rock shapes, distant hills, quiet palette
+BO-949	山间小屋	mountain cabin badge, tiny cabin silhouette, pine trees, sun behind hill, no smoke text
+BO-950	海浪贝壳	wave and shell badge, stylized wave behind shell, warm sun accent, no text
+BO-951	山谷花园	mountain valley botanical badge, flowers in foreground, distant mountains, soft oval frame
+BO-952	松林星环	pine forest star ring badge, pine silhouettes, star circle, moon accent, no text
+BO-953	月夜花园	moon garden badge, crescent moon, flowers and leaves, dark oval shape, quiet style
+BO-954	月亮松枝	moon and pine branch crest, crescent moon, pine needles, small stars, oval frame
+BO-955	温柔山海	gentle mountain and sea badge, mountain line above wave curve, sun disc, botanical accents

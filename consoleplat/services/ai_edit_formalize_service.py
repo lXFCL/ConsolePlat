@@ -12,10 +12,12 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 from PIL import Image
 
+from consoleplat.config import resolve_project_dir
+from consoleplat.paths import project_root
 from consoleplat.services.putaway_sync_service import PutawaySyncSummary, sync_putaway_assets
 
 
-POSAI_ROOT = Path("E:/1PythonProject/PosAiImg")
+POSAI_ROOT = resolve_project_dir("posaiimg") or (project_root() / "modules" / "PosAiImg")
 if str(POSAI_ROOT) not in sys.path:
     sys.path.append(str(POSAI_ROOT))
 

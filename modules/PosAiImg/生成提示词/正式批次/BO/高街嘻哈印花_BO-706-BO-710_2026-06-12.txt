@@ -1,0 +1,8 @@
+高街嘻哈印花测试，本地可控渲染。
+元素：皇冠、链条、徽章、涂鸦字标、唱片；透明底；不生成衣服、人物、真实品牌 Logo。
+
+BO-706: 皇冠涂鸦 / KING VIBE
+BO-707: 星芒锁链 / STREET CODE
+BO-708: 黑金徽章 / NO LIMIT
+BO-709: 街头字标 / CITY FLOW
+BO-710: 火焰唱片 / NIGHT BEAT

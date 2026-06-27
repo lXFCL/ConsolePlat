@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.browser-profile/
+downloads/
+outputs/
+build/
+dist/
+*.spec.bak
+.venv/
+.idea/
+.vscode/

@@ -1,0 +1,47 @@
+最终透明底
+本地 ComfyUI 生成；西海岸复古街头/冲浪/棕榈/落日方向；无文字、无品牌、无人物、无衣服。
+BO-1521	棕榈日落	retro California sunset over ocean waves and tall palm trees, distressed beach poster badge
+BO-1522	卷浪太阳	curling blue surf wave under low golden sun, small palm silhouette, clean vintage surf decal
+BO-1523	海岸公路	coastal highway curving beside ocean cliffs, sunset sky, palm tree accents, travel badge composition
+BO-1524	低趴街车	west coast lowrider street style, abstract classic car silhouette under palm sunset, chrome-like highlights
+BO-1525	滑板海浪	skateboard silhouette with wave lines, palm leaves and sunburst, vintage skate beach graphic
+BO-1526	码头黄昏	wooden pier silhouette, orange sunset, calm wave stripes, palm shadows, old California beach mood
+BO-1527	冲浪小巴	retro surf van with board on roof, ocean wave and palm sun background, sticker-style badge
+BO-1528	海滩霓虹	neon-style beach sign shape without letters, palm sunset, wave stripe base, red teal black palette
+BO-1529	落日山崖	ocean cliff at sunset with winding road, small palm trees, bold travel poster shape
+BO-1530	湾区海浪	stylized bay wave, bridge-like abstract arc without specific landmark, sunburst and palm accents
+BO-1531	沙滩车影	classic beach cruiser car silhouette, surfboard, palm trees, warm cream outline
+BO-1532	冲浪板组	three surfboards crossed with wave base and sun circle, retro resort streetwear emblem
+BO-1533	椰树海湾	quiet cove with palm trees, moon-like sunset disk, teal water and orange sky
+BO-1534	日落电线	west coast street scene detail, palm trees and power lines against sunset, badge without buildings text
+BO-1535	浪花徽章	bold foam wave badge, cream spray shapes, navy teal sea, orange sun disk
+BO-1536	公路棕榈	straight desert coastal road, rows of palms, low red sun, vintage road-trip decal
+BO-1537	复古海鸥	abstract seabird silhouettes over wave and sun, palm leaves around, no realistic animal detail
+BO-1538	沙丘日光	beach dunes with palm shadows, wave stripe horizon, sunburst, faded screen print texture
+BO-1539	街头海岸	urban beach collage with palm, wave, sun, car stripe shapes, clean sticker silhouette
+BO-1540	长板冲浪	longboard surfboard standing by wave and palm, sunset circle, vintage surf club mood without text
+BO-1541	红橙落日	large red orange sunset disk with teal wave bands and black palm silhouettes
+BO-1542	蓝调海湾	deep teal bay water, cream foam, orange sky, decorative palm frame
+BO-1543	轮滑海滩	roller skate silhouette with wave stripe and sunburst, west coast retro streetwear decal
+BO-1544	海岸唱片	vinyl record shape blended with sunset wave and palm, music beach mood, no text
+BO-1545	冲浪火焰	surf wave with small flame-like sunset rays, bold red teal cream palette
+BO-1546	棕榈拱门	palm trees forming arch around ocean sunset and wave base, centered sticker badge
+BO-1547	公路浪线	yellow road lines turning into ocean wave stripes, palm sunset, retro road trip symbol
+BO-1548	沙滩排球	simple volleyball circle icon with wave and palm sun background, vintage beach graphic
+BO-1549	摩托海岸	abstract cruiser motorcycle silhouette near palm sunset, coastal streetwear mood, no brand
+BO-1550	夕阳帆影	small sailboat silhouette on ocean sunset with palm leaves, bold poster-style decal
+BO-1551	海浪星芒	wave crest with starburst sun rays and small sparkle dots, screen print badge
+BO-1552	车窗海景	retro car window frame showing palm sunset and ocean wave, standalone decal
+BO-1553	西岸花浪	hibiscus-like tropical flower with wave and sun, west coast beach badge, no realistic photo
+BO-1554	海边加油站	abstract retro roadside gas pump silhouette without brand, palm sunset, coastal road badge
+BO-1555	夜色棕榈	deep navy night palm trees, orange moon disk, teal wave stripe, vintage night beach decal
+BO-1556	冲浪尾鳍	surfboard fin and ocean spray, palm sunset circle, compact sticker silhouette
+BO-1557	海岸相机	retro camera icon framing wave and palm sunset, travel beach print, no brand
+BO-1558	加州热浪	heat wave lines around sun disk, palm silhouettes, ocean stripe base, bold vector poster
+BO-1559	码头灯影	pier lamp silhouette without text, sunset ocean and palm shadows, retro coastal badge
+BO-1560	滑板公路	skateboard and road stripe crossing wave base, palm sunset, street beach graphic
+BO-1561	棕榈闪电	palm tree with lightning sunburst and wave base, red teal cream black palette
+BO-1562	复古救生圈	lifebuoy-like circle with wave and palm sunset, no letters, clean beach emblem
+BO-1563	海风贝壳	stylized shell with wave bands and palm leaf accents, west coast souvenir decal
+BO-1564	日落天际	low coastal skyline as abstract blocks, palm trees, wave and sunset, no specific landmark
+BO-1565	冲浪街牌	blank street sign shape with palm sunset and waves, no text, vintage streetwear sticker

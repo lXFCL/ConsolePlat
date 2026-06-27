@@ -1,0 +1,13 @@
+.browser-profile/
+downloads/
+outputs/
+合规相关资料/generated/
+settings.json
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+~$*
+dist/
+build/
+*.spec

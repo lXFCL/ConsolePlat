@@ -1,0 +1,8 @@
+爆款金属字印花_BO-1421-BO-1425_2026-06-17
+本批次只接收上一轮已落盘的 5 张金属字透明底图，不继续补生成图片。
+贴图主图按印花主体亮度选择：浅色印花贴黑 T，深色印花贴白 T。
+BO-1421	尖刺银字	metal_spiky_print_01.png	luma=252.6
+BO-1422	重铬字形	metal_spiky_print_02.png	luma=253.2
+BO-1423	暗纹金属字	metal_spiky_print_03.png	luma=252.8
+BO-1424	锋利链字	metal_spiky_print_04.png	luma=252.1
+BO-1425	银灰爆裂字	metal_spiky_print_05.png	luma=253.0

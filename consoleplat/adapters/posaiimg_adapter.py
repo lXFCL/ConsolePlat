@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from consoleplat.config import resolve_project_dir
+from consoleplat.paths import project_root
+
 
 @dataclass(frozen=True)
 class LocalImageJob:
@@ -21,9 +24,9 @@ class LocalImageJob:
     test_mode: bool = True
     auto_start_comfyui: bool = False
     keep_comfyui: bool = True
-    gallery_root: str = "E:/1PythonProject/PosAiImg/图库"
-    mockup_root: str = "E:/1PythonProject/PosAiImg/批量贴图结果"
-    xlsx_root: str = "E:/1PythonProject/PosAiImg/衣物对应的xlsx"
+    gallery_root: str = ""
+    mockup_root: str = ""
+    xlsx_root: str = ""
 
 
 @dataclass(frozen=True)
@@ -54,9 +57,9 @@ class AIEditJob:
     prefix: str = "BO"
     start_number: int = 1421
     test_mode: bool = True
-    gallery_root: str = "E:/1PythonProject/PosAiImg/图库"
-    mockup_root: str = "E:/1PythonProject/PosAiImg/批量贴图结果"
-    xlsx_root: str = "E:/1PythonProject/PosAiImg/衣物对应的xlsx"
+    gallery_root: str = ""
+    mockup_root: str = ""
+    xlsx_root: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,10 +72,14 @@ class AIEditSummary:
     message: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass
 class PosAiImgAdapter:
-    project_dir: Path = Path("E:/1PythonProject/PosAiImg")
+    project_dir: Path | None = None
     conda_env: str = "posai-img"
+
+    def __post_init__(self) -> None:
+        if self.project_dir is None:
+            self.project_dir = resolve_project_dir("posaiimg") or (project_root() / "modules" / "PosAiImg")
 
     def local_image_command(self, job: LocalImageJob) -> tuple[str, list[str], Path]:
         if job.test_mode:
@@ -101,7 +108,7 @@ class PosAiImgAdapter:
         args.extend(["--total-return-count", str(max(1, int(job.total_return_count or 1)))])
         for image in job.images:
             args.extend(["--image", str(image)])
-        return sys.executable, args, Path("E:/1PythonProject/ConsolePlat")
+        return sys.executable, args, project_root()
 
     def _test_mode_command(self, job: LocalImageJob) -> tuple[str, list[str], Path]:
         output_dir = self.project_dir / "_consoleplat_tests" / job.prefix / f"{job.style_name}_{job.count}张"

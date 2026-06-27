@@ -3,6 +3,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QLabel, QLineEdit
 
 from consoleplat.config import AppSettings, SettingsStore, resolve_project_dir
+from consoleplat.paths import default_prints_dir, default_runtime_dir
 from consoleplat.ui.settings_page import SettingsPage
 
 
@@ -34,8 +35,32 @@ def test_resolve_project_dir_falls_back_to_detected_root(tmp_path):
     assert resolved == detected
 
 
+def test_resolve_project_dir_prefers_portable_modules_dir(tmp_path):
+    root = tmp_path / "ConsolePlat"
+    portable = root / "modules" / "SendGoods"
+    sibling = tmp_path / "SendGoods"
+    portable.mkdir(parents=True)
+    sibling.mkdir()
+
+    resolved = resolve_project_dir(
+        "sendgoods",
+        "",
+        search_roots=[root, tmp_path],
+    )
+
+    assert resolved == portable
+
+
 def test_resolve_project_dir_returns_none_when_missing(tmp_path):
     assert resolve_project_dir("sendgoods", "", search_roots=[tmp_path]) is None
+
+
+def test_portable_runtime_and_print_defaults_stay_under_project_root(monkeypatch, tmp_path):
+    root = tmp_path / "ConsolePlat"
+    monkeypatch.setattr("consoleplat.paths.project_root", lambda: root)
+
+    assert default_runtime_dir("outputs") == root / "runtime" / "outputs"
+    assert default_prints_dir() == root / "resources" / "prints"
 
 
 def test_settings_store_preserves_blank_external_paths(tmp_path):

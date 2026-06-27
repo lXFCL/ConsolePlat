@@ -1,0 +1,52 @@
+仿油彩名画风格竖版印花_BO-1421-BO-1470_2026-06-17
+本地 ComfyUI 生成；竖版仿油彩名画风格；无文字、无模特、无衣服。
+BO-1421	睡莲池塘	monet-inspired misty water lily pond at dawn, soft pastel blue green and lavender, impressionist light, floating lily pads and gentle reflections
+BO-1422	星夜花园	van gogh-inspired night garden with swirling stars over cypress silhouettes, deep ultramarine sky, golden brushstroke stars, expressive post-impressionist movement
+BO-1423	苹果静物	cezanne-inspired vertical still life with apples, ceramic jug and folded cloth, warm earthy palette, structured oil brushwork, quiet studio composition
+BO-1424	金色花枝	klimt-inspired golden floral orchard, decorative oil painting, mosaic-like gold accents, emerald leaves and small blossoms, elegant vertical ornamental composition
+BO-1425	浮世巨浪	hokusai-inspired great wave interpreted as thick oil paint, dramatic blue wave rising upward, cream foam, distant small mountain, vertical modern art print composition
+BO-1426	鸢尾花园	van gogh-inspired irises in a vertical garden, cobalt blue flowers, olive green leaves, heavy oil brush texture
+BO-1427	睡莲夕照	monet-inspired water lilies under warm sunset haze, coral peach sky, soft reflected clouds, impressionist brush marks
+BO-1428	森林小径	post-impressionist forest path with tall cypress trees, swirling blue green shadows, golden light on the trail
+BO-1429	乡村花窗	matisse-inspired colorful window with flowers and garden shapes, expressive oil paint, decorative vertical composition
+BO-1430	月夜海湾	whistler-inspired moonlit bay, quiet blue silver water, soft glowing moon, atmospheric oil painting panel
+BO-1431	向日葵静物	van gogh-inspired sunflowers in a ceramic vase, ochre yellow petals, teal wall, thick impasto oil paint
+BO-1432	橄榄果瓶	cezanne-inspired still life with pears, olive jar and folded linen, geometric brushwork, earthy colors
+BO-1433	金色树林	klimt-inspired golden birch forest, vertical tree trunks, mosaic gold leaves, emerald and cream accents
+BO-1434	蓝色海浪	hokusai-inspired curling blue wave, cream foam, pale sky, oil painted reinterpretation with thick texture
+BO-1435	芒果花布	gauguin-inspired tropical fruit and flowers, warm orange mango, deep green leaves, bold oil painting blocks
+BO-1436	海岸日落	turner-inspired glowing coastal sunset, dramatic golden sky, soft waves, luminous oil brushwork
+BO-1437	红色花瓶	matisse-inspired red flower vase on patterned table, bold decorative color, vertical oil painting
+BO-1438	雪地松林	monet-inspired snowy pine grove, pale violet shadows, soft winter light, impressionist vertical panel
+BO-1439	稻田风景	van gogh-inspired wheat field with crows removed, golden field, blue sky swirls, vertical crop, no birds
+BO-1440	蓝色山峦	cezanne-inspired blue mountain landscape, layered geometric hills, warm foreground, structured oil paint
+BO-1441	金色孔雀羽	klimt-inspired ornamental peacock feathers, gold mosaic pattern, teal eye shapes, vertical decorative art
+BO-1442	黑松浪花	hokusai-inspired wave and black pine silhouettes, navy blue water, cream foam, vertical oil painting
+BO-1443	连绵池岸	monet-inspired pond bank with reeds and lilies, foggy morning light, green blue lavender palette
+BO-1444	路灯星空	van gogh-inspired small road under swirling starry sky, lamp glow, cypress silhouettes, no buildings text
+BO-1445	白壶梨子	cezanne-inspired white pitcher with pears and cloth, quiet beige wall, warm tabletop, textured oil paint
+BO-1446	金叶小鸟	klimt-inspired gold leaf branches with small abstract birds, ornamental flowers, no text, vertical panel
+BO-1447	富士浪山	hokusai-inspired wave with distant mountain, cream clouds, thick oil paint, balanced vertical composition
+BO-1448	花桥池水	monet-inspired garden bridge over water lilies, soft green bridge, misty pond reflections, vertical panel
+BO-1449	蓝黄花束	van gogh-inspired blue and yellow wildflower bouquet, vigorous brush strokes, dark teal background
+BO-1450	桃子静物	cezanne-inspired peaches on folded white cloth, ceramic bowl, warm ochre shadows, structured composition
+BO-1451	金色星树	klimt-inspired golden tree of life, curling branches, mosaic stars, emerald details, vertical ornament
+BO-1452	浪与明月	hokusai-inspired moonlit wave, indigo water, cream foam, pale moon, oil paint reinterpretation
+BO-1453	淡紫花池	monet-inspired violet water lily pond, soft pink sky, floating blossoms, hazy impressionist oil
+BO-1454	深蓝松林	van gogh-inspired deep blue pine forest with golden moon, swirling brushwork, vertical landscape
+BO-1455	青苹果桌	cezanne-inspired green apples on rustic table, folded cloth, muted wall, strong oil texture
+BO-1456	金色蔡子花	klimt-inspired golden meadow flowers, dense decorative blossoms, green stems, cream background
+BO-1457	海浪云山	hokusai-inspired wave beneath cloud mountain, navy and cream palette, vertical print panel
+BO-1458	荷叶晨雾	monet-inspired lotus leaves in morning mist, pale blue water, glowing sunrise reflection
+BO-1459	麦田月色	van gogh-inspired moonlit wheat field, blue shadows, golden strokes, no figures, vertical panel
+BO-1460	瓶花桌布	cezanne-inspired vase, oranges and striped cloth, earthy ochre and green, still life panel
+BO-1461	金色花瓶	klimt-inspired gold flower vase, ornamental blossoms, mosaic pattern, teal and ivory accents
+BO-1462	山海浪尖	hokusai-inspired sharp wave peaks with distant hills, cream foam dots, thick oil paint texture
+BO-1463	睡莲蓝桥	monet-inspired blue garden bridge and lily pond, cool blue green haze, impressionist brush strokes
+BO-1464	橙色星夜	van gogh-inspired orange starry night over rolling hills, cypress line, dynamic oil brushwork
+BO-1465	陶罐葡萄	cezanne-inspired clay pot with grapes and apples, warm brown table, geometric composition
+BO-1466	金色藤蔓	klimt-inspired golden vines and white flowers, decorative vertical pattern, emerald leaves
+BO-1467	大浪白泡	hokusai-inspired great wave closeup, white foam claws, deep blue sea, vertical oil panel
+BO-1468	池畔花影	monet-inspired pond flowers and soft reflections, pale yellow sunlight, lavender green palette
+BO-1469	蓝色鸢尾	van gogh-inspired blue irises closeup, olive leaves, cream ground, impasto brushwork
+BO-1470	梨子瓷碗	cezanne-inspired pears in ceramic bowl, folded linen, muted ochre and sage, vertical still life

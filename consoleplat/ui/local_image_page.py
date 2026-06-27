@@ -5,6 +5,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from PyQt5.QtCore import QProcess, Qt, QTimer
 from PyQt5.QtWidgets import (
@@ -26,7 +27,8 @@ from PyQt5.QtWidgets import (
 )
 
 from consoleplat.adapters.posaiimg_adapter import LocalImageJob, PosAiImgAdapter
-from consoleplat.config import SettingsStore
+from consoleplat.config import SettingsStore, resolve_project_dir
+from consoleplat.paths import default_prints_dir
 from consoleplat.services.app_log import log_exception
 from consoleplat.services.comfyui_service import ComfyUIService
 from consoleplat.services.posai_batch_service import suggest_next_start
@@ -202,6 +204,8 @@ class LocalImagePage(QWidget):
         self.gallery_root = ""
         self.mockup_root = ""
         self.xlsx_root = ""
+        self.posai_comfyui_dir = ""
+        self.posai_model_root = ""
         self.task_store: TaskStore | None = None
         self._tasks_file_mtime: float | None = None
         self._dirty_task_ids: set[str] = set()
@@ -376,6 +380,13 @@ class LocalImagePage(QWidget):
 
         job = self.build_job()
         self.current_task = self._create_task_record(job)
+        missing_resource_message = self._missing_posai_resource_message(job)
+        if missing_resource_message:
+            self._update_current_task(status="等待资源配置", stage_text="等待资源配置", progress_percent=0)
+            self.status_label.setText("等待资源配置")
+            self._append_log(missing_resource_message)
+            self._flush_persist()
+            return
 
         comfy_status = self.comfyui_service.ensure_ready(
             auto_start=job.auto_start_comfyui,
@@ -439,6 +450,18 @@ class LocalImagePage(QWidget):
         self._dirty_task_ids.add(record.task_id)
         self._flush_persist()
         return record
+
+    def _missing_posai_resource_message(self, job: LocalImageJob) -> str:
+        if job.test_mode:
+            return ""
+        missing: list[str] = []
+        if not self.posai_comfyui_dir or not Path(self.posai_comfyui_dir).exists():
+            missing.append("ComfyUI 安装目录")
+        if not self.posai_model_root or not Path(self.posai_model_root).exists():
+            missing.append("模型目录")
+        if not missing:
+            return ""
+        return "PosAiImg 资源未配置完整，请先到设置页下载或配置：" + "、".join(missing)
 
     def stop_job(self) -> None:
         if self.process is None:
@@ -664,6 +687,8 @@ class LocalImagePage(QWidget):
         self.gallery_root = settings.posai_gallery_root
         self.mockup_root = settings.posai_mockup_root
         self.xlsx_root = settings.posai_xlsx_root
+        self.posai_comfyui_dir = settings.posai_comfyui_dir
+        self.posai_model_root = settings.posai_model_root
         self.task_store = self._build_task_store(settings.program_data_dir)
         self.auto_start_comfyui_check.setChecked(settings.local_image_auto_start_comfyui)
         self.keep_comfyui_check.setChecked(settings.local_image_keep_comfyui)
@@ -688,7 +713,9 @@ class LocalImagePage(QWidget):
         if self._loading_preferences:
             return
         fallback = self.start_spin.value() or (1421 if prefix == "BO" else 3113)
-        suggested = suggest_next_start(prefix, self.gallery_root or "E:/1PythonProject/PosAiImg/图库", fallback)
+        posai = resolve_project_dir("posaiimg")
+        gallery_root = self.gallery_root or (str(posai / "图库") if posai else str(default_prints_dir()))
+        suggested = suggest_next_start(prefix, gallery_root, fallback)
         self.start_spin.setValue(suggested)
 
     def show_task_detail(self, item: QListWidgetItem) -> None:

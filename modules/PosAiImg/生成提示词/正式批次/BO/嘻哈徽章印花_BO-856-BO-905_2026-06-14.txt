@@ -1,0 +1,50 @@
+BO-856	涂鸦皇冠	crown chain graffiti crest, crown inside a circular chain halo, spray paint drips, star accents, lightning marks and splatter, compact emblem, no readable letters
+BO-857	麦克风喷溅	microphone splatter badge, microphone, circular paint burst, soundwave rings and chain, no text
+BO-858	麦克风链条	microphone chain soundwave badge, microphone centered inside circular chain frame, red radial sound bursts, black paint splatter, compact emblem, no person, no label, no letters, no logo
+BO-859	麦克风星环	microphone star ring badge, microphone, starburst, soundwave arcs and chain circle, no label
+BO-860	唱盘耳机	turntable headphones soundwave badge, vinyl turntable, headphones, equalizer bars, lightning shapes, spray splatter and chain arc arranged as a shield emblem, blank lower area, no text, no words, no letters
+BO-861	唱针闪电	record needle lightning badge, tonearm, vinyl fragment, equalizer bars, chain halo and red burst, compact emblem
+BO-862	音箱星环	speaker star ring badge, boombox speaker, starburst halo, chain fragments and paint splashes
+BO-863	唱片火花	vinyl spark badge, vinyl record with red spark halo, abstract lightning, chain arc, no plain record icon
+BO-864	节奏闪电	rhythm lightning badge, microphone, lightning bolts, waveform circle and paint drips, compact emblem
+BO-865	耳机黑胶	headphones vinyl badge, headphones around vinyl record, equalizer bars and red splatter, no readable marks
+BO-866	耳机喷罐	headphones spray can chain badge, headphones, spray paint can, chain arc, lightning bolt, paint splatter and abstract starburst arranged as compact emblem, no shoe, no logo, no letters, no brand mark
+BO-867	低音皇冠	bass crown badge, crown, speaker cone, shockwave circle and paint drips, no letters
+BO-868	重低音	subwoofer badge, deep bass speaker cone, circular shockwaves, red accent splatter, thick outline
+BO-869	耳机皇冠	headphones crown crest, headphones, small abstract crown, red splatter and chain frame, no brand mark
+BO-870	黑胶闪电	vinyl lightning shield badge, vinyl fragment, bold lightning, splatter halo and thick outline, no words
+BO-871	街头鼓机	drum machine sampler badge, square sampler pads, headphones, small chain arc, red splatter halo, compact shield emblem, no words
+BO-872	街头节拍	street beat badge, drum pad controller, vinyl slice, lightning and spray splatter, no letters
+BO-873	喷溅音箱	splatter boombox badge, boombox, bold red spray burst, soundwave arcs, thick white outline
+BO-874	街头唱针	street tonearm badge, record tonearm, soundwave circle, paint drips and chain border
+BO-875	混音台	mixer console badge, faders, knobs, headphones, red burst and circular shield outline, no labels
+BO-876	复古收录机	retro cassette radio badge, radio speaker front, red splatter, waveform arcs, no logo
+BO-877	涂鸦耳机	graffiti headphones badge, headphones, spray splatter, lightning marks and chain border, no readable letters
+BO-878	音箱喷溅	boombox crown graffiti badge, retro speaker front, small abstract crown, sound waves, paint splashes and chain arc, compact high contrast emblem
+BO-879	音浪圆牌	soundwave medallion badge, waveform bars, chain border, red spark accents, no typography
+BO-880	节拍圆章	beat circle badge, sampler pads, microphone silhouette, red radial burst and black splatter, no words
+BO-881	黑胶皇冠	vinyl crown badge, vinyl record behind abstract crown, chain halo and spray paint drips, no text
+BO-882	喷漆皇冠	spray can crown badge, abstract crown above spray can, chain arc and red black splatter, no letters
+BO-883	音浪锁链	soundwave chain badge, waveform bars inside circular chain frame, red lightning accents, no text
+BO-884	街头采样器	sampler machine badge, grid pads, knob details, headphones and paint splatter, no brand mark
+BO-885	城市音箱	urban speaker badge, compact speaker stack, skyline-like equalizer bars, red splatter, no readable text
+BO-886	鼓点音浪	drum beat soundwave badge, drum pad grid, waveform arcs, red splatter, thick outline
+BO-887	低音喇叭	bass speaker badge, twin speaker cones, soundwave rings, lightning bolts and paint splatter, bold circular emblem, no letters
+BO-888	喷漆音浪	spray can soundwave badge, spray can, waveform arcs, crown spark, chain loop, black red splatter, no letters
+BO-889	唱片链环	vinyl chain ring badge, vinyl record inside thick chain border, red burst and equalizer accents, no text
+BO-890	耳机星芒	headphones starburst badge, large headphones around red starburst, equalizer bars and chain fragments, no logo
+BO-891	喷漆节拍	spray beat badge, spray can, sampler pads, waveform circle and chain arc, no letters
+BO-892	唱盘链条	turntable chain badge, turntable deck, chain loop, red lightning and paint drips, no words
+BO-893	皇冠音浪	crown soundwave badge, abstract crown, waveform circle, chain ring and black splatter, no readable letters
+BO-894	街舞地板	abstract dance floor tile badge, vinyl disc, arrows, soundwave rings and chain frame, no dancer, no person
+BO-895	地下音浪	underground soundwave crest, waveform, chain frame, crown spark and black red splatter, no text
+BO-896	唱片涂鸦	graffiti vinyl badge, vinyl record, paint drips, star accents and chain frame, no readable graffiti words
+BO-897	音频旋钮	mixer knobs badge, audio knobs, faders, headphones, lightning and chain halo, no text
+BO-898	采样耳机	sampler headphones badge, pad controller, headphones, chain arc, lightning and red splatter
+BO-899	双音箱	double speaker badge, two speaker cones, cassette center, splatter halo and chain arc, no words
+BO-900	节奏火花	beat spark badge, microphone, sampler pad, lightning sparks and circular splatter, no letters
+BO-901	地下唱盘	underground turntable badge, turntable platter, chain ring, black white red splashes, no letters
+BO-902	爆裂音箱	exploded speaker badge, speaker cone, red burst, black splatter, chain ring and thick outline
+BO-903	音箱链条	speaker chain badge, central speaker box, chain border, paint drips and red shockwaves, no text
+BO-904	磁带音箱	cassette boombox badge, cassette tape, speaker cones, paint drips and red lightning, compact sticker emblem, no text
+BO-905	节奏王冠	rhythm crown badge, abstract crown, equalizer bars, speaker cone and paint splatter, no words

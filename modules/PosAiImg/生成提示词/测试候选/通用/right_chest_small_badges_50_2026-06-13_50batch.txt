@@ -1,0 +1,18 @@
+Small right upper chest print batch: 50 designs
+
+Style basis: the approved 10-image test direction, expanded into 10 families x 5 variants.
+Families: tiny typography, retro club badge, botanical line badge, hand drawn mini symbol, wave word, geometric frame, sun mark, pixel tag, soft script, leaf number.
+Placement: center_x=0.62, center_y=0.32, width=0.115, opacity=0.98, shadow_strength=0.16, wave_strength=0.003.
+Transparent prints: E:\1PythonProject\PosAiImg\印花图_透明底\right_chest_small_badges_50_2026-06-13_50batch
+Main-image mockups: E:\1PythonProject\PosAiImg\AI印花贴图测试\right_chest_small_badges_50_2026-06-13_50batch_main_mockups
+
+- tiny_type: small typography chest mark; short readable type with underline
+- club_badge: retro numbered club badge; small sports badge with a number
+- botanical: fine botanical line badge; leaf and small flower motif
+- mini_heart: hand drawn mini symbol; simple hand drawn icon and small text
+- wave_word: wave short word; wavy line with short word
+- geo_square: geometric frame label; small square frame streetwear mark
+- sun_mark: daily sun mark; round sun icon with text
+- pixel_tag: pixel tech tag; pixel blocks and numeric tag
+- script_mark: soft script mark; small handwritten word mark
+- leaf_number: leaf number patch; natural number label

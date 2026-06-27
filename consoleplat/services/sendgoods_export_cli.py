@@ -7,10 +7,11 @@ from pathlib import Path
 
 from consoleplat.config import SettingsStore
 from consoleplat.config import resolve_project_dir
+from consoleplat.paths import default_prints_dir, default_runtime_dir
 from consoleplat.services.print_gallery_service import collect_print_gallery
 
 
-SENDGOODS_DIR = Path("E:/1PythonProject/SendGoods")
+SENDGOODS_DIR = resolve_project_dir("sendgoods") or Path(__file__).resolve().parents[2] / "modules" / "SendGoods"
 
 
 def main() -> int:
@@ -27,13 +28,18 @@ def export_purchase_sheet() -> dict:
     if not SENDGOODS_DIR.exists():
         raise RuntimeError(f"未找到 SendGoods 项目：{SENDGOODS_DIR}")
     sys.path.insert(0, str(SENDGOODS_DIR))
+    for module_name in ("models", "excel_writer", "temu_reader"):
+        module = sys.modules.get(module_name)
+        module_path = Path(str(getattr(module, "__file__", "") or "")) if module is not None else None
+        if module_path is not None and SENDGOODS_DIR not in module_path.parents:
+            sys.modules.pop(module_name, None)
 
     from excel_writer import write_purchase_sheet
     from temu_reader import TemuReader
 
     settings = SettingsStore().load()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_root = Path(settings.purchase_export_dir or SENDGOODS_DIR / "outputs")
+    output_root = Path(settings.purchase_export_dir or default_runtime_dir("outputs") / "purchase")
     batch_dir = output_root / timestamp
     xlsx_dir = batch_dir / "xlsx"
     print_gallery_dir = batch_dir / "印花图集"
@@ -89,7 +95,7 @@ def _resolve_print_gallery_local_dir(settings) -> Path:
     posai_dir = resolve_project_dir("posaiimg")
     if posai_dir:
         return posai_dir / "图库"
-    return Path("E:/1PythonProject/PosAiImg/图库")
+    return default_prints_dir()
 
 
 def _write(payload: dict) -> None:

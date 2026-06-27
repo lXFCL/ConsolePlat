@@ -1570,8 +1570,9 @@ class ProductPublishPage(QWidget):
         self.task_name_edit.setText(str(getattr(settings, "publish_task_name", "") or "默认产品发布任务"))
         saved_start = max(0, int(getattr(settings, "publish_start_number", 0) or 0))
         fallback = saved_start or (1421 if self.prefix_combo.currentText() == "BO" else 3113)
+        suggested_start = suggest_next_start(self.prefix_combo.currentText(), settings.posai_gallery_root, fallback)
         self.start_spin.setValue(
-            suggest_next_start(self.prefix_combo.currentText(), settings.posai_gallery_root, fallback)
+            max(fallback, suggested_start) if saved_start else suggested_start
         )
         saved_mode = str(getattr(settings, "publish_generation_mode", "") or "本地生图")
         self.generation_mode_combo.setCurrentText(saved_mode if saved_mode in {"本地生图", "AI 改图"} else "本地生图")

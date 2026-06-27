@@ -1,0 +1,52 @@
+写实黑白手势英文印花_BO-1371-BO-1420_2026-06-16
+source	sku	caption	path
+1	BO-1371	code of silence	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_5\hand_01_heart_raw.png
+2	BO-1372	peace signal	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1372_replacement_raw.png
+3	BO-1373	pinkie oath	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1373_replacement_raw.png
+4	BO-1374	finger talk	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1374_replacement_raw.png
+5	BO-1375	rock okay	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1375_replacement_raw.png
+6	BO-1376	stay silent	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_06_stay_silent_raw.png
+7	BO-1377	trust no shadow	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_07_trust_no_shadow_raw.png
+8	BO-1378	coded in calm	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_08_coded_in_calm_raw.png
+9	BO-1379	soft rebellion	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_09_soft_rebellion_raw.png
+10	BO-1380	guard your peace	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_10_guard_your_peace_raw.png
+11	BO-1381	no hard feelings	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_11_no_hard_feelings_raw.png
+12	BO-1382	quiet signal	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_12_quiet_signal_raw.png
+13	BO-1383	hands remember	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_13_hands_remember_raw.png
+14	BO-1384	never fold	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_14_never_fold_raw.png
+15	BO-1385	low key forever	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_15_low_key_forever_raw.png
+16	BO-1386	silver promise	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_16_silver_promise_raw.png
+17	BO-1387	after midnight	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_17_after_midnight_raw.png
+18	BO-1388	speak in signs	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1388_replacement_raw.png
+19	BO-1389	hush mode	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_19_hush_mode_raw.png
+20	BO-1390	keep it sacred	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_20_keep_it_sacred_raw.png
+21	BO-1391	cold hands warm heart	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_21_cold_hands_warm_heart_raw.png
+22	BO-1392	still outside	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_22_still_outside_raw.png
+23	BO-1393	private motion	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_23_private_motion_raw.png
+24	BO-1394	no second guess	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_24_no_second_guess_raw.png
+25	BO-1395	almost famous	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_25_almost_famous_raw.png
+26	BO-1396	calm pressure	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_26_calm_pressure_raw.png
+27	BO-1397	double meaning	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_27_double_meaning_raw.png
+28	BO-1398	sign language	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_28_sign_language_raw.png
+29	BO-1399	silent proof	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_29_silent_proof_raw.png
+30	BO-1400	shadow talk	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_30_shadow_talk_raw.png
+31	BO-1401	hold the line	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_31_hold_the_line_raw.png
+32	BO-1402	coded touch	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_32_coded_touch_raw.png
+33	BO-1403	rare gesture	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1403_replacement_raw.png
+34	BO-1404	one more secret	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_34_one_more_secret_raw.png
+35	BO-1405	nothing obvious	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_35_nothing_obvious_raw.png
+36	BO-1406	faith in motion	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_36_faith_in_motion_raw.png
+37	BO-1407	small revenge	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_37_small_revenge_raw.png
+38	BO-1408	unseen energy	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_38_unseen_energy_raw.png
+39	BO-1409	quiet luxury	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_39_quiet_luxury_raw.png
+40	BO-1410	ring language	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_40_ring_language_raw.png
+41	BO-1411	soft warning	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_41_soft_warning_raw.png
+42	BO-1412	sacred noise	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_42_sacred_noise_raw.png
+43	BO-1413	inner circle	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_43_inner_circle_raw.png
+44	BO-1414	money fingers	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_44_money_fingers_raw.png
+45	BO-1415	gentle chaos	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1415_replacement_raw.png
+46	BO-1416	never explain	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1416_replacement_raw.png
+47	BO-1417	midnight code	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_47_midnight_code_raw.png
+48	BO-1418	hand signal	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\replacements\BO-1418_replacement_raw.png
+49	BO-1419	silent season	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_49_silent_season_raw.png
+50	BO-1420	private code	E:\1PythonProject\PosAiImg\爆款印花知识库\爆款1\hand_print_imggen_50\new45_raw_split\hand_50_private_code_raw.png

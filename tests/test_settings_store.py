@@ -132,6 +132,25 @@ def test_settings_store_persists_update_proxy_preferences(tmp_path):
     assert loaded.update_proxy_port == 10809
 
 
+def test_settings_store_persists_posai_resource_download_preferences(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        posai_comfyui_dir="E:/ConsolePlat/modules/PosAiImg/ComfyUI",
+        posai_resource_download_dir="E:/ConsolePlat/runtime/downloads/posai",
+        posai_comfyui_download_url="https://example.invalid/comfyui.zip",
+        posai_models_download_url="https://example.invalid/models.zip",
+    )
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.posai_comfyui_dir == "E:/ConsolePlat/modules/PosAiImg/ComfyUI"
+    assert loaded.posai_resource_download_dir == "E:/ConsolePlat/runtime/downloads/posai"
+    assert loaded.posai_comfyui_download_url == "https://example.invalid/comfyui.zip"
+    assert loaded.posai_models_download_url == "https://example.invalid/models.zip"
+
+
 def test_settings_store_migrates_legacy_ai_provider_fields(tmp_path):
     path = tmp_path / "settings.json"
     path.write_text(

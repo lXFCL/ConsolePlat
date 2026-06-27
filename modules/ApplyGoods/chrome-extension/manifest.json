@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "ApplyGoods Temu Helper",
+  "description": "Automates the first ApplyGoods step on Temu Agent Seller goods list.",
+  "version": "0.1.0",
+  "permissions": [
+    "activeTab",
+    "clipboardRead",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://agentseller.temu.com/*"
+  ],
+  "action": {
+    "default_title": "ApplyGoods",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://agentseller.temu.com/goods/list*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+BO-956	霓虹磁带	retro cassette tape vaporwave badge, neon grid halo, chrome tape reels, no readable label
+BO-957	铬感圆环	chrome ring emblem, neon gradient inner circle, pixel sparkle accents, compact sticker shape
+BO-958	霓虹落日	neon sunset grid badge, striped sun disc, perspective grid floor, small palm silhouettes, chrome ring frame
+BO-959	海浪圆章	round synthwave wave emblem, striped sun, palm leaf accents, bold black linework
+BO-960	棕榈网格	vaporwave palm tree badge, magenta sunset, cyan wireframe grid, black palm silhouettes, compact emblem
+BO-961	月夜棕榈	crescent moon above wireframe ocean grid, two palm leaves, electric blue magenta violet palette
+BO-962	霓虹浪花	neon splash wave badge, stylized wave foam, hot pink sun disc, cyan outline
+BO-963	街机星芒	arcade starburst badge, geometric pixel sparks, neon cyan magenta yellow, clean sticker contour
+BO-964	梦幻海湾	vaporwave bay badge, curved shoreline, striped sun, two palm silhouettes, pink cyan palette
+BO-965	磁带星爆	cassette tape starburst badge, angular neon burst, chrome tape reels, no readable label
+BO-966	铬感星球	chrome geometric orb badge, wireframe triangle, neon grid lines, magenta cyan glow accents
+BO-967	霓虹岛屿	small island vaporwave badge, palm silhouettes, striped sun, ocean grid, chrome rim
+BO-968	霓虹唱片	retro vinyl record badge, chrome record ring, magenta cyan highlights, abstract sound waves, no text
+BO-969	月光网格	moon and grid badge, crescent moon, perspective cyan grid, purple sea lines
+BO-970	复古游戏机	retro handheld game console badge, glowing blank screen, pixel sparks, no readable buttons text
+BO-971	合成海浪	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 合成海浪
+BO-972	霓虹光环	neon halo badge, abstract chrome ring, tiny pixel stars, purple cyan glow accents
+BO-973	铬感海星	chrome star shape badge, grid reflection, magenta cyan edge lights, abstract vaporwave emblem
+BO-974	街机方窗	arcade square window badge, pixel frame, abstract blank screen, neon burst, no readable text
+BO-975	复古光盘	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 复古光盘
+BO-976	棕榈日落	palm sunset medallion, hot pink sun, cyan water lines, bold black silhouettes
+BO-977	复古键盘	retro keyboard badge, old computer keyboard, neon pixel sparkles, cyan magenta frame, no text
+BO-978	复古电脑	retro computer window badge, old monitor, pixel sparkle accents, cyan magenta frame, no readable screen text
+BO-979	电音波纹	abstract synthwave ripple badge, concentric neon wave lines, chrome center orb, no text
+BO-980	像素月亮	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 像素月亮
+BO-981	复古电视	retro television badge, glowing screen shape, pixel stars, chrome knobs, no readable content
+BO-982	霓虹方块	stacked geometric cube badge, chrome cubes, neon pink cyan rim light, grid shadow removed
+BO-983	棕榈星环	palm silhouette inside star ring badge, neon sunset, cyan orbit lines, compact central graphic
+BO-984	电子月海	moonlit synthwave sea badge, crescent moon, wireframe wave, palm shadow, purple blue palette
+BO-985	铬感三角	chrome triangle emblem, neon grid reflection, small sun disc, deep navy shadow, no text
+BO-986	电子星球	retro planet badge, chrome ringed planet, neon grid reflection, purple cyan palette
+BO-987	像素闪电	pixel arcade starburst badge, abstract lightning bolts, cyan pink yellow black palette
+BO-988	霓虹圆窗	round vaporwave window badge, sunset gradient, ocean line, palm silhouettes, chrome outer contour
+BO-989	铬感海浪	chrome wave badge, stylized wave curl, neon pink cyan reflections, black outline
+BO-990	棕榈月亮	palm leaves and moon badge, dark silhouette leaves, violet moon glow, cyan outline
+BO-991	霓虹贝壳	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 霓虹贝壳
+BO-992	棕榈海平线	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 棕榈海平线
+BO-993	霓虹山线	wireframe mountain badge, neon sunset disc, magenta purple sky shapes, cyan grid base
+BO-994	复古软盘	retro floppy disk badge, chrome disk shape, neon pink cyan accents, pixel stars, no text
+BO-995	网格山海	wireframe mountain and ocean badge, striped sun, purple blue grid, black outline
+BO-996	复古窗口	retro operating system window collage badge, simple icons, pink cyan blocks, no letters
+BO-997	夜色网格	night grid badge, deep navy base, neon sun stripe, small palm shadows, high contrast outline
+BO-998	夜海棕榈	night sea palm badge, dark palm silhouettes, moon glow, magenta cyan water lines
+BO-999	电子地平线	vaporwave horizon badge, grid floor, sun half circle, small geometric mountains
+BO-1000	霓虹罗盘	abstract compass-like vaporwave badge, chrome points, grid circle, no letters or numbers
+BO-1001	像素太阳	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 像素太阳
+BO-1002	霓虹旋涡	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 霓虹旋涡
+BO-1003	电子云海	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 电子云海
+BO-1004	电子海面	local vector vaporwave replacement, no shirt silhouette, no apparel, clean printable decal, 电子海面
+BO-1005	合成落日	synthwave sunset badge, striped sun, ocean wave, palm leaf frame, high contrast decal

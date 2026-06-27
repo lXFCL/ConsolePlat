@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from consoleplat.config import SettingsStore
+from consoleplat.config import resolve_project_dir
+from consoleplat.paths import default_runtime_dir, modules_root
 from consoleplat.services.monitor_service import MonitorEvent, MonitorSnapshot
 
 
 @dataclass(frozen=True)
 class SendGoodsAdapter:
-    project_dir: Path = Path("E:/1PythonProject/SendGoods")
+    project_dir: Path = resolve_project_dir("sendgoods") or modules_root() / "SendGoods"
 
     def export_command(self) -> tuple[str, list[str]]:
         return sys.executable, ["-m", "consoleplat.services.sendgoods_export_cli"]
@@ -26,7 +28,7 @@ class SendGoodsAdapter:
         if output_path:
             return Path(output_path).parent
         settings = SettingsStore().load()
-        return Path(settings.purchase_export_dir or self.project_dir / "outputs")
+        return Path(settings.purchase_export_dir or default_runtime_dir("outputs") / "purchase")
 
     def apply_export_result(self, snapshot: MonitorSnapshot, payload: dict[str, Any]) -> MonitorSnapshot:
         if not payload.get("ok"):

@@ -1,0 +1,31 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+.buildvenv/
+venv/
+env/
+
+# Build outputs
+build/
+dist/
+*.spec~
+
+# Local IDE state
+.idea/
+.trae/
+
+# Runtime/browser state and logs
+browser_profile/
+log/
+debug.log
+
+# Local OS files
+Thumbs.db
+.DS_Store
+
+# Large/local business input can be regenerated or supplied separately
+# Keep source code and small sample data under version control intentionally.

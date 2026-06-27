@@ -1,0 +1,9 @@
+手写涂鸦短句印花 5 款预览
+定位：商业 T 恤胸前局部印花，透明底，适合黑色/白色/灰色 T 恤。
+共性：短英文短句、手写字体、少量星星/笑脸/下划线/角标，深色主体加浅色描边，局部低饱和点缀色。
+
+01_stay_easy.png: STAY / EASY; motif=stars; font=Inkfree.ttf
+02_good_day.png: GOOD / DAY; motif=smile; font=segoeprb.ttf
+03_slow_down.png: SLOW / DOWN; motif=underline; font=comicbd.ttf
+04_little_luck.png: LITTLE / LUCK; motif=sparkle; font=mvboli.ttf
+05_take_it_light.png: TAKE IT / LIGHT; motif=corner; font=segoepr.ttf

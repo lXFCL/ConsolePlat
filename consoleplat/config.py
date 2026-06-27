@@ -9,6 +9,8 @@ from ctypes import wintypes
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from consoleplat.paths import default_download_dir, modules_root
+
 
 DEFAULT_AI_EDIT_PROMPT = "保留主体，整理成适合印花的透明底效果。"
 DEFAULT_AI_PROVIDER_ID = "default-ai-provider"
@@ -27,7 +29,19 @@ def default_project_search_roots() -> list[Path]:
     if env_root:
         roots.append(Path(env_root))
     repo_root = Path(__file__).resolve().parents[1]
-    roots.extend([repo_root.parent, Path.cwd(), Path.cwd().parent, Path.home(), Path.home() / "1PythonProject"])
+    roots.extend(
+        [
+            modules_root(),
+            repo_root / "modules",
+            repo_root,
+            repo_root.parent,
+            Path.cwd() / "modules",
+            Path.cwd(),
+            Path.cwd().parent,
+            Path.home(),
+            Path.home() / "1PythonProject",
+        ]
+    )
     drive = Path.cwd().drive
     if drive:
         roots.append(Path(f"{drive}/1PythonProject"))
@@ -59,7 +73,7 @@ def resolve_project_dir(
     project_dir_name = PROJECT_DIR_NAMES.get(name.lower(), name)
     for root in search_roots or default_project_search_roots():
         root = Path(root).expanduser()
-        candidates = [root / project_dir_name, root / "1PythonProject" / project_dir_name]
+        candidates = [root / "modules" / project_dir_name, root / project_dir_name, root / "1PythonProject" / project_dir_name]
         if root.name.lower() == project_dir_name.lower():
             candidates.insert(0, root)
         for candidate in candidates:
@@ -206,6 +220,10 @@ class AppSettings:
     posai_mockup_root: str = ""
     posai_xlsx_root: str = ""
     posai_model_root: str = ""
+    posai_comfyui_dir: str = ""
+    posai_resource_download_dir: str = ""
+    posai_comfyui_download_url: str = ""
+    posai_models_download_url: str = ""
     putaway_project_dir: str = ""
     putaway_data_dir: str = ""
     putaway_log_dir: str = ""
@@ -354,6 +372,10 @@ class SettingsStore:
             posai_mockup_root=str(data.get("posai_mockup_root") or ""),
             posai_xlsx_root=str(data.get("posai_xlsx_root") or ""),
             posai_model_root=str(data.get("posai_model_root") or ""),
+            posai_comfyui_dir=str(data.get("posai_comfyui_dir") or ""),
+            posai_resource_download_dir=str(data.get("posai_resource_download_dir") or ""),
+            posai_comfyui_download_url=str(data.get("posai_comfyui_download_url") or ""),
+            posai_models_download_url=str(data.get("posai_models_download_url") or ""),
             putaway_project_dir=str(data.get("putaway_project_dir") or ""),
             putaway_data_dir=str(data.get("putaway_data_dir") or ""),
             putaway_log_dir=str(data.get("putaway_log_dir") or ""),
@@ -445,6 +467,10 @@ class SettingsStore:
             "posai_mockup_root": settings.posai_mockup_root or "",
             "posai_xlsx_root": settings.posai_xlsx_root or "",
             "posai_model_root": settings.posai_model_root or "",
+            "posai_comfyui_dir": settings.posai_comfyui_dir or "",
+            "posai_resource_download_dir": settings.posai_resource_download_dir or "",
+            "posai_comfyui_download_url": settings.posai_comfyui_download_url or "",
+            "posai_models_download_url": settings.posai_models_download_url or "",
             "putaway_project_dir": settings.putaway_project_dir or "",
             "putaway_data_dir": settings.putaway_data_dir or "",
             "putaway_log_dir": settings.putaway_log_dir or "",

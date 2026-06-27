@@ -1,0 +1,2 @@
+APP_VERSION = "3.6"
+APP_TITLE = f"浏览器DOM自动化 v{APP_VERSION}"

@@ -142,3 +142,30 @@ def test_local_image_page_debounces_log_and_progress_persistence(tmp_path, monke
     assert save_calls == ["save"]
 
     page.close()
+
+
+def test_local_image_page_blocks_complete_mode_when_posai_resources_missing(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    page, _path = _page_with_temp_store(
+        tmp_path,
+        monkeypatch,
+        AppSettings(
+            program_data_dir=str(tmp_path / "ConsolePlatData"),
+            local_image_test_mode=False,
+            posai_comfyui_dir="",
+            posai_model_root="",
+        ),
+    )
+    started = []
+    monkeypatch.setattr(page.adapter, "local_image_command", lambda _job: started.append("started") or ("python", [], tmp_path))
+
+    page.test_mode_check.setChecked(False)
+    page.start_job()
+
+    assert started == []
+    assert page.process is None
+    assert page.current_task is not None
+    assert page.current_task.status == "等待资源配置"
+    assert any("PosAiImg 资源" in line for line in page.current_task.logs)
+
+    page.close()
