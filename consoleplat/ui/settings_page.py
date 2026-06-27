@@ -37,8 +37,10 @@ from consoleplat.config import (
 )
 from consoleplat.services.version_check_service import UpdateCheckWorker, download_asset
 from consoleplat.services.version_check_service import UpdateProxyConfig
+from consoleplat.services.print_gallery_service import GithubPrintTestResult, pull_random_github_print
 
 _UpdateCheckWorker = UpdateCheckWorker
+_PrintGalleryGithubTest = pull_random_github_print
 
 
 class _DownloadWorker(QObject):
@@ -60,6 +62,22 @@ class _DownloadWorker(QObject):
         self.finished.emit(True, path)
 
 
+class _PrintGalleryGithubTestWorker(QObject):
+    finished = pyqtSignal(object)
+
+    def __init__(self, github_url: str, local_gallery_dir: str) -> None:
+        super().__init__()
+        self.github_url = github_url
+        self.local_gallery_dir = local_gallery_dir
+
+    def run(self) -> None:
+        result = _PrintGalleryGithubTest(
+            github_url=self.github_url,
+            local_gallery_dir=self.local_gallery_dir,
+        )
+        self.finished.emit(result)
+
+
 class SettingsPage(QWidget):
     settings_saved = pyqtSignal(object)
 
@@ -74,6 +92,8 @@ class SettingsPage(QWidget):
         self._latest_release: dict | None = None
         self._download_thread: QThread | None = None
         self._download_worker: _DownloadWorker | None = None
+        self._print_gallery_test_thread: QThread | None = None
+        self._print_gallery_test_worker: _PrintGalleryGithubTestWorker | None = None
         self._build_ui()
         self.load_settings()
 
@@ -107,6 +127,13 @@ class SettingsPage(QWidget):
             "printGalleryGithubRawBaseEdit",
             "例如 https://raw.githubusercontent.com/owner/repo/main/gallery",
         )
+        self.test_print_gallery_github_button = QPushButton("测试拉取")
+        self.test_print_gallery_github_button.setObjectName("testPrintGalleryGithubButton")
+        self.test_print_gallery_github_button.setCursor(Qt.PointingHandCursor)
+        self.test_print_gallery_github_button.clicked.connect(self.test_print_gallery_github)
+        self.print_gallery_github_test_status_label = QLabel("")
+        self.print_gallery_github_test_status_label.setObjectName("printGalleryGithubTestStatusLabel")
+        self.print_gallery_github_test_status_label.setWordWrap(True)
         self.posai_gallery_root_edit = self._line_edit("posaiGalleryRootEdit", "留空则自动探测 PosAiImg/图库")
         self.posai_mockup_root_edit = self._line_edit("posaiMockupRootEdit", "留空则自动探测 PosAiImg/批量贴图结果")
         self.posai_xlsx_root_edit = self._line_edit("posaiXlsxRootEdit", "留空则自动探测 PosAiImg/衣物对应的xlsx")
@@ -229,7 +256,11 @@ class SettingsPage(QWidget):
         form.addRow("拿货表导出目录", self._browse_row(self.purchase_export_dir_edit, self.choose_export_dir))
         form.addRow("印花来源", self.print_gallery_source_combo)
         form.addRow("本地图集目录", self._browse_row(self.print_gallery_local_dir_edit, self.choose_print_gallery_local_dir))
-        form.addRow("GitHub Raw 目录", self.print_gallery_github_raw_base_edit)
+        form.addRow(
+            "GitHub Raw 目录",
+            self._button_row(self.print_gallery_github_raw_base_edit, self.test_print_gallery_github_button),
+        )
+        form.addRow("拉取测试", self.print_gallery_github_test_status_label)
         layout.addLayout(form)
         return self._wrap_scroll_panel(panel, fill_viewport=False)
 
@@ -466,14 +497,17 @@ class SettingsPage(QWidget):
         return edit
 
     def _browse_row(self, edit: QLineEdit, callback) -> QWidget:
-        row = QWidget()
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
         button = QPushButton("选择")
         button.setObjectName("ghostButton")
         button.setCursor(Qt.PointingHandCursor)
         button.clicked.connect(callback)
+        return self._button_row(edit, button)
+
+    def _button_row(self, edit: QLineEdit, button: QPushButton) -> QWidget:
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         layout.addWidget(edit, 1)
         layout.addWidget(button)
         return row
@@ -572,6 +606,57 @@ class SettingsPage(QWidget):
         keys = list(self.tab_buttons)
         if "update" in keys:
             self.activate_module(keys.index("update"))
+
+    def test_print_gallery_github(self) -> None:
+        if self._print_gallery_test_thread is not None:
+            return
+        github_url = self.print_gallery_github_raw_base_edit.text().strip()
+        if not github_url:
+            self.print_gallery_github_test_status_label.setText("请先填写 GitHub 图集地址")
+            return
+        local_gallery_dir = str(self._current_print_gallery_local_dir())
+        self.test_print_gallery_github_button.setEnabled(False)
+        self.print_gallery_github_test_status_label.setText("正在从 GitHub 随机拉取印花…")
+
+        thread = QThread(self)
+        worker = _PrintGalleryGithubTestWorker(github_url, local_gallery_dir)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_print_gallery_test_finished)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._cleanup_print_gallery_test_worker(thread, worker))
+        self._print_gallery_test_thread = thread
+        self._print_gallery_test_worker = worker
+        thread.start()
+
+    def _current_print_gallery_local_dir(self) -> Path:
+        configured = self.print_gallery_local_dir_edit.text().strip()
+        if configured:
+            return Path(configured)
+        posai_gallery_root = self.posai_gallery_root_edit.text().strip()
+        if posai_gallery_root:
+            return Path(posai_gallery_root)
+        posai_dir = resolve_project_dir("posaiimg")
+        if posai_dir:
+            return posai_dir / "图库"
+        return Path("E:/1PythonProject/PosAiImg/图库")
+
+    def _cleanup_print_gallery_test_worker(self, thread: QThread, worker: _PrintGalleryGithubTestWorker) -> None:
+        if self._print_gallery_test_thread is thread:
+            self._print_gallery_test_thread = None
+        if self._print_gallery_test_worker is worker:
+            self._print_gallery_test_worker = None
+
+    def _on_print_gallery_test_finished(self, result: GithubPrintTestResult) -> None:
+        self.test_print_gallery_github_button.setEnabled(True)
+        message = getattr(result, "message", "") or "测试完成"
+        saved_path = getattr(result, "saved_path", "")
+        if getattr(result, "ok", False) and saved_path:
+            self.print_gallery_github_test_status_label.setText(f"拉取成功：{saved_path}")
+            return
+        self.print_gallery_github_test_status_label.setText(message)
 
     def check_for_update(self) -> None:
         if self._update_thread is not None:

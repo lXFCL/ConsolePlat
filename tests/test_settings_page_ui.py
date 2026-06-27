@@ -54,6 +54,8 @@ def test_settings_page_exposes_monitor_print_gallery_controls(tmp_path, monkeypa
     assert combos["printGallerySourceCombo"] == "来自 GitHub"
     assert edits["printGalleryLocalDirEdit"] == "E:/prints/cache"
     assert edits["printGalleryGithubRawBaseEdit"] == "https://raw.githubusercontent.com/demo/gallery/main"
+    assert page.findChild(QPushButton, "testPrintGalleryGithubButton") is not None
+    assert page.findChild(QLabel, "printGalleryGithubTestStatusLabel") is not None
 
     page.close()
 
@@ -77,6 +79,83 @@ def test_settings_page_save_persists_print_gallery_controls(tmp_path, monkeypatc
     assert saved.print_gallery_source == "github"
     assert saved.print_gallery_local_dir == "E:/prints/cache"
     assert saved.print_gallery_github_raw_base_url == "https://raw.githubusercontent.com/demo/gallery/main"
+
+    page.close()
+
+
+def test_settings_page_test_print_gallery_uses_current_form_values(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(print_gallery_local_dir="E:/old/cache"))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+    started = {}
+
+    class FakeThread:
+        def __init__(self, parent=None):
+            started["thread_parent"] = parent
+            self.started = FakeSignal()
+            self.finished = FakeSignal()
+
+        def start(self):
+            started["thread_started"] = True
+
+        def quit(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    class FakeSignal:
+        def __init__(self):
+            self.callbacks = []
+
+        def connect(self, callback):
+            self.callbacks.append(callback)
+
+    class FakeWorker:
+        def __init__(self, github_url, local_gallery_dir):
+            started["github_url"] = github_url
+            started["local_gallery_dir"] = local_gallery_dir
+            self.finished = FakeSignal()
+
+        def moveToThread(self, thread):
+            started["moved_to_thread"] = thread
+
+        def run(self):
+            pass
+
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("consoleplat.ui.settings_page.QThread", FakeThread)
+    monkeypatch.setattr("consoleplat.ui.settings_page._PrintGalleryGithubTestWorker", FakeWorker)
+
+    page = SettingsPage()
+    page.findChild(QLineEdit, "printGalleryLocalDirEdit").setText(str(tmp_path / "current-gallery"))
+    page.findChild(QLineEdit, "printGalleryGithubRawBaseEdit").setText("https://github.com/demo/gallery")
+    page.test_print_gallery_github()
+
+    assert started["thread_parent"] is page
+    assert started["thread_started"] is True
+    assert started["github_url"] == "https://github.com/demo/gallery"
+    assert started["local_gallery_dir"] == str(tmp_path / "current-gallery")
+    assert page.findChild(QPushButton, "testPrintGalleryGithubButton").isEnabled() is False
+
+    page.close()
+
+
+def test_settings_page_test_print_gallery_requires_github_url(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings())
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+    page.findChild(QLineEdit, "printGalleryGithubRawBaseEdit").setText("")
+    page.test_print_gallery_github()
+
+    assert page.findChild(QLabel, "printGalleryGithubTestStatusLabel").text() == "请先填写 GitHub 图集地址"
+    assert page._print_gallery_test_thread is None
 
     page.close()
 
