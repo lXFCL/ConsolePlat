@@ -22,3 +22,4 @@ data/
 _rebuild_v110/
 _recovered_from_session/
 _recovered_worktree/
+.superpowers/
