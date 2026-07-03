@@ -28,6 +28,8 @@ from consoleplat.ui.product_publish_page import ProductPublishPage
 from consoleplat.ui.putaway_page import PutawayPage
 from consoleplat.ui.settings_page import SettingsPage
 from consoleplat.ui.theme import APP_STYLE, get_app_style
+from consoleplat.ui.tutorial_data import get_tutorial_steps
+from consoleplat.ui.tutorial_overlay import TutorialOverlay
 
 
 PAGE_BODIES = {
@@ -83,6 +85,7 @@ class MainWindow(QMainWindow):
         self._built: set[str] = set()
         self._update_check_thread: QThread | None = None
         self._update_check_worker: UpdateCheckWorker | None = None
+        self.tutorial_overlay: TutorialOverlay | None = None
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(QIcon(str(resource_path("assets/images/app_icon.ico"))))
@@ -138,9 +141,16 @@ class MainWindow(QMainWindow):
         app_title.setObjectName("appTitle")
         self.status_pill = QLabel("框架预览")
         self.status_pill.setObjectName("statusPill")
+        self.tutorial_button = QPushButton("?")
+        self.tutorial_button.setObjectName("tutorialButton")
+        self.tutorial_button.setAccessibleName("打开当前页面教程")
+        self.tutorial_button.setToolTip("打开当前页面教程")
+        self.tutorial_button.setCursor(Qt.PointingHandCursor)
+        self.tutorial_button.clicked.connect(self._open_current_page_tutorial)
         header.addWidget(app_title)
         header.addStretch(1)
         header.addWidget(self.status_pill)
+        header.addWidget(self.tutorial_button)
         layout.addLayout(header)
 
         self.stack = QStackedWidget()
@@ -200,6 +210,7 @@ class MainWindow(QMainWindow):
         return page
 
     def activate_page(self, key: str) -> None:
+        self._close_tutorial_overlay()
         self._ensure_page_built(key)
         self.state.active_page = key
         self.stack.setCurrentIndex(self.page_indexes[key])
@@ -274,6 +285,22 @@ class MainWindow(QMainWindow):
         page = self.pages.get("settings")
         if isinstance(page, SettingsPage):
             page.activate_update_tab()
+
+    def _open_current_page_tutorial(self) -> None:
+        page = self.pages.get(self.state.active_page)
+        if page is None:
+            return
+        steps = get_tutorial_steps(self.state.active_page)
+        self._close_tutorial_overlay()
+        self.tutorial_overlay = TutorialOverlay(page, steps)
+        self.tutorial_overlay.start()
+
+    def _close_tutorial_overlay(self) -> None:
+        if self.tutorial_overlay is None:
+            return
+        self.tutorial_overlay.finish()
+        self.tutorial_overlay.deleteLater()
+        self.tutorial_overlay = None
 
     def refresh_task_badges(self) -> None:
         for key, button in self.nav_buttons.items():

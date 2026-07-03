@@ -89,17 +89,29 @@ QLabel#applyPageEyebrow {
     font-weight: 800;
     letter-spacing: 1px;
 }
-QFrame#panel {
+QFrame#panel,
+QFrame#monitorControlsAnchor,
+QFrame#monitorOrdersAnchor,
+QFrame#publishHeaderAnchor,
+QFrame#publishFormAnchor,
+QFrame#localImageConfigAnchor,
+QFrame#localImageStatusAnchor,
+QFrame#aiEditQueueAnchor,
+QFrame#putawayStatusAnchor,
+QFrame#putawayEmbedAnchor,
+QFrame#settingsBrowserAnchor {
     background: #ffffff;
     border: 1px solid #e3ebf4;
     border-radius: 8px;
 }
-QFrame#applyHeaderPanel {
+QFrame#applyHeaderPanel,
+QFrame#applySafetyAnchor {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #ffffff, stop:1 #f4f8fd);
     border: 1px solid #dce6f1;
     border-radius: 12px;
 }
-QFrame#applyEmbedPanel {
+QFrame#applyEmbedPanel,
+QFrame#applyEmbedAnchor {
     background: #ffffff;
     border: 1px solid #dce6f1;
     border-radius: 12px;
@@ -254,7 +266,8 @@ QPushButton#checkUpdateButton:disabled {
     background: #bcd3ed;
     color: #f8fbff;
 }
-QPushButton#ghostButton {
+QPushButton#ghostButton,
+QPushButton#settingsPathsAnchor {
     background: #ffffff;
     color: #243142;
     border: 1px solid #d7e2ee;
@@ -285,18 +298,66 @@ QPushButton#skipVersionButton:disabled {
     background: #f5f8fb;
     color: #9ca8b4;
 }
-QPushButton#ghostButton:hover {
+QPushButton#ghostButton:hover,
+QPushButton#settingsPathsAnchor:hover {
     background: #eef6ff;
     border-color: #b8d5f4;
     color: #2f6fb4;
 }
-QPushButton#ghostButton:pressed {
+QPushButton#ghostButton:pressed,
+QPushButton#settingsPathsAnchor:pressed {
     background: #dcecff;
     border-color: #5d96d8;
 }
-QPushButton#ghostButton:disabled {
+QPushButton#ghostButton:disabled,
+QPushButton#settingsPathsAnchor:disabled {
     background: #f5f8fb;
     color: #9ca8b4;
+}
+QLabel#settingsSecurityAnchor {
+    color: #6e7d8b;
+    font-size: 12px;
+}
+QPushButton#tutorialButton {
+    background: #ffffff;
+    color: #2f6fb4;
+    border: 1px solid #c8d8ea;
+    border-radius: 15px;
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    font-weight: 900;
+}
+QPushButton#tutorialButton:hover {
+    background: #eef6ff;
+    border-color: #9fc4ef;
+}
+QFrame#tutorialCard {
+    background: #ffffff;
+    border: 1px solid #cbd9ea;
+    border-radius: 8px;
+}
+QLabel#tutorialTitle {
+    color: #142131;
+    font-size: 16px;
+    font-weight: 800;
+}
+QLabel#tutorialBody {
+    color: #5f7080;
+    line-height: 1.4;
+}
+QLabel#tutorialScreenshot {
+    background: #f4f8fd;
+    border: 1px solid #e2ebf4;
+    border-radius: 6px;
+}
+QLabel#tutorialSafety {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    color: #9a3412;
+    padding: 7px 9px;
 }
 QPushButton#settingsTabButton {
     background: #ffffff;
@@ -412,17 +473,29 @@ QLabel#applyPageEyebrow {
     font-weight: 800;
     letter-spacing: 1px;
 }
-QFrame#panel {
+QFrame#panel,
+QFrame#monitorControlsAnchor,
+QFrame#monitorOrdersAnchor,
+QFrame#publishHeaderAnchor,
+QFrame#publishFormAnchor,
+QFrame#localImageConfigAnchor,
+QFrame#localImageStatusAnchor,
+QFrame#aiEditQueueAnchor,
+QFrame#putawayStatusAnchor,
+QFrame#putawayEmbedAnchor,
+QFrame#settingsBrowserAnchor {
     background: #1e2538;
     border: 1px solid #2c3347;
     border-radius: 8px;
 }
-QFrame#applyHeaderPanel {
+QFrame#applyHeaderPanel,
+QFrame#applySafetyAnchor {
     background: #1e2538;
     border: 1px solid #2c3347;
     border-radius: 12px;
 }
-QFrame#applyEmbedPanel {
+QFrame#applyEmbedPanel,
+QFrame#applyEmbedAnchor {
     background: #1e2538;
     border: 1px solid #2c3347;
     border-radius: 12px;
@@ -577,7 +650,8 @@ QPushButton#checkUpdateButton:disabled {
     background: #2d3f5d;
     color: #a8b7ca;
 }
-QPushButton#ghostButton {
+QPushButton#ghostButton,
+QPushButton#settingsPathsAnchor {
     background: #1e2538;
     color: #d4dce8;
     border: 1px solid #3a4460;
@@ -608,18 +682,66 @@ QPushButton#skipVersionButton:disabled {
     background: #20273a;
     color: #7a879a;
 }
-QPushButton#ghostButton:hover {
+QPushButton#ghostButton:hover,
+QPushButton#settingsPathsAnchor:hover {
     background: #1f2740;
     border-color: #4b628d;
     color: #dbe3ee;
 }
-QPushButton#ghostButton:pressed {
+QPushButton#ghostButton:pressed,
+QPushButton#settingsPathsAnchor:pressed {
     background: #243050;
     border-color: #5d96d8;
 }
-QPushButton#ghostButton:disabled {
+QPushButton#ghostButton:disabled,
+QPushButton#settingsPathsAnchor:disabled {
     background: #20273a;
     color: #7a879a;
+}
+QLabel#settingsSecurityAnchor {
+    color: #9eacbf;
+    font-size: 12px;
+}
+QPushButton#tutorialButton {
+    background: #1e2538;
+    color: #7eb7f0;
+    border: 1px solid #3a4460;
+    border-radius: 15px;
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    font-weight: 900;
+}
+QPushButton#tutorialButton:hover {
+    background: #243050;
+    border-color: #4b628d;
+}
+QFrame#tutorialCard {
+    background: #1e2538;
+    border: 1px solid #3a4460;
+    border-radius: 8px;
+}
+QLabel#tutorialTitle {
+    color: #edf2f8;
+    font-size: 16px;
+    font-weight: 800;
+}
+QLabel#tutorialBody {
+    color: #c0cde0;
+    line-height: 1.4;
+}
+QLabel#tutorialScreenshot {
+    background: #171c2a;
+    border: 1px solid #2c3347;
+    border-radius: 6px;
+}
+QLabel#tutorialSafety {
+    background: #3a2e1a;
+    border: 1px solid #6b5226;
+    border-radius: 6px;
+    color: #f5c97a;
+    padding: 7px 9px;
 }
 QPushButton#settingsTabButton {
     background: #1e2538;

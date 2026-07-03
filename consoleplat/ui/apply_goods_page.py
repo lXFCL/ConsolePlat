@@ -43,7 +43,7 @@ class ApplyGoodsPage(QWidget):
         root.setSpacing(16)
 
         header = QFrame()
-        header.setObjectName("applyHeaderPanel")
+        header.setObjectName("applySafetyAnchor")
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(24, 22, 24, 22)
         header_layout.setSpacing(10)
@@ -62,7 +62,7 @@ class ApplyGoodsPage(QWidget):
         root.addWidget(header)
 
         self.container_panel = QFrame()
-        self.container_panel.setObjectName("applyEmbedPanel")
+        self.container_panel.setObjectName("applyEmbedAnchor")
         self.container_panel.setMinimumHeight(720)
         container_layout = QVBoxLayout(self.container_panel)
         container_layout.setContentsMargins(24, 20, 24, 24)

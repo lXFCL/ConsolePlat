@@ -1,0 +1,63 @@
+from PyQt5.QtWidgets import QApplication, QWidget
+
+from consoleplat.config import AppSettings
+from consoleplat.models import DEFAULT_NAV_ITEMS
+from consoleplat.paths import resource_path
+
+
+class FakeSettingsStore:
+    def load(self):
+        return AppSettings(startup_width=1280, startup_height=820)
+
+
+def test_each_nav_page_has_tutorial_steps():
+    from consoleplat.ui.tutorial_data import TUTORIALS, get_tutorial_steps
+
+    page_keys = {item.key for item in DEFAULT_NAV_ITEMS}
+
+    assert set(TUTORIALS) == page_keys
+    for key in page_keys:
+        assert get_tutorial_steps(key), key
+
+
+def test_tutorial_steps_have_required_text():
+    from consoleplat.ui.tutorial_data import TUTORIALS, TutorialStep
+
+    for page_key, steps in TUTORIALS.items():
+        for step in steps:
+            assert isinstance(step, TutorialStep)
+            assert step.title.strip(), page_key
+            assert step.body.strip(), page_key
+            assert step.target.strip(), page_key
+
+
+def test_unknown_page_returns_empty_steps():
+    from consoleplat.ui.tutorial_data import get_tutorial_steps
+
+    assert get_tutorial_steps("missing") == ()
+
+
+def test_tutorial_screenshot_references_exist():
+    from consoleplat.ui.tutorial_data import TUTORIALS
+
+    for page_key, steps in TUTORIALS.items():
+        for step in steps:
+            if step.screenshot:
+                assert resource_path(step.screenshot).exists(), f"{page_key}:{step.screenshot}"
+
+
+def test_tutorial_targets_exist_on_loaded_pages(monkeypatch):
+    from consoleplat.ui.main_window import MainWindow
+    from consoleplat.ui.tutorial_data import TUTORIALS
+
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    for page_key, steps in TUTORIALS.items():
+        window.activate_page(page_key)
+        page = window.pages[page_key]
+        for step in steps:
+            assert page.findChild(QWidget, step.target) is not None, f"{page_key}:{step.target}"
+
+    window.close()

@@ -223,7 +223,7 @@ class ProductPublishPage(QWidget):
         root.setSpacing(14)
 
         header = QFrame()
-        header.setObjectName("panel")
+        header.setObjectName("publishHeaderAnchor")
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(22, 18, 22, 18)
         header_layout.setSpacing(8)
@@ -248,7 +248,7 @@ class ProductPublishPage(QWidget):
 
     def _build_draft_panel(self) -> QFrame:
         panel = QFrame()
-        panel.setObjectName("panel")
+        panel.setObjectName("publishFormAnchor")
         panel.setMinimumWidth(350)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 18, 22, 18)
@@ -312,7 +312,10 @@ class ProductPublishPage(QWidget):
         layout.addWidget(self.local_params_panel)
         layout.addWidget(self.ai_params_panel)
 
-        actions = QHBoxLayout()
+        self.publish_actions_anchor = QWidget()
+        self.publish_actions_anchor.setObjectName("publishActionsAnchor")
+        actions = QHBoxLayout(self.publish_actions_anchor)
+        actions.setContentsMargins(0, 0, 0, 0)
         self.confirm_button = QPushButton("同意并开始")
         self.confirm_button.setObjectName("primaryButton")
         self.confirm_button.clicked.connect(self.confirm_and_start)
@@ -323,7 +326,7 @@ class ProductPublishPage(QWidget):
         self.primary_action_buttons = [self.confirm_button, self.stop_button]
         actions.addWidget(self.confirm_button)
         actions.addWidget(self.stop_button)
-        layout.addLayout(actions)
+        layout.addWidget(self.publish_actions_anchor)
         layout.addStretch(1)
         return panel
 

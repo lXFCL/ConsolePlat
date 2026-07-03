@@ -1388,7 +1388,7 @@ class AIEditPage(QWidget):
         layout.addLayout(self.split_row_layout)
 
         self.image_panel = QFrame()
-        self.image_panel.setObjectName("subPanel")
+        self.image_panel.setObjectName("aiEditImagesAnchor")
         image_layout = QVBoxLayout(self.image_panel)
         image_layout.addWidget(QLabel("参考图片"))
         self.selected_image_path_label = QLabel("--")
@@ -1408,7 +1408,7 @@ class AIEditPage(QWidget):
         layout.addWidget(self.image_panel)
 
         self.request_panel = QFrame()
-        self.request_panel.setObjectName("subPanel")
+        self.request_panel.setObjectName("aiEditRequestAnchor")
         request_layout = QVBoxLayout(self.request_panel)
         request_layout.addWidget(QLabel("改图要求"))
         self.prompt_edit = QTextEdit()
@@ -1437,7 +1437,7 @@ class AIEditPage(QWidget):
 
     def _build_task_panel(self) -> QFrame:
         panel = QFrame()
-        panel.setObjectName("panel")
+        panel.setObjectName("aiEditQueueAnchor")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(12)

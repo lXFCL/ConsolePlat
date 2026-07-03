@@ -350,3 +350,31 @@ def test_main_window_nav_badge_reflects_running_page(monkeypatch):
     assert badge.isHidden()
 
     window.close()
+
+
+def test_main_window_has_tutorial_button(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+
+    assert window.tutorial_button.objectName() == "tutorialButton"
+    assert window.tutorial_button.text() == "?"
+
+    window.close()
+
+
+def test_main_window_tutorial_button_opens_overlay(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    window.show()
+    window.activate_page("monitor")
+    window.tutorial_button.click()
+
+    assert window.tutorial_overlay is not None
+    assert window.tutorial_overlay.isVisible()
+    assert window.tutorial_overlay.title_label.text().startswith("1/")
+
+    window.close()

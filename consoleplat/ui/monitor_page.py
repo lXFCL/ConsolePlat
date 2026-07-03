@@ -127,7 +127,9 @@ class MonitorPage(QWidget):
         top.addWidget(self.source_label)
         root.addLayout(top)
 
-        grid = QGridLayout()
+        metrics_anchor = QFrame()
+        metrics_anchor.setObjectName("monitorMetricsAnchor")
+        grid = QGridLayout(metrics_anchor)
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(12)
         for index, (name, accent) in enumerate(
@@ -136,10 +138,10 @@ class MonitorPage(QWidget):
             card = MetricCard(name, accent=accent)
             self.metric_cards[name] = card
             grid.addWidget(card, 0, index)
-        root.addLayout(grid)
+        root.addWidget(metrics_anchor)
 
         control_panel = QFrame()
-        control_panel.setObjectName("panel")
+        control_panel.setObjectName("monitorControlsAnchor")
         control_layout = QHBoxLayout(control_panel)
         control_layout.setContentsMargins(18, 14, 18, 14)
         control_layout.setSpacing(12)
@@ -187,7 +189,7 @@ class MonitorPage(QWidget):
         root.addWidget(control_panel)
 
         table_panel = QFrame()
-        table_panel.setObjectName("panel")
+        table_panel.setObjectName("monitorOrdersAnchor")
         table_layout = QVBoxLayout(table_panel)
         table_layout.setContentsMargins(18, 16, 18, 16)
         table_layout.setSpacing(10)

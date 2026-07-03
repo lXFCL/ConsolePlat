@@ -293,10 +293,14 @@ class SettingsPage(QWidget):
         self.status_label.setObjectName("cardSubtitle")
         actions.addWidget(self.save_button)
         self.detect_paths_button = QPushButton("自动定位源项目")
-        self.detect_paths_button.setObjectName("ghostButton")
+        self.detect_paths_button.setObjectName("settingsPathsAnchor")
         self.detect_paths_button.setCursor(Qt.PointingHandCursor)
         self.detect_paths_button.clicked.connect(self.detect_project_paths)
+        self.security_hint_label = QLabel("敏感信息不要写入日志或仓库；API Key、Cookie、Token 应使用安全存储或临时输入。")
+        self.security_hint_label.setObjectName("settingsSecurityAnchor")
+        self.security_hint_label.setWordWrap(True)
         actions.addWidget(self.detect_paths_button)
+        actions.addWidget(self.security_hint_label)
         actions.addWidget(self.status_label)
         actions.addStretch(1)
 
@@ -307,6 +311,7 @@ class SettingsPage(QWidget):
 
     def _build_monitor_panel(self) -> QFrame:
         panel = self._make_panel("监控模块", "这里集中放 Temu 监控、浏览器连接和拿货表导出目录。", compact=True)
+        panel.setObjectName("settingsBrowserAnchor")
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)

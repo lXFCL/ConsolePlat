@@ -37,7 +37,7 @@ class PutawayPage(QWidget):
         self.embedded_widget: QWidget | None = None
 
         header = QFrame()
-        header.setObjectName("panel")
+        header.setObjectName("putawayStatusAnchor")
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(22, 18, 22, 18)
         header_layout.setSpacing(8)
@@ -53,7 +53,7 @@ class PutawayPage(QWidget):
         root.addWidget(header)
 
         self.container_panel = QFrame()
-        self.container_panel.setObjectName("panel")
+        self.container_panel.setObjectName("putawayEmbedAnchor")
         container_layout = QVBoxLayout(self.container_panel)
         container_layout.setContentsMargins(22, 18, 22, 18)
         container_layout.setSpacing(12)

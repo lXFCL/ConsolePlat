@@ -249,7 +249,7 @@ class LocalImagePage(QWidget):
 
     def _build_config_panel(self) -> QFrame:
         panel = QFrame()
-        panel.setObjectName("panel")
+        panel.setObjectName("localImageConfigAnchor")
         panel.setMinimumWidth(360)
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 18, 22, 18)
@@ -324,7 +324,7 @@ class LocalImagePage(QWidget):
 
     def _build_task_panel(self) -> QFrame:
         panel = QFrame()
-        panel.setObjectName("panel")
+        panel.setObjectName("localImageStatusAnchor")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(12)
