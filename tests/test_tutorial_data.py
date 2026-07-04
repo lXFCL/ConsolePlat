@@ -20,6 +20,13 @@ def test_each_nav_page_has_tutorial_steps():
         assert get_tutorial_steps(key), key
 
 
+def test_each_tutorial_page_has_configuration_sized_steps():
+    from consoleplat.ui.tutorial_data import TUTORIALS
+
+    for page_key, steps in TUTORIALS.items():
+        assert 4 <= len(steps) <= 6, page_key
+
+
 def test_tutorial_steps_have_required_text():
     from consoleplat.ui.tutorial_data import TUTORIALS, TutorialStep
 
@@ -73,6 +80,10 @@ def test_tutorial_explains_where_to_change_key_folders():
         "图库目录",
         "产品图目录",
         "XLSX 目录",
+        "投放目录",
+        "CDP",
+        "API Key",
+        "ComfyUI",
         "设置 > 上架",
         "上架 data 目录",
         "设置 > 监控",
@@ -81,6 +92,16 @@ def test_tutorial_explains_where_to_change_key_folders():
     ]
     for phrase in required_phrases:
         assert phrase in all_text
+
+
+def test_tutorial_body_focuses_on_configuration_not_button_details():
+    from consoleplat.ui.tutorial_data import TUTORIALS
+
+    for page_key, steps in TUTORIALS.items():
+        for step in steps:
+            main_text = "\n".join((step.title, step.body, step.goal, step.expected))
+            assert "按钮" not in main_text, page_key
+            assert "点击" not in main_text, page_key
 
 
 def test_tutorial_targets_exist_on_loaded_pages(monkeypatch):
