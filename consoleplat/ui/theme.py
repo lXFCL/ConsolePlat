@@ -347,6 +347,14 @@ QLabel#tutorialBody {
     color: #5f7080;
     line-height: 1.4;
 }
+QLabel#tutorialDetail {
+    background: #f8fbff;
+    border: 1px solid #e2ebf4;
+    border-radius: 6px;
+    color: #425466;
+    padding: 7px 9px;
+    line-height: 1.35;
+}
 QLabel#tutorialScreenshot {
     background: #f4f8fd;
     border: 1px solid #e2ebf4;
@@ -730,6 +738,14 @@ QLabel#tutorialTitle {
 QLabel#tutorialBody {
     color: #c0cde0;
     line-height: 1.4;
+}
+QLabel#tutorialDetail {
+    background: #171c2a;
+    border: 1px solid #2c3347;
+    border-radius: 6px;
+    color: #c0cde0;
+    padding: 7px 9px;
+    line-height: 1.35;
 }
 QLabel#tutorialScreenshot {
     background: #171c2a;
