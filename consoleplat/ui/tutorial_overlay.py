@@ -175,12 +175,14 @@ class TutorialOverlay(QWidget):
     def _set_detail_label(self, label: QLabel, heading: str, text: str) -> None:
         clean = str(text or "").strip()
         if not clean:
+            label.setMinimumHeight(0)
             label.hide()
             return
         label.setText(f"{heading}：\n{clean}")
         label.show()
 
     def _place_card(self) -> None:
+        self._sync_wrapped_label_heights()
         self.card.adjustSize()
         margin = 18
         card_size = self.card.sizeHint()
@@ -195,3 +197,27 @@ class TutorialOverlay(QWidget):
             x = max(margin, (self.width() - card_size.width()) // 2)
             y = max(margin, (self.height() - card_size.height()) // 2)
         self.card.setGeometry(x, y, card_size.width(), card_size.height())
+        self._sync_wrapped_label_heights()
+        self.card.adjustSize()
+        card_size = self.card.sizeHint()
+        if self.highlight_rect.isValid():
+            if y + card_size.height() > self.height() - margin:
+                y = max(margin, self.height() - card_size.height() - margin)
+        else:
+            y = max(margin, (self.height() - card_size.height()) // 2)
+        self.card.setGeometry(x, y, card_size.width(), card_size.height())
+
+    def _sync_wrapped_label_heights(self) -> None:
+        layout = self.card.layout()
+        margins = layout.contentsMargins() if layout is not None else None
+        fallback_width = self.card.width()
+        if margins is not None:
+            fallback_width -= margins.left() + margins.right()
+        for label in (self.goal_label, self.actions_label, self.expected_label, self.tips_label):
+            if not label.isVisible():
+                label.setMinimumHeight(0)
+                continue
+            width = label.width() if label.width() > 0 else max(1, fallback_width)
+            required = label.heightForWidth(width)
+            if required > 0:
+                label.setMinimumHeight(required)
