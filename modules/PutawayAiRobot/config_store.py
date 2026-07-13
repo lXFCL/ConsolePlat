@@ -2,6 +2,7 @@ import base64
 import ctypes
 import json
 import os
+from decimal import Decimal, InvalidOperation
 from ctypes import wintypes
 
 
@@ -229,6 +230,23 @@ def save_product_rows(rows):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+DEFAULT_DECLARE_PRICE = "14"
+
+
+def normalize_declare_price(value, default: str = DEFAULT_DECLARE_PRICE) -> str:
+    text = str(value or "").strip()
+    try:
+        price = Decimal(text)
+    except (InvalidOperation, ValueError):
+        return default
+    if not price.is_finite() or price <= 0:
+        return default
+    normalized = price.normalize()
+    if normalized.as_tuple().exponent < -2:
+        return default
+    return format(normalized, "f")
+
+
 def load_runtime_settings():
     defaults = {
         "parallel_count": 1,
@@ -237,6 +255,7 @@ def load_runtime_settings():
         "upload_fail_stop_threshold": 3,
         "browser_preference": "auto",
         "latest_excel_dir": "",
+        "declare_price": DEFAULT_DECLARE_PRICE,
     }
     path = runtime_settings_path()
     if not os.path.exists(path):
@@ -267,6 +286,7 @@ def load_runtime_settings():
     if bp in {"auto", "msedge", "chrome"}:
         out["browser_preference"] = bp
     out["latest_excel_dir"] = (data.get("latest_excel_dir") or "").strip()
+    out["declare_price"] = normalize_declare_price(data.get("declare_price"))
     return out
 
 
@@ -277,6 +297,7 @@ def save_runtime_settings(
     browser_preference: str = "auto",
     upload_fail_stop_threshold: int = 3,
     latest_excel_dir: str = "",
+    declare_price: str = DEFAULT_DECLARE_PRICE,
 ):
     bp = (browser_preference or "auto").strip().lower()
     if bp not in {"auto", "msedge", "chrome"}:
@@ -288,6 +309,7 @@ def save_runtime_settings(
         "upload_fail_stop_threshold": max(0, int(upload_fail_stop_threshold if upload_fail_stop_threshold is not None else 3)),
         "browser_preference": bp,
         "latest_excel_dir": (latest_excel_dir or "").strip(),
+        "declare_price": normalize_declare_price(declare_price),
     }
     with open(runtime_settings_path(), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

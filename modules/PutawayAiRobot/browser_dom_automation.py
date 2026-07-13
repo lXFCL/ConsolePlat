@@ -12,6 +12,7 @@ from config_store import (
     load_account_profiles,
     load_product_rows,
     load_runtime_settings,
+    normalize_declare_price,
     save_account_profiles,
     save_product_rows,
     save_runtime_settings,
@@ -46,7 +47,7 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         self.fill_login_btn.setEnabled(False)
         self.enter_create_btn = QtWidgets.QPushButton("进入创建产品页面")
         self.enter_create_btn.setEnabled(False)
-        self.select_shop_category_btn = QtWidgets.QPushButton("自动上架模拟测试")
+        self.select_shop_category_btn = QtWidgets.QPushButton("开始批量上架")
         self.select_shop_category_btn.setEnabled(False)
         self.open_runtime_settings_tab_btn = QtWidgets.QPushButton("运行设置")
 
@@ -178,11 +179,16 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         self.upload_fail_stop_threshold_input = QtWidgets.QSpinBox()
         self.upload_fail_stop_threshold_input.setRange(0, 50)
         self.upload_fail_stop_threshold_input.setSpecialValueText("0（关闭保护）")
+        self.declare_price_input = QtWidgets.QDoubleSpinBox()
+        self.declare_price_input.setDecimals(2)
+        self.declare_price_input.setRange(0.01, 999999.99)
+        self.declare_price_input.setValue(14.0)
         self.browser_preference_input = QtWidgets.QComboBox()
         runtime_form.addRow("同时并发数量：", self.parallel_publish_input)
         runtime_form.addRow("每成功多少条清理一次：", self.cleanup_every_input)
         runtime_form.addRow("单次清理最大轮次：", self.cleanup_max_rounds_input)
         runtime_form.addRow("连续上传失败停止阈值：", self.upload_fail_stop_threshold_input)
+        runtime_form.addRow("申报价格：", self.declare_price_input)
         runtime_form.addRow("浏览器类型：", self.browser_preference_input)
         runtime_settings_layout.addLayout(runtime_form)
         runtime_btn_row = QtWidgets.QHBoxLayout()
@@ -300,14 +306,14 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
                 color: #9aa5a2;
                 border-color: #d9dfdd;
             }
-            QLineEdit, QSpinBox, QComboBox {
+            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
                 background: #ffffff;
                 border: 1px solid #c7d2cf;
                 border-radius: 5px;
                 padding: 6px 8px;
                 min-height: 20px;
             }
-            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
                 border-color: #2d9d8b;
             }
             QTableWidget {
@@ -471,6 +477,24 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         if not creds["username"] or not creds["password"]:
             QtWidgets.QMessageBox.warning(self, "提示", "请先在“账号配置”里保存并选择本次运行账号")
             return
+        declare_price = normalize_declare_price(self.declare_price_input.value())
+        try:
+            self._save_runtime_settings_from_ui()
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "运行设置保存失败", str(e))
+            return
+        confirmation = QtWidgets.QMessageBox.question(
+            self,
+            "确认批量上架",
+            "即将执行真实批量上架并立即发布。\n\n"
+            f"有效商品：{len(valid_rows)} 条\n"
+            f"申报价格：{declare_price}\n\n"
+            "是否继续？",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if confirmation != QtWidgets.QMessageBox.Yes:
+            return
         parallel_count = min(int(self.parallel_publish_input.value()), len(valid_rows))
         cleanup_every = int(self.cleanup_every_input.value())
         worker = BatchPublishWorker(
@@ -485,8 +509,9 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             upload_fail_stop_threshold=int(self.upload_fail_stop_threshold_input.value()),
             login_username=creds["username"],
             login_password=creds["password"],
+            declare_price=declare_price,
         )
-        self._run_action(worker, f"正在批量上架（并发{parallel_count}）…")
+        self._run_action(worker, f"正在批量上架（并发{parallel_count}，申报价格{declare_price}）…")
 
     def open_runtime_settings_tab(self):
         idx = self.tabs.indexOf(self.runtime_settings_tab)
@@ -508,6 +533,7 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         self.cleanup_every_input.setValue(int(settings.get("cleanup_every") or 50))
         self.cleanup_max_rounds_input.setValue(int(settings.get("cleanup_max_rounds") or 40))
         self.upload_fail_stop_threshold_input.setValue(int(settings.get("upload_fail_stop_threshold", 3)))
+        self.declare_price_input.setValue(float(normalize_declare_price(settings.get("declare_price"))))
         self.latest_excel_dir_input.setText(settings.get("latest_excel_dir") or "")
         browser_pref = (settings.get("browser_preference") or "auto").strip().lower()
         idx = self.browser_preference_input.findData(browser_pref)
@@ -523,6 +549,7 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             str(self.browser_preference_input.currentData() or "auto"),
             int(self.upload_fail_stop_threshold_input.value()),
             self.latest_excel_dir_input.text(),
+            normalize_declare_price(self.declare_price_input.value()),
         )
 
     def save_runtime_settings_ui(self):

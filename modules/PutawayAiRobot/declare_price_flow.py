@@ -61,8 +61,8 @@ def _click_first(locators, timeout_ms: int):
     return False
 
 
-def fill_declare_price_batch(page, price_text: str = "13", progress=None):
-    price_text = (price_text or "").strip() or "13"
+def fill_declare_price_batch(page, price_text: str = "14", progress=None):
+    price_text = (price_text or "").strip() or "14"
 
     if progress:
         progress("打开申报价格批量填写…")

@@ -886,7 +886,16 @@ def _select_images_for_skc_row(page, skc_input, sku: str, color: str):
         raise RuntimeError("未能触发“本地图片”多图选择或上传控件")
 
 
-def _select_shop_and_category(page, shop_name: str, category: str, title: str, sku: str, color: str = "", progress=None):
+def _select_shop_and_category(
+    page,
+    shop_name: str,
+    category: str,
+    title: str,
+    sku: str,
+    color: str = "",
+    progress=None,
+    declare_price: str = "14",
+):
     shop_name = (shop_name or "").strip()
     category = (category or "").strip()
     if not shop_name:
@@ -953,7 +962,7 @@ def _select_shop_and_category(page, shop_name: str, category: str, title: str, s
                 progress("填写申报价格…")
             from declare_price_flow import fill_declare_price_batch
 
-            fill_declare_price_batch(page, "13", progress=progress)
+            fill_declare_price_batch(page, declare_price, progress=progress)
             if progress:
                 progress("填写包裹尺寸…")
             from package_size_flow import fill_package_size_batch
@@ -1021,7 +1030,7 @@ def _select_shop_and_category(page, shop_name: str, category: str, title: str, s
             progress("填写申报价格…")
         from declare_price_flow import fill_declare_price_batch
 
-        fill_declare_price_batch(page, "13", progress=progress)
+        fill_declare_price_batch(page, declare_price, progress=progress)
         if progress:
             progress("填写包裹尺寸…")
         from package_size_flow import fill_package_size_batch
@@ -1640,6 +1649,7 @@ def select_shop_category_flow(
     color: str = "",
     page_ws: str = "",
     progress=None,
+    declare_price: str = "14",
 ):
     _silence_playwright_node_warnings()
     try:
@@ -1671,7 +1681,16 @@ def select_shop_category_flow(
                     pass
             if progress:
                 progress("开始执行…")
-            _select_shop_and_category(target, shop_name, category, title, sku, color, progress=progress)
+            _select_shop_and_category(
+                target,
+                shop_name,
+                category,
+                title,
+                sku,
+                color,
+                declare_price=declare_price,
+                progress=progress,
+            )
         finally:
             if hasattr(browser, "disconnect"):
                 browser.disconnect()
