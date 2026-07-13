@@ -14,11 +14,11 @@ python main.py
 
 ## Portable Release
 
-GitHub Release `v1.6.0` uses a portable source package:
+GitHub Release `v1.7.0` uses a portable source package:
 
 ```text
-ConsolePlat-v1.6.0-portable.zip
-ConsolePlat-prints-v1.6.0.zip
+ConsolePlat-v1.7.0-portable.zip
+ConsolePlat-prints-v1.7.0.zip
 ```
 
 After extracting the portable package, run:
@@ -34,7 +34,7 @@ The portable package keeps project defaults inside the extracted folder:
 - runtime outputs: `runtime/outputs`, `runtime/data`, `runtime/downloads`
 - print gallery placeholder: `resources/prints`
 
-The main package does not include ComfyUI, PosAiImg models, browser profiles, account settings, logs, historical outputs, or generated image caches. Download `ConsolePlat-prints-v1.6.0.zip` separately and extract it into `resources/prints` when local print-gallery matching is needed. Configure or download PosAiImg ComfyUI/models from `设置 -> 生图 / 改图 -> PosAiImg 资源`.
+The main package does not include ComfyUI, PosAiImg models, browser profiles, account settings, logs, historical outputs, Putaway business data, or generated image caches. Download `ConsolePlat-prints-v1.7.0.zip` separately and extract it into `resources/prints` when local print-gallery matching is needed. Configure or download PosAiImg ComfyUI/models from `设置 -> 生图 / 改图 -> PosAiImg 资源`.
 
 For the real Temu monitor source, the current machine has Playwright available in the `flask` conda environment:
 

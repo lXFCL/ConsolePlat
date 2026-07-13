@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 PORTABLE_NAME = f"ConsolePlat-v{VERSION}-portable"
 PRINTS_NAME = f"ConsolePlat-prints-v{VERSION}"
 
@@ -74,11 +74,18 @@ def should_include_path(path: str | Path, *, root: str | Path, package_kind: str
         return False
     if path.suffix.lower() in EXCLUDED_SUFFIXES:
         return False
+    if package_kind == "portable" and _is_putaway_business_data(rel):
+        return False
     if package_kind == "portable" and "图库" in parts:
         return False
     if package_kind == "portable" and "PosAiImg" in parts and path.suffix.lower() in PORTABLE_POSAI_IMAGE_SUFFIXES:
         return False
     return True
+
+
+def _is_putaway_business_data(rel: Path) -> bool:
+    parts = rel.parts
+    return len(parts) >= 3 and parts[:3] == ("modules", "PutawayAiRobot", "data")
 
 
 def build_release(root: Path, dist_dir: Path | None = None) -> tuple[Path, Path]:
@@ -134,6 +141,7 @@ def _ensure_portable_dirs(stage: Path) -> None:
         "modules/SendGoods",
         "modules/PosAiImg",
         "modules/PutawayAiRobot/data/pic/1",
+        "modules/PutawayAiRobot/data/pic/2",
         "modules/ApplyGoods",
         "resources/prints",
         "runtime/outputs",
@@ -143,12 +151,12 @@ def _ensure_portable_dirs(stage: Path) -> None:
     for rel in keep_dirs:
         target = stage / rel
         target.mkdir(parents=True, exist_ok=True)
-        if rel.startswith("runtime/"):
+        if rel.startswith("runtime/") or rel.startswith("modules/PutawayAiRobot/data/"):
             (target / ".gitkeep").write_text("", encoding="utf-8")
     readme = stage / "resources" / "prints" / "README.md"
     if not readme.exists():
         readme.write_text(
-            "完整图集请从 GitHub Release 下载 ConsolePlat-prints-v1.6.0.zip 后解压到本目录。\n",
+            f"完整图集请从 GitHub Release 下载 {PRINTS_NAME}.zip 后解压到本目录。\n",
             encoding="utf-8",
         )
 
