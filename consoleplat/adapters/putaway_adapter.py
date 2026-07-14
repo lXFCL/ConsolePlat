@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import importlib.util
 
+from consoleplat.runtime import script_command
+
 
 @dataclass(frozen=True)
 class PutawayAdapter:
@@ -14,9 +16,8 @@ class PutawayAdapter:
 
     def launch_command(self) -> tuple[str, list[str], Path]:
         entry = self.project_dir / "browser_dom_automation.py"
-        if entry.exists():
-            return sys.executable, [str(entry)], self.project_dir
-        return sys.executable, ["-c", "print('PutawayAiRobot placeholder launch')"], self.project_dir
+        program, args = script_command(entry)
+        return program, args, self.project_dir
 
     def build_embedded_widget(self, parent=None):
         entry = self.project_dir / "browser_dom_automation.py"

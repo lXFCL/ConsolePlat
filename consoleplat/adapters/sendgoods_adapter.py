@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Any
 from consoleplat.config import SettingsStore
 from consoleplat.config import resolve_project_dir
 from consoleplat.paths import default_runtime_dir, modules_root
+from consoleplat.runtime import cli_command
 from consoleplat.services.monitor_service import MonitorEvent, MonitorSnapshot
 
 
@@ -17,7 +17,7 @@ class SendGoodsAdapter:
     project_dir: Path = resolve_project_dir("sendgoods") or modules_root() / "SendGoods"
 
     def export_command(self) -> tuple[str, list[str]]:
-        return sys.executable, ["-m", "consoleplat.services.sendgoods_export_cli"]
+        return cli_command("sendgoods-export")
 
     def export_dir(self, payload: dict[str, Any] | None = None) -> Path:
         summary = (payload or {}).get("summary") or {}

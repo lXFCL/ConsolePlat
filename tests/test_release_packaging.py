@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.build_release_package import _ensure_portable_dirs, should_include_path
+from scripts.build_exe import copy_runtime_payload
 
 
 def test_release_packaging_excludes_generated_and_sensitive_paths():
@@ -48,3 +49,27 @@ def test_release_packaging_keeps_empty_putaway_image_directories(tmp_path):
 
     assert (tmp_path / "modules" / "PutawayAiRobot" / "data" / "pic" / "1" / ".gitkeep").is_file()
     assert (tmp_path / "modules" / "PutawayAiRobot" / "data" / "pic" / "2" / ".gitkeep").is_file()
+
+
+def test_exe_payload_only_copies_filtered_runtime_files(tmp_path):
+    root = tmp_path / "repo"
+    (root / "modules" / "SendGoods").mkdir(parents=True)
+    (root / "modules" / "SendGoods" / "main.py").write_text("print('ok')", encoding="utf-8")
+    (root / "modules" / "SendGoods" / "outputs").mkdir()
+    (root / "modules" / "SendGoods" / "outputs" / "old.xlsx").write_bytes(b"old")
+    (root / "modules" / "SendGoods" / "tests").mkdir()
+    (root / "modules" / "SendGoods" / "tests" / "test_export.py").write_text(
+        "def test_export(): pass",
+        encoding="utf-8",
+    )
+    (root / "modules" / "PutawayAiRobot" / "data").mkdir(parents=True)
+    (root / "modules" / "PutawayAiRobot" / "data" / "batch.xlsx").write_bytes(b"private")
+    output = tmp_path / "output"
+
+    copy_runtime_payload(root, output)
+
+    assert (output / "modules" / "SendGoods" / "main.py").is_file()
+    assert not (output / "modules" / "SendGoods" / "outputs" / "old.xlsx").exists()
+    assert not (output / "modules" / "SendGoods" / "tests").exists()
+    assert not (output / "modules" / "PutawayAiRobot" / "data" / "batch.xlsx").exists()
+    assert (output / "runtime" / "outputs").is_dir()

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageTk
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -233,7 +233,7 @@ class App:
         self.wave_strength = tk.DoubleVar(value=0.012)
         self.remove_white_bg = tk.BooleanVar(value=True)
         self.status = tk.StringVar(value="\u5c31\u7eea")
-        self.preview_photo: ImageTk.PhotoImage | None = None
+        self.preview_photo = None
 
         self._build()
         self.refresh_preview()
@@ -349,6 +349,8 @@ class App:
                 return
             max_w, max_h = 720, 700
             image.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+            from PIL import ImageTk
+
             self.preview_photo = ImageTk.PhotoImage(image)
             self.canvas.configure(image=self.preview_photo)
             self.status.set("\u9884\u89c8\u4f7f\u7528\u7b2c\u4e00\u5f20\u6a21\u7279\u56fe\u548c\u7b2c\u4e00\u5f20\u5370\u82b1\u56fe\u3002")

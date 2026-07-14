@@ -36,6 +36,16 @@ The portable package keeps project defaults inside the extracted folder:
 
 The main package does not include ComfyUI, PosAiImg models, browser profiles, account settings, logs, historical outputs, Putaway business data, or generated image caches. Download `ConsolePlat-prints-v1.7.0.zip` separately and extract it into `resources/prints` when local print-gallery matching is needed. Configure or download PosAiImg ComfyUI/models from `设置 -> 生图 / 改图 -> PosAiImg 资源`.
 
+## Windows EXE
+
+Build the self-contained desktop runtime from the existing `flask` conda environment:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_exe.ps1
+```
+
+Then launch `dist\ConsolePlat\ConsolePlat.exe`. The adjacent `_internal` directory is the bundled Python runtime and must remain beside the EXE. The build deliberately excludes browser profiles, credentials, logs, historical outputs, Putaway business data, print galleries, ComfyUI, and AI models.
+
 For the real Temu monitor source, the current machine has Playwright available in the `flask` conda environment:
 
 ```powershell

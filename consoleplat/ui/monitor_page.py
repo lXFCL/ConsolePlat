@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 
 from PyQt5.QtCore import QProcess, QTimer, Qt, pyqtSignal
 from PyQt5.QtWidgets import (
@@ -26,6 +25,7 @@ from PyQt5.QtWidgets import (
 
 from consoleplat.paths import resource_path
 from consoleplat.adapters.sendgoods_adapter import SendGoodsAdapter
+from consoleplat.runtime import cli_command
 from consoleplat.config import SettingsStore
 from consoleplat.services.app_log import log_exception
 from consoleplat.services.monitor_service import EmptyMonitorSource, MonitorEvent, MonitorSnapshot
@@ -279,8 +279,9 @@ class MonitorPage(QWidget):
         self.manual_button.setEnabled(False)
         self.source_label.setText("来源：正在读取页面...")
         process = QProcess(self)
-        process.setProgram(sys.executable)
-        process.setArguments(["-m", "consoleplat.services.monitor_fetch_cli"])
+        program, args = cli_command("monitor-fetch")
+        process.setProgram(program)
+        process.setArguments(args)
         process.finished.connect(self._on_fetch_process_finished)
         process.errorOccurred.connect(self._on_fetch_process_error)
         self.fetch_process = process
@@ -516,8 +517,9 @@ class MonitorPage(QWidget):
             return
         self.cleanup_started = True
         try:
+            program, args = cli_command("monitor-fetch", "--close-monitor-pages")
             subprocess.Popen(
-                [sys.executable, "-m", "consoleplat.services.monitor_fetch_cli", "--close-monitor-pages"],
+                [program, *args],
                 cwd=os.getcwd(),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

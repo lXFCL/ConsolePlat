@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +8,7 @@ from typing import Any
 
 from consoleplat.config import resolve_project_dir
 from consoleplat.paths import project_root
+from consoleplat.runtime import cli_command
 
 
 @dataclass(frozen=True)
@@ -89,9 +89,6 @@ class PosAiImgAdapter:
     def ai_edit_command(self, job: AIEditJob) -> tuple[str, list[str], Path]:
         output_dir = job.output_dir or (self.project_dir / "_consoleplat_ai_edits")
         args = [
-            "-u",
-            "-m",
-            "consoleplat.services.ai_image_edit_cli",
             "--prompt",
             job.prompt,
             "--output-dir",
@@ -108,7 +105,8 @@ class PosAiImgAdapter:
         args.extend(["--total-return-count", str(max(1, int(job.total_return_count or 1)))])
         for image in job.images:
             args.extend(["--image", str(image)])
-        return sys.executable, args, project_root()
+        program, command_args = cli_command("ai-image-edit", *args, unbuffered=True)
+        return program, command_args, project_root()
 
     def _test_mode_command(self, job: LocalImageJob) -> tuple[str, list[str], Path]:
         output_dir = self.project_dir / "_consoleplat_tests" / job.prefix / f"{job.style_name}_{job.count}张"
