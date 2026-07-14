@@ -1,6 +1,8 @@
 import json
 
-from consoleplat.config import AppSettings, ShopAccount, SettingsStore
+import json
+
+from consoleplat.config import AppSettings, ShopAccount, SettingsStore, encrypt_secret
 
 
 def test_settings_store_does_not_write_plain_password(tmp_path):
@@ -24,6 +26,57 @@ def test_settings_store_does_not_write_plain_password(tmp_path):
     assert "secret-password" not in raw
     assert loaded.accounts["YUHOOBO"].phone == "18800000000"
     assert loaded.accounts["YUHOOBO"].password == "secret-password"
+
+
+def test_settings_store_persists_ordered_monitor_shops_and_shared_account(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        active_shop="THIRD_SHOP",
+        monitor_shops=["YUHOOBO", "YUHAOBO", "THIRD_SHOP"],
+        monitor_account=ShopAccount(
+            shop_name="THIRD_SHOP",
+            phone="18800000000",
+            password="shared-secret",
+        ),
+    )
+
+    store.save(settings)
+    raw = path.read_text(encoding="utf-8")
+    loaded = store.load()
+
+    assert loaded.monitor_shops == ["YUHOOBO", "YUHAOBO", "THIRD_SHOP"]
+    assert loaded.active_shop == "THIRD_SHOP"
+    assert loaded.monitor_account.phone == "18800000000"
+    assert loaded.monitor_account.password == "shared-secret"
+    assert "shared-secret" not in raw
+    assert raw.count("password_dpapi") == 1
+
+
+def test_settings_store_migrates_legacy_shop_accounts_to_shared_account(tmp_path):
+    path = tmp_path / "settings.json"
+    payload = {
+        "active_shop": "YUHAOBO",
+        "accounts": {
+            "YUHOOBO": {
+                "shop_name": "YUHOOBO",
+                "phone": "first",
+                "password_dpapi": encrypt_secret("first-pass"),
+            },
+            "YUHAOBO": {
+                "shop_name": "YUHAOBO",
+                "phone": "active",
+                "password_dpapi": encrypt_secret("active-pass"),
+            },
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = SettingsStore(path).load()
+
+    assert loaded.monitor_shops == ["YUHOOBO", "YUHAOBO"]
+    assert loaded.monitor_account.phone == "active"
+    assert loaded.monitor_account.password == "active-pass"
 
 
 def test_settings_store_persists_purchase_export_dir(tmp_path):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+import re
 
 from PyQt5.QtCore import QObject, QThread, Qt, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices
@@ -13,8 +14,10 @@ from PyQt5.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -134,8 +137,19 @@ class SettingsPage(QWidget):
         root.setSpacing(14)
 
         self.shop_combo = QComboBox()
-        self.shop_combo.addItems(["YUHOOBO", "YUHAOBO"])
-        self.shop_combo.currentTextChanged.connect(self._load_account_for_shop)
+        self.shop_combo.setObjectName("monitorShopCombo")
+        self.add_shop_button = QPushButton("+")
+        self.add_shop_button.setObjectName("addMonitorShopButton")
+        self.add_shop_button.setToolTip("新增监控店铺")
+        self.add_shop_button.setAccessibleName("新增监控店铺")
+        self.add_shop_button.setFixedWidth(34)
+        self.add_shop_button.clicked.connect(self._add_monitor_shop)
+        self.remove_shop_button = QPushButton("−")
+        self.remove_shop_button.setObjectName("removeMonitorShopButton")
+        self.remove_shop_button.setToolTip("删除当前监控店铺")
+        self.remove_shop_button.setAccessibleName("删除当前监控店铺")
+        self.remove_shop_button.setFixedWidth(34)
+        self.remove_shop_button.clicked.connect(self._remove_monitor_shop)
 
         self.phone_edit = QLineEdit()
         self.phone_edit.setPlaceholderText("手机号 / 账号")
@@ -317,7 +331,7 @@ class SettingsPage(QWidget):
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(8)
         form.setLabelAlignment(Qt.AlignRight)
-        form.addRow("监控店铺", self.shop_combo)
+        form.addRow("监控店铺", self._shop_management_row())
         form.addRow("Chrome 调试地址", self.cdp_edit)
         form.addRow("刷新间隔", self.interval_spin)
         form.addRow("拿货表导出目录", self._browse_row(self.purchase_export_dir_edit, self.choose_export_dir))
@@ -1083,10 +1097,13 @@ class SettingsPage(QWidget):
 
     def load_settings(self) -> None:
         settings = self.store.load()
-        index = self.shop_combo.findText(settings.active_shop)
         self.shop_combo.blockSignals(True)
+        self.shop_combo.clear()
+        self.shop_combo.addItems(settings.monitor_shops)
+        index = self.shop_combo.findText(settings.active_shop)
         self.shop_combo.setCurrentIndex(max(0, index))
         self.shop_combo.blockSignals(False)
+        self._update_remove_shop_button()
 
         self.cdp_edit.setText(settings.cdp_endpoint)
         self.interval_spin.setValue(settings.refresh_interval_seconds)
@@ -1136,15 +1153,16 @@ class SettingsPage(QWidget):
         self.startup_width_spin.setValue(settings.startup_width)
         self.startup_height_spin.setValue(settings.startup_height)
 
-        self._load_account_for_shop(self.shop_combo.currentText(), settings)
+        self.phone_edit.setText(settings.monitor_account.phone)
+        self.password_edit.setText(settings.monitor_account.password)
         self._refresh_path_status_labels()
 
     def save_settings(self) -> None:
         old_settings = self.store.load()
         self._sync_provider_form_into_memory()
         shop_name = self.shop_combo.currentText().strip() or "YUHOOBO"
-        accounts = dict(old_settings.accounts)
-        accounts[shop_name] = ShopAccount(
+        monitor_shops = [self.shop_combo.itemText(index) for index in range(self.shop_combo.count())]
+        monitor_account = ShopAccount(
             shop_name=shop_name,
             phone=self.phone_edit.text().strip(),
             password=self.password_edit.text(),
@@ -1153,6 +1171,8 @@ class SettingsPage(QWidget):
         default_provider = self._provider_records[max(0, provider_index)]
         settings = AppSettings(
             active_shop=shop_name,
+            monitor_shops=monitor_shops,
+            monitor_account=monitor_account,
             cdp_endpoint=self.cdp_edit.text().strip() or "http://127.0.0.1:9222",
             refresh_interval_seconds=self.interval_spin.value(),
             purchase_export_dir=self.purchase_export_dir_edit.text().strip(),
@@ -1215,7 +1235,6 @@ class SettingsPage(QWidget):
             publish_ai_reference_images=list(old_settings.publish_ai_reference_images),
             startup_width=self.startup_width_spin.value(),
             startup_height=self.startup_height_spin.value(),
-            accounts=accounts,
         )
         self.store.save(settings)
         self.status_label.setText(f"已保存到 {self.store.path}")
@@ -1345,8 +1364,60 @@ class SettingsPage(QWidget):
         if path:
             self.bg_image_edit.setText(path)
 
-    def _load_account_for_shop(self, shop_name: str, settings: AppSettings | None = None) -> None:
-        settings = settings or self.store.load()
-        account = settings.accounts.get(shop_name) or ShopAccount(shop_name=shop_name)
-        self.phone_edit.setText(account.phone)
-        self.password_edit.setText(account.password)
+    def _shop_management_row(self) -> QWidget:
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(self.shop_combo, 1)
+        layout.addWidget(self.add_shop_button)
+        layout.addWidget(self.remove_shop_button)
+        return row
+
+    def _add_monitor_shop(self) -> None:
+        name, accepted = QInputDialog.getText(
+            self,
+            "新增监控店铺",
+            "店铺名称（需与 Temu 页面显示完全一致）",
+        )
+        if not accepted:
+            return
+        name = name.strip()
+        if not name or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            QMessageBox.warning(self, "店铺名称无效", "店铺名称只能包含字母、数字、下划线和短横线。")
+            return
+        existing = {
+            self.shop_combo.itemText(index).casefold()
+            for index in range(self.shop_combo.count())
+        }
+        if name.casefold() in existing:
+            QMessageBox.warning(self, "店铺已存在", f"监控店铺 {name} 已在列表中。")
+            return
+        self.shop_combo.addItem(name)
+        self.shop_combo.setCurrentIndex(self.shop_combo.count() - 1)
+        self._update_remove_shop_button()
+
+    def _remove_monitor_shop(self) -> None:
+        if self.shop_combo.count() <= 1:
+            return
+        name = self.shop_combo.currentText()
+        confirmed = QMessageBox.question(
+            self,
+            "确认删除店铺",
+            f"确定从监控列表中删除 {name}？\n通用账号和密码不会被删除。",
+        )
+        if confirmed != QMessageBox.Yes:
+            return
+        self.shop_combo.removeItem(self.shop_combo.currentIndex())
+        self.shop_combo.setCurrentIndex(0)
+        self._update_remove_shop_button()
+
+    def _update_remove_shop_button(self) -> None:
+        self.remove_shop_button.setEnabled(self.shop_combo.count() > 1 and self.add_shop_button.isEnabled())
+
+    def set_shop_management_enabled(self, enabled: bool) -> None:
+        self.add_shop_button.setEnabled(enabled)
+        self.remove_shop_button.setEnabled(enabled and self.shop_combo.count() > 1)
+        hint = "" if enabled else "监控运行中，请先停止监控"
+        self.add_shop_button.setToolTip(hint or "新增监控店铺")
+        self.remove_shop_button.setToolTip(hint or "删除当前监控店铺")

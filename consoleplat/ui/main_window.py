@@ -196,8 +196,10 @@ class MainWindow(QMainWindow):
             return ApplyGoodsPage()
         if key == "settings":
             settings_page = SettingsPage()
-            settings_page.settings_saved.connect(
-                lambda s: self.setStyleSheet(get_app_style(s.theme_name, s.bg_image_path))
+            settings_page.settings_saved.connect(self._handle_settings_saved)
+            monitor_page = self.pages.get("monitor")
+            settings_page.set_shop_management_enabled(
+                not isinstance(monitor_page, MonitorPage) or not monitor_page.timer.isActive()
             )
             return settings_page
 
@@ -214,6 +216,13 @@ class MainWindow(QMainWindow):
         self._ensure_page_built(key)
         self.state.active_page = key
         self.stack.setCurrentIndex(self.page_indexes[key])
+        if key == "settings":
+            settings_page = self.pages.get("settings")
+            monitor_page = self.pages.get("monitor")
+            if isinstance(settings_page, SettingsPage):
+                settings_page.set_shop_management_enabled(
+                    not isinstance(monitor_page, MonitorPage) or not monitor_page.timer.isActive()
+                )
         for item_key, button in self.nav_buttons.items():
             is_active = item_key == key
             button.setChecked(is_active)
@@ -221,6 +230,12 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
         self.refresh_task_badges()
+
+    def _handle_settings_saved(self, settings) -> None:
+        self.setStyleSheet(get_app_style(settings.theme_name, settings.bg_image_path))
+        monitor_page = self.pages.get("monitor")
+        if isinstance(monitor_page, MonitorPage):
+            monitor_page.reload_settings(settings)
 
     def _prepare_putaway_import_from_publish(self, record: object) -> None:
         self.activate_page("putaway")

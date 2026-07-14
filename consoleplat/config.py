@@ -194,6 +194,8 @@ def _build_legacy_provider(data: dict) -> AIProviderConfig:
 @dataclass
 class AppSettings:
     active_shop: str = "YUHOOBO"
+    monitor_shops: list[str] = field(default_factory=lambda: ["YUHOOBO", "YUHAOBO"])
+    monitor_account: ShopAccount = field(default_factory=lambda: ShopAccount(shop_name="YUHOOBO"))
     cdp_endpoint: str = "http://127.0.0.1:9222"
     refresh_interval_seconds: int = 5
     purchase_export_dir: str = ""
@@ -261,6 +263,35 @@ class AppSettings:
     accounts: dict[str, ShopAccount] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        shops: list[str] = []
+        seen: set[str] = set()
+        for value in list(self.monitor_shops or []) + list(self.accounts):
+            name = str(value or "").strip()
+            token = name.casefold()
+            if name and token not in seen:
+                seen.add(token)
+                shops.append(name)
+        if not shops:
+            shops = ["YUHOOBO", "YUHAOBO"]
+        active_token = str(self.active_shop or "").strip().casefold()
+        matched_active = next((name for name in shops if name.casefold() == active_token), None)
+        self.active_shop = matched_active or shops[0]
+        self.monitor_shops = shops
+
+        shared = self.monitor_account
+        if not (shared.phone and shared.password):
+            preferred = self.accounts.get(self.active_shop)
+            candidates = [preferred] + list(self.accounts.values())
+            shared = next((item for item in candidates if item and item.phone and item.password), shared)
+        self.monitor_account = ShopAccount(
+            shop_name=self.active_shop,
+            phone=shared.phone,
+            password=shared.password,
+        )
+        self.accounts = {
+            name: ShopAccount(name, self.monitor_account.phone, self.monitor_account.password)
+            for name in self.monitor_shops
+        }
         if self.print_gallery_source not in {"local", "github"}:
             self.print_gallery_source = "local"
         self.print_gallery_github_raw_base_url = (self.print_gallery_github_raw_base_url or "").rstrip("/")
@@ -318,6 +349,32 @@ class SettingsStore:
                 password=decrypt_secret(str(item.get("password_dpapi") or "")),
             )
 
+        raw_shops = data.get("monitor_shops")
+        monitor_shops = (
+            [str(name) for name in raw_shops if str(name).strip()]
+            if isinstance(raw_shops, list)
+            else list(accounts)
+        )
+        if not monitor_shops:
+            monitor_shops = ["YUHOOBO", "YUHAOBO"]
+        active_shop = str(data.get("active_shop") or monitor_shops[0])
+        monitor_account_data = data.get("monitor_account")
+        if isinstance(monitor_account_data, dict):
+            monitor_account = ShopAccount(
+                shop_name=active_shop,
+                phone=str(monitor_account_data.get("phone") or ""),
+                password=decrypt_secret(str(monitor_account_data.get("password_dpapi") or "")),
+            )
+        else:
+            preferred = accounts.get(active_shop)
+            candidates = [preferred] + list(accounts.values())
+            legacy_account = next((item for item in candidates if item and item.phone and item.password), None)
+            monitor_account = ShopAccount(
+                shop_name=active_shop,
+                phone=legacy_account.phone if legacy_account else "",
+                password=legacy_account.password if legacy_account else "",
+            )
+
         provider_payloads = data.get("ai_providers")
         if isinstance(provider_payloads, list) and provider_payloads:
             providers: list[AIProviderConfig] = []
@@ -338,7 +395,9 @@ class SettingsStore:
 
         default_provider_id = str(data.get("default_ai_provider_id") or providers[0].provider_id)
         settings = AppSettings(
-            active_shop=str(data.get("active_shop") or "YUHOOBO"),
+            active_shop=active_shop,
+            monitor_shops=monitor_shops,
+            monitor_account=monitor_account,
             cdp_endpoint=str(data.get("cdp_endpoint") or "http://127.0.0.1:9222"),
             refresh_interval_seconds=int(data.get("refresh_interval_seconds") or 5),
             purchase_export_dir=str(data.get("purchase_export_dir") or ""),
@@ -426,6 +485,11 @@ class SettingsStore:
 
         data = {
             "active_shop": settings.active_shop,
+            "monitor_shops": list(settings.monitor_shops),
+            "monitor_account": {
+                "phone": settings.monitor_account.phone,
+                "password_dpapi": encrypt_secret(settings.monitor_account.password),
+            },
             "cdp_endpoint": settings.cdp_endpoint,
             "refresh_interval_seconds": int(settings.refresh_interval_seconds or 5),
             "purchase_export_dir": settings.purchase_export_dir or "",
@@ -505,14 +569,7 @@ class SettingsStore:
             "publish_ai_reference_images": list(settings.publish_ai_reference_images or []),
             "startup_width": int(settings.startup_width or 1180),
             "startup_height": int(settings.startup_height or 760),
-            "accounts": {},
         }
-        for key, account in settings.accounts.items():
-            data["accounts"][key] = {
-                "shop_name": account.shop_name,
-                "phone": account.phone,
-                "password_dpapi": encrypt_secret(account.password),
-            }
         self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         self._cache = copy.deepcopy(settings)
         self._cache_mtime = self.path.stat().st_mtime

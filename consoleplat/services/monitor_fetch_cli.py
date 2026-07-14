@@ -55,12 +55,9 @@ def _write(payload: dict) -> None:
 
 
 def _monitor_account(settings) -> ShopAccount | None:
-    account = settings.accounts.get(settings.active_shop)
+    account = settings.monitor_account
     if account and account.phone and account.password:
-        return account
-    for item in settings.accounts.values():
-        if item.phone and item.password:
-            return ShopAccount(shop_name=settings.active_shop, phone=item.phone, password=item.password)
+        return ShopAccount(shop_name=settings.active_shop, phone=account.phone, password=account.password)
     return None
 
 

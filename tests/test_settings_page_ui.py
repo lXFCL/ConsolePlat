@@ -1,4 +1,4 @@
-from consoleplat.config import AppSettings, SettingsStore
+from consoleplat.config import AppSettings, SettingsStore, ShopAccount
 from consoleplat.ui.settings_page import SettingsPage
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -15,6 +15,99 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QWidget,
 )
+
+
+def test_settings_page_manages_monitor_shops_without_changing_shared_account(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            monitor_shops=["YUHOOBO", "YUHAOBO"],
+            monitor_account=ShopAccount(
+                shop_name="YUHOOBO", phone="shared-user", password="shared-pass"
+            ),
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    monkeypatch.setattr(
+        "consoleplat.ui.settings_page.QInputDialog.getText",
+        lambda *args, **kwargs: ("  THIRD_SHOP  ", True),
+    )
+    app = QApplication.instance() or QApplication([])
+    page = SettingsPage()
+
+    page.add_shop_button.click()
+
+    assert [page.shop_combo.itemText(i) for i in range(page.shop_combo.count())] == [
+        "YUHOOBO",
+        "YUHAOBO",
+        "THIRD_SHOP",
+    ]
+    assert page.shop_combo.currentText() == "THIRD_SHOP"
+    assert page.phone_edit.text() == "shared-user"
+    assert page.password_edit.text() == "shared-pass"
+
+    page.save_settings()
+    loaded = SettingsStore(path).load()
+    assert loaded.monitor_shops == ["YUHOOBO", "YUHAOBO", "THIRD_SHOP"]
+    assert loaded.monitor_account.phone == "shared-user"
+    page.close()
+
+
+def test_settings_page_prevents_removing_last_monitor_shop(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(active_shop="ONLY", monitor_shops=["ONLY"]))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+    page = SettingsPage()
+
+    assert not page.remove_shop_button.isEnabled()
+    page.close()
+
+
+def test_settings_page_removes_shop_without_clearing_shared_account(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            active_shop="YUHAOBO",
+            monitor_shops=["YUHOOBO", "YUHAOBO"],
+            monitor_account=ShopAccount("YUHAOBO", "shared-user", "shared-pass"),
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    monkeypatch.setattr(
+        "consoleplat.ui.settings_page.QMessageBox.question",
+        lambda *args, **kwargs: __import__("PyQt5.QtWidgets", fromlist=["QMessageBox"]).QMessageBox.Yes,
+    )
+    app = QApplication.instance() or QApplication([])
+    page = SettingsPage()
+
+    page.remove_shop_button.click()
+    page.save_settings()
+
+    loaded = SettingsStore(path).load()
+    assert loaded.monitor_shops == ["YUHOOBO"]
+    assert loaded.active_shop == "YUHOOBO"
+    assert loaded.monitor_account.phone == "shared-user"
+    assert loaded.monitor_account.password == "shared-pass"
+    page.close()
+
+
+def test_settings_page_rejects_case_insensitive_duplicate_shop(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(monitor_shops=["YUHOOBO", "YUHAOBO"]))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    monkeypatch.setattr(
+        "consoleplat.ui.settings_page.QInputDialog.getText",
+        lambda *args, **kwargs: ("yuhoobo", True),
+    )
+    monkeypatch.setattr("consoleplat.ui.settings_page.QMessageBox.warning", lambda *args, **kwargs: None)
+    app = QApplication.instance() or QApplication([])
+    page = SettingsPage()
+
+    page.add_shop_button.click()
+
+    assert page.shop_combo.count() == 2
+    page.close()
 
 
 def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):

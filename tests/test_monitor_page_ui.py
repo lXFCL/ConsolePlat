@@ -38,7 +38,9 @@ def test_monitor_page_initial_state_does_not_show_demo_orders():
     page.close()
 
 
-def test_monitor_page_has_shop_selector_for_monitor_target():
+def test_monitor_page_has_shop_selector_for_monitor_target(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr("consoleplat.ui.monitor_page.SettingsStore", lambda: SettingsStore(path))
     app = QApplication.instance() or QApplication([])
 
     page = MonitorPage()
@@ -46,6 +48,46 @@ def test_monitor_page_has_shop_selector_for_monitor_target():
     combos = page.findChildren(QComboBox)
     assert any(combo.findText("YUHOOBO") >= 0 and combo.findText("YUHAOBO") >= 0 for combo in combos)
 
+    page.close()
+
+
+def test_monitor_page_loads_configured_shops_and_stops_before_switching(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(active_shop="YUHOOBO", monitor_shops=["YUHOOBO", "THIRD_SHOP"])
+    )
+    monkeypatch.setattr("consoleplat.ui.monitor_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+    page = MonitorPage()
+    page.timer.start(5000)
+    page.toggle_button.setText("停止监控")
+
+    page.shop_combo.setCurrentText("THIRD_SHOP")
+
+    assert not page.timer.isActive()
+    assert page.toggle_button.text() == "开始监控"
+    assert SettingsStore(path).load().active_shop == "THIRD_SHOP"
+    page.close()
+
+
+def test_monitor_page_reloads_shop_list_after_settings_save(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(monitor_shops=["YUHOOBO", "YUHAOBO"]))
+    monkeypatch.setattr("consoleplat.ui.monitor_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+    page = MonitorPage()
+    settings = SettingsStore(path).load()
+    settings.monitor_shops.append("THIRD_SHOP")
+    settings.active_shop = "THIRD_SHOP"
+
+    page.reload_settings(settings)
+
+    assert [page.shop_combo.itemText(i) for i in range(page.shop_combo.count())] == [
+        "YUHOOBO",
+        "YUHAOBO",
+        "THIRD_SHOP",
+    ]
+    assert page.shop_combo.currentText() == "THIRD_SHOP"
     page.close()
 
 

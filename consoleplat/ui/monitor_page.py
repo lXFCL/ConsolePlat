@@ -26,13 +26,10 @@ from PyQt5.QtWidgets import (
 from consoleplat.paths import resource_path
 from consoleplat.adapters.sendgoods_adapter import SendGoodsAdapter
 from consoleplat.runtime import cli_command
-from consoleplat.config import SettingsStore
+from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.services.app_log import log_exception
 from consoleplat.services.monitor_service import EmptyMonitorSource, MonitorEvent, MonitorSnapshot
 from consoleplat.ui.components import HeroBanner
-
-SHOP_OPTIONS = ("YUHOOBO", "YUHAOBO")
-
 
 class MetricCard(QFrame):
     def __init__(self, title: str, value: str = "0", accent: str = "#fb78b7") -> None:
@@ -153,8 +150,9 @@ class MonitorPage(QWidget):
         self.interval_spin.setSuffix(" 秒")
         self.interval_spin.valueChanged.connect(self.update_interval)
         self.shop_combo = QComboBox()
-        self.shop_combo.addItems(SHOP_OPTIONS)
-        active_shop_index = self.shop_combo.findText(self._active_shop_name())
+        settings = self.settings_store.load()
+        self.shop_combo.addItems(settings.monitor_shops)
+        active_shop_index = self.shop_combo.findText(settings.active_shop)
         self.shop_combo.setCurrentIndex(max(0, active_shop_index))
         self.shop_combo.currentTextChanged.connect(self.update_active_shop)
         self.toggle_button = QPushButton("开始监控")
@@ -251,6 +249,11 @@ class MonitorPage(QWidget):
             self.timer.start(seconds * 1000)
 
     def update_active_shop(self, shop_name: str) -> None:
+        if not shop_name.strip():
+            return
+        if self.timer.isActive():
+            self.timer.stop()
+            self.toggle_button.setText("开始监控")
         settings = self.settings_store.load()
         settings.active_shop = shop_name.strip() or "YUHOOBO"
         self.settings_store.save(settings)
@@ -260,6 +263,27 @@ class MonitorPage(QWidget):
             shop_name=settings.active_shop,
             refresh_interval_seconds=self.interval_spin.value(),
             message="已切换监控店铺，等待刷新真实页面数据",
+        )
+        self.apply_snapshot(self.previous_snapshot, 0)
+
+    def reload_settings(self, settings: AppSettings | None = None) -> None:
+        settings = settings or self.settings_store.load()
+        was_active = self.timer.isActive()
+        if was_active:
+            self.timer.stop()
+            self.toggle_button.setText("开始监控")
+        self.shop_combo.blockSignals(True)
+        self.shop_combo.clear()
+        self.shop_combo.addItems(settings.monitor_shops)
+        index = self.shop_combo.findText(settings.active_shop)
+        self.shop_combo.setCurrentIndex(max(0, index))
+        self.shop_combo.blockSignals(False)
+        self.interval_spin.setValue(settings.refresh_interval_seconds)
+        self.source = self._build_source()
+        self.previous_snapshot = MonitorSnapshot.empty(
+            shop_name=settings.active_shop,
+            refresh_interval_seconds=settings.refresh_interval_seconds,
+            message="监控设置已更新，等待刷新真实页面数据",
         )
         self.apply_snapshot(self.previous_snapshot, 0)
 

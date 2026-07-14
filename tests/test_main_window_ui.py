@@ -41,6 +41,21 @@ def test_main_window_applies_saved_theme_and_background(monkeypatch):
     window.close()
 
 
+def test_main_window_settings_save_refreshes_loaded_monitor(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.activate_page("monitor")
+    monitor_page = window.pages["monitor"]
+    settings = AppSettings(active_shop="THIRD_SHOP", monitor_shops=["YUHOOBO", "THIRD_SHOP"])
+
+    window._handle_settings_saved(settings)
+
+    assert monitor_page.shop_combo.currentText() == "THIRD_SHOP"
+    assert monitor_page.shop_combo.count() == 2
+    window.close()
+
+
 def test_main_window_startup_update_result_shows_clickable_status_pill(monkeypatch):
     monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
     app = QApplication.instance() or QApplication([])
