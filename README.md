@@ -12,29 +12,27 @@ Version rule: when a software update changes more than 200 lines of code, increa
 python main.py
 ```
 
-## Portable Release
+## Windows Release
 
-GitHub Release `v1.7.0` uses a portable source package:
+GitHub Release `v1.7.1` provides a bundled Windows x64 package:
 
 ```text
-ConsolePlat-v1.7.0-portable.zip
-ConsolePlat-prints-v1.7.0.zip
+ConsolePlat-v1.7.1-windows-x64.zip
 ```
 
-After extracting the portable package, run:
+Extract the complete archive, then double-click:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup_portable_env.ps1
-.\启动ConsolePlat.bat
+```text
+ConsolePlat\ConsolePlat.exe
 ```
 
-The portable package keeps project defaults inside the extracted folder:
+The adjacent `_internal` directory is required and must remain beside the EXE. The Windows package keeps project defaults inside the extracted folder:
 
 - external modules: `modules/SendGoods`, `modules/PosAiImg`, `modules/PutawayAiRobot`, `modules/ApplyGoods`
 - runtime outputs: `runtime/outputs`, `runtime/data`, `runtime/downloads`
 - print gallery placeholder: `resources/prints`
 
-The main package does not include ComfyUI, PosAiImg models, browser profiles, account settings, logs, historical outputs, Putaway business data, or generated image caches. Download `ConsolePlat-prints-v1.7.0.zip` separately and extract it into `resources/prints` when local print-gallery matching is needed. Configure or download PosAiImg ComfyUI/models from `设置 -> 生图 / 改图 -> PosAiImg 资源`.
+The main package does not include ComfyUI, PosAiImg models, browser profiles, account settings, logs, historical outputs, Putaway business data, print galleries, or generated image caches. Configure PosAiImg ComfyUI/models and print resources from `设置 -> 生图 / 改图 -> PosAiImg 资源` when those features are needed.
 
 ## Windows EXE
 
