@@ -14,10 +14,10 @@ python main.py
 
 ## Windows Release
 
-GitHub Release `v1.7.1` provides a bundled Windows x64 package:
+GitHub Release `v1.8.1` provides a bundled Windows x64 package:
 
 ```text
-ConsolePlat-v1.7.1-windows-x64.zip
+ConsolePlat-v1.8.1-windows-x64.zip
 ```
 
 Extract the complete archive, then double-click:
