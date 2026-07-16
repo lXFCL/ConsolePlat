@@ -56,6 +56,27 @@ If dependencies are missing:
 python -m pip install -r requirements.txt
 ```
 
+## Incremental Update Protocol
+
+Phase 1 provides deterministic content chunks and an Ed25519-signed application manifest. It does not replace the current updater yet; the stable launcher, isolated version directories, update lock, health check, and rollback are delivered in later phases described in `docs/superpowers/specs/2026-07-16-versioned-runtime-incremental-update-design.md`.
+
+Build test release assets from a complete packaged runtime:
+
+```powershell
+$env:CONSOLEPLAT_UPDATE_PRIVATE_KEY_HEX = "<64 hexadecimal characters>"
+python -m scripts.build_update_assets .\dist\ConsolePlat .\dist\update-assets `
+  --source-version 1.8.1 `
+  --target-version 1.9.1 `
+  --release-tag v1.9.1 `
+  --commit-sha <40-character-commit-sha> `
+  --workflow-run <workflow-run-id> `
+  --built-at 2026-07-16T10:00:00Z `
+  --minimum-launcher-version 1.0.0 `
+  --key-id local-test
+```
+
+The private key is read only from the named environment variable and is never written to the output directory. Production private keys must remain in protected CI secrets; production launchers must not trust local test keys.
+
 ## Verify
 
 ```powershell
