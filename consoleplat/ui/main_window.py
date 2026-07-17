@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -95,6 +96,10 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(get_app_style(settings.theme_name, settings.bg_image_path))
         self._build_ui()
         self.activate_page(self.state.active_page)
+        self._activity_timer = QTimer(self)
+        self._activity_timer.setInterval(750)
+        self._activity_timer.timeout.connect(self.refresh_task_badges)
+        self._activity_timer.start()
         QTimer.singleShot(1500, self._maybe_check_update_on_startup)
 
     def _build_ui(self) -> None:
@@ -123,6 +128,7 @@ class MainWindow(QMainWindow):
 
         for item in DEFAULT_NAV_ITEMS:
             button = NavButton(item.icon, item.title, large_icon=item.key != "settings")
+            button.setToolTip(item.description)
             button.clicked.connect(partial(self.activate_page, item.key))
             self.nav_buttons[item.key] = button
             layout.addWidget(button)
@@ -137,17 +143,29 @@ class MainWindow(QMainWindow):
         layout.setSpacing(14)
 
         header = QHBoxLayout()
-        app_title = QLabel(f"{APP_NAME} v{APP_VERSION}")
+        header.setSpacing(12)
+        identity = QVBoxLayout()
+        identity.setSpacing(1)
+        app_title = QLabel(f"{APP_NAME}  v{APP_VERSION}")
         app_title.setObjectName("appTitle")
-        self.status_pill = QLabel("框架预览")
+        self.page_title_label = QLabel("")
+        self.page_title_label.setObjectName("pageTitle")
+        self.page_description_label = QLabel("")
+        self.page_description_label.setObjectName("pageDescription")
+        self.page_description_label.setWordWrap(True)
+        identity.addWidget(app_title)
+        identity.addWidget(self.page_title_label)
+        identity.addWidget(self.page_description_label)
+        self.status_pill = QLabel("就绪")
         self.status_pill.setObjectName("statusPill")
+        self.status_pill.setAccessibleName("应用状态：就绪")
         self.tutorial_button = QPushButton("?")
         self.tutorial_button.setObjectName("tutorialButton")
         self.tutorial_button.setAccessibleName("打开当前页面教程")
         self.tutorial_button.setToolTip("打开当前页面教程")
         self.tutorial_button.setCursor(Qt.PointingHandCursor)
         self.tutorial_button.clicked.connect(self._open_current_page_tutorial)
-        header.addWidget(app_title)
+        header.addLayout(identity, stretch=1)
         header.addStretch(1)
         header.addWidget(self.status_pill)
         header.addWidget(self.tutorial_button)
@@ -216,6 +234,10 @@ class MainWindow(QMainWindow):
         self._ensure_page_built(key)
         self.state.active_page = key
         self.stack.setCurrentIndex(self.page_indexes[key])
+        nav_item = next((item for item in DEFAULT_NAV_ITEMS if item.key == key), None)
+        if nav_item is not None:
+            self.page_title_label.setText(PAGE_TITLES.get(key, nav_item.title))
+            self.page_description_label.setText(nav_item.description)
         if key == "settings":
             settings_page = self.pages.get("settings")
             monitor_page = self.pages.get("monitor")
@@ -318,6 +340,7 @@ class MainWindow(QMainWindow):
         self.tutorial_overlay = None
 
     def refresh_task_badges(self) -> None:
+        running_pages: list[str] = []
         for key, button in self.nav_buttons.items():
             badge = getattr(button, "badge_label", None)
             if badge is None:
@@ -325,18 +348,68 @@ class MainWindow(QMainWindow):
             page = self.pages.get(key)
             running = bool(page and self._page_has_running_task(page))
             badge.setVisible(running)
+            if running:
+                running_pages.append(PAGE_TITLES.get(key, key))
+
+        if not self.status_pill.property("hasUpdate"):
+            if running_pages:
+                self.status_pill.setText(f"{len(running_pages)} 项运行中")
+                self.status_pill.setProperty("running", "true")
+                details = "、".join(running_pages)
+                self.status_pill.setToolTip(f"正在运行：{details}")
+                self.status_pill.setAccessibleName(f"应用状态：{details}正在运行")
+            else:
+                self.status_pill.setText("就绪")
+                self.status_pill.setProperty("running", "false")
+                self.status_pill.setToolTip("当前没有后台任务")
+                self.status_pill.setAccessibleName("应用状态：就绪")
+            self.status_pill.style().unpolish(self.status_pill)
+            self.status_pill.style().polish(self.status_pill)
 
     def _page_has_running_task(self, page: QWidget) -> bool:
-        process = getattr(page, "process", None)
-        if process is not None:
+        for name in ("process", "fetch_process", "export_process"):
+            if self._process_is_running(getattr(page, name, None)):
+                return True
+        if any(self._process_is_running(process) for process in (getattr(page, "processes", None) or [])):
             return True
-        processes = getattr(page, "processes", None)
-        if processes:
+        if any(self._thread_is_running(thread) for thread in (getattr(page, "_background_threads", None) or [])):
             return True
-        current_task = getattr(page, "current_task", None)
-        if current_task is not None:
+        for name in (
+            "_update_thread",
+            "_download_thread",
+            "_print_gallery_test_thread",
+            "_posai_download_thread",
+        ):
+            if self._thread_is_running(getattr(page, name, None)):
+                return True
+        timer = getattr(page, "timer", None)
+        if timer is not None and callable(getattr(timer, "isActive", None)) and timer.isActive():
             return True
         return False
+
+    @staticmethod
+    def _process_is_running(process: object | None) -> bool:
+        if process is None:
+            return False
+        state = getattr(process, "state", None)
+        if not callable(state):
+            return True
+        try:
+            return state() != QProcess.NotRunning
+        except (RuntimeError, TypeError):
+            return False
+
+    @staticmethod
+    def _thread_is_running(thread: object | None) -> bool:
+        if thread is None:
+            return False
+        is_running = getattr(thread, "isRunning", None)
+        if not callable(is_running):
+            return True
+        try:
+            return bool(is_running())
+        except RuntimeError:
+            return False
 
     def _ensure_page_built(self, key: str) -> None:
         if key in self._built:
@@ -371,6 +444,23 @@ class MainWindow(QMainWindow):
             page.prefill_from_monitor(context)
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        running_pages = [
+            PAGE_TITLES.get(key, key)
+            for key, page in self.pages.items()
+            if self._page_has_running_task(page)
+        ]
+        if running_pages:
+            details = "、".join(running_pages)
+            answer = QMessageBox.question(
+                self,
+                "仍有任务运行",
+                f"{details}仍在运行。\n\n现在退出会停止这些任务，尚未保存的进度可能丢失。是否继续退出？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
         for monitor_page in self.findChildren(MonitorPage):
             monitor_page._close_monitor_browser_pages()
         super().closeEvent(event)

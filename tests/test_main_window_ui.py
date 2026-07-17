@@ -1,4 +1,5 @@
-from PyQt5.QtWidgets import QApplication, QLabel
+from PyQt5.QtGui import QCloseEvent
+from PyQt5.QtWidgets import QApplication, QLabel, QMessageBox
 
 from consoleplat.config import AppSettings
 from consoleplat.ui.ai_edit_page import AIEditPage
@@ -172,7 +173,7 @@ def test_main_window_startup_update_result_respects_skipped_version(monkeypatch)
         }
     )
 
-    assert window.status_pill.text() == "框架预览"
+    assert window.status_pill.text() == "就绪"
     assert window.status_pill.property("hasUpdate") in (None, False)
 
     window.close()
@@ -217,6 +218,21 @@ def test_main_window_uses_readable_nav_labels(monkeypatch):
     assert window.nav_buttons["publish"].accessibleName() == "发布"
     assert window.nav_buttons["putaway"].accessibleName() == "上架"
     assert window.nav_buttons["apply"].accessibleName() == "合规"
+    assert window.nav_buttons["monitor"].toolTip() == "店铺实时状态与待处理提醒"
+
+    window.close()
+
+
+def test_main_window_header_tracks_active_page(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    window.activate_page("ai_edit")
+
+    assert window.page_title_label.text() == "AI 改图"
+    assert window.page_description_label.text() == "AI 图片改造与参考图任务"
+    assert window.status_pill.text() == "就绪"
 
     window.close()
 
@@ -359,12 +375,52 @@ def test_main_window_nav_badge_reflects_running_page(monkeypatch):
     badge = window.nav_buttons["publish"].badge_label
     assert not badge.isHidden()
     assert badge.text() == "运行"
+    assert window.status_pill.text() == "1 项运行中"
 
     publish_page.process = None
     window.refresh_task_badges()
     assert badge.isHidden()
+    assert window.status_pill.text() == "就绪"
 
     window.close()
+
+
+def test_main_window_cancel_close_keeps_running_monitor_open(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.No)
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    monitor_page = window.pages["monitor"]
+    monitor_page.timer.start(5000)
+    event = QCloseEvent()
+
+    window.closeEvent(event)
+
+    assert not event.isAccepted()
+    assert monitor_page.timer.isActive()
+    monitor_page.timer.stop()
+    window.close()
+
+
+def test_main_window_confirm_close_cleans_up_running_monitor(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
+    calls = []
+    monkeypatch.setattr(
+        "consoleplat.ui.monitor_page.MonitorPage._close_monitor_browser_pages",
+        lambda self: calls.append(self),
+    )
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    monitor_page = window.pages["monitor"]
+    monitor_page.timer.start(5000)
+    event = QCloseEvent()
+
+    window.closeEvent(event)
+
+    assert event.isAccepted()
+    assert calls == [monitor_page]
+    monitor_page.timer.stop()
 
 
 def test_main_window_has_tutorial_button(monkeypatch):

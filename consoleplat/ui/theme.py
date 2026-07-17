@@ -31,8 +31,17 @@ QPushButton#navButton[active="true"] {
     border-left: 4px solid #5d96d8;
 }
 QLabel#appTitle {
-    font-size: 13px;
+    font-size: 11px;
+    color: #6e7d8b;
+}
+QLabel#pageTitle {
+    font-size: 19px;
+    font-weight: 800;
     color: #142131;
+}
+QLabel#pageDescription {
+    font-size: 11px;
+    color: #6e7d8b;
 }
 QFrame#heroFrame {
     border-radius: 8px;
@@ -81,6 +90,12 @@ QLabel#statusPill[hasUpdate="true"] {
     background: #fff4e5;
     color: #b45309;
     border: 1px solid #fcd9a8;
+    font-weight: 700;
+}
+QLabel#statusPill[running="true"] {
+    background: #e8f7ef;
+    color: #18794e;
+    border: 1px solid #b7e3ca;
     font-weight: 700;
 }
 QLabel#applyPageEyebrow {
@@ -247,6 +262,16 @@ QPushButton#primaryButton:pressed {
 QPushButton#primaryButton:disabled {
     background: #bcd3ed;
     color: #f8fbff;
+}
+QPushButton:focus,
+QComboBox:focus,
+QLineEdit:focus,
+QSpinBox:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus,
+QListWidget:focus,
+QTableWidget:focus {
+    border: 2px solid #5d96d8;
 }
 QPushButton#checkUpdateButton {
     background: #5d96d8;
@@ -423,8 +448,17 @@ QPushButton#navButton[active="true"] {
     border-left: 4px solid #5d96d8;
 }
 QLabel#appTitle {
-    font-size: 13px;
-    color: #dbe3ee;
+    font-size: 11px;
+    color: #9eacbf;
+}
+QLabel#pageTitle {
+    font-size: 19px;
+    font-weight: 800;
+    color: #edf2f8;
+}
+QLabel#pageDescription {
+    font-size: 11px;
+    color: #9eacbf;
 }
 QFrame#heroFrame {
     border-radius: 8px;
@@ -473,6 +507,12 @@ QLabel#statusPill[hasUpdate="true"] {
     background: #3a2e1a;
     color: #f5c97a;
     border: 1px solid #6b5226;
+    font-weight: 700;
+}
+QLabel#statusPill[running="true"] {
+    background: #193a2d;
+    color: #9de0bd;
+    border: 1px solid #2d6a4f;
     font-weight: 700;
 }
 QLabel#applyPageEyebrow {
@@ -639,6 +679,16 @@ QPushButton#primaryButton:pressed {
 QPushButton#primaryButton:disabled {
     background: #2d3f5d;
     color: #a8b7ca;
+}
+QPushButton:focus,
+QComboBox:focus,
+QLineEdit:focus,
+QSpinBox:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus,
+QListWidget:focus,
+QTableWidget:focus {
+    border: 2px solid #5d96d8;
 }
 QPushButton#checkUpdateButton {
     background: #3a6fa8;
