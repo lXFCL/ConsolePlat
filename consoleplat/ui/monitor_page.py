@@ -32,7 +32,7 @@ from consoleplat.services.monitor_service import EmptyMonitorSource, MonitorEven
 from consoleplat.ui.components import HeroBanner
 
 class MetricCard(QFrame):
-    def __init__(self, title: str, value: str = "0", accent: str = "#fb78b7") -> None:
+    def __init__(self, title: str, value: str = "0", accent: str = "#3f7fc4") -> None:
         super().__init__()
         self.setObjectName("metricCard")
         self.value_label = QLabel(value)
@@ -40,12 +40,12 @@ class MetricCard(QFrame):
         self.title_label = QLabel(title)
         self.title_label.setObjectName("metricTitle")
         marker = QLabel()
-        marker.setFixedSize(8, 42)
-        marker.setStyleSheet(f"background: {accent}; border-radius: 4px;")
+        marker.setFixedSize(4, 34)
+        marker.setStyleSheet(f"background: {accent}; border-radius: 2px;")
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(14, 12, 14, 12)
-        row.setSpacing(12)
+        row.setContentsMargins(14, 10, 14, 10)
+        row.setSpacing(10)
         row.addWidget(marker)
         text = QVBoxLayout()
         text.setSpacing(2)
@@ -103,19 +103,24 @@ class MonitorPage(QWidget):
         outer.addWidget(scroll)
 
         content = QWidget()
+        content.setObjectName('monitorScrollContent')
         scroll.setWidget(content)
 
         root = QVBoxLayout(content)
         root.setContentsMargins(0, 0, 10, 18)
         root.setSpacing(14)
 
-        hero = HeroBanner(str(resource_path("assets/images/dashboard_hero.png")), background_y_offset=56)
-        hero.setMinimumHeight(180)
-        hero.setMaximumHeight(210)
+        hero = HeroBanner(
+            str(resource_path("assets/images/dashboard_hero.png")),
+            background_y_offset=42,
+            show_copy=False,
+        )
+        hero.setMinimumHeight(128)
+        hero.setMaximumHeight(142)
         root.addWidget(hero)
 
         top = QHBoxLayout()
-        title = QLabel("商品监控 >")
+        title = QLabel("商品监控")
         title.setObjectName("sectionTitle")
         self.source_label = QLabel("来源：等待刷新")
         self.source_label.setObjectName("statusPill")
@@ -130,7 +135,7 @@ class MonitorPage(QWidget):
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(12)
         for index, (name, accent) in enumerate(
-            (("待发货", "#fb78b7"), ("备货件数", "#6ba6ff"), ("高优先级", "#ffbd63"), ("异常提醒", "#8ad7c4"))
+            (("待发货", "#3f7fc4"), ("备货件数", "#2f8f83"), ("高优先级", "#c8872b"), ("异常提醒", "#c75b52"))
         ):
             card = MetricCard(name, accent=accent)
             self.metric_cards[name] = card
@@ -139,9 +144,9 @@ class MonitorPage(QWidget):
 
         control_panel = QFrame()
         control_panel.setObjectName("monitorControlsAnchor")
-        control_layout = QHBoxLayout(control_panel)
-        control_layout.setContentsMargins(18, 14, 18, 14)
-        control_layout.setSpacing(12)
+        control_layout = QVBoxLayout(control_panel)
+        control_layout.setContentsMargins(18, 12, 18, 12)
+        control_layout.setSpacing(10)
         control_title = QLabel("刷新控制")
         control_title.setObjectName("panelTitle")
         self.interval_spin = QSpinBox()
@@ -173,17 +178,26 @@ class MonitorPage(QWidget):
         self.open_publish_button.clicked.connect(self._emit_open_publish_request)
         self.last_fetch_label = QLabel("最近刷新：--")
         self.last_fetch_label.setObjectName("cardSubtitle")
-        control_layout.addWidget(control_title)
-        control_layout.addWidget(QLabel("店铺"))
-        control_layout.addWidget(self.shop_combo)
-        control_layout.addWidget(self.interval_spin)
-        control_layout.addWidget(self.toggle_button)
-        control_layout.addWidget(self.manual_button)
-        control_layout.addWidget(self.export_button)
-        control_layout.addWidget(self.open_export_folder_button)
-        control_layout.addWidget(self.open_publish_button)
-        control_layout.addStretch(1)
-        control_layout.addWidget(self.last_fetch_label)
+        heading_row = QHBoxLayout()
+        heading_row.setSpacing(10)
+        heading_row.addWidget(control_title)
+        heading_row.addStretch(1)
+        heading_row.addWidget(self.last_fetch_label)
+        action_row = QHBoxLayout()
+        action_row.setSpacing(10)
+        action_row.addWidget(QLabel("店铺"))
+        action_row.addWidget(self.shop_combo)
+        action_row.addWidget(QLabel("间隔"))
+        action_row.addWidget(self.interval_spin)
+        action_row.addSpacing(4)
+        action_row.addWidget(self.toggle_button)
+        action_row.addWidget(self.manual_button)
+        action_row.addWidget(self.export_button)
+        action_row.addWidget(self.open_export_folder_button)
+        action_row.addWidget(self.open_publish_button)
+        action_row.addStretch(1)
+        control_layout.addLayout(heading_row)
+        control_layout.addLayout(action_row)
         root.addWidget(control_panel)
 
         table_panel = QFrame()

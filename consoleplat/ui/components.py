@@ -8,17 +8,28 @@ from consoleplat.models import TaskCard
 
 
 class HeroBanner(QFrame):
-    def __init__(self, image_path: str, parent: QWidget | None = None, background_y_offset: int = 0) -> None:
+    def __init__(
+        self,
+        image_path: str,
+        parent: QWidget | None = None,
+        background_y_offset: int = 0,
+        *,
+        show_copy: bool = True,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("heroFrame")
         self.setMinimumHeight(320)
         self._pixmap = QPixmap(image_path)
         self.background_y_offset = background_y_offset
+        self.show_copy = show_copy
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(38, 34, 38, 34)
         layout.setSpacing(8)
         layout.addStretch(1)
+
+        if not show_copy:
+            return
 
         title = QLabel("ConsolePlat")
         title.setObjectName("heroTitle")

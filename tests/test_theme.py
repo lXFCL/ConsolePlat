@@ -31,3 +31,25 @@ def test_theme_factory_switches_between_light_and_dark_and_background_image():
 def test_theme_has_update_status_pill_styles_for_light_and_dark():
     assert 'QLabel#statusPill[hasUpdate="true"]' in APP_STYLE
     assert 'QLabel#statusPill[hasUpdate="true"]' in DARK_STYLE
+
+
+def test_theme_unifies_common_workbench_controls_in_both_modes():
+    for style in (APP_STYLE, DARK_STYLE):
+        assert 'QWidget#monitorScrollContent' in style
+        assert 'QLabel#navIcon,' in style
+        assert 'outline: none' in style
+        assert "QFrame#workbenchHeader" in style
+        assert "QLabel#brandMark" in style
+        assert "QLineEdit," in style
+        assert "QComboBox," in style
+        assert "QCheckBox {" in style
+        assert "QProgressBar::chunk" in style
+        assert "QTextEdit#taskLog" in style
+        assert "QScrollBar:horizontal" in style
+        assert "QToolTip" in style
+        assert "QMenu::item:selected" in style
+
+
+def test_focus_feedback_does_not_resize_one_pixel_controls():
+    assert "border: 2px solid #5d96d8" not in APP_STYLE
+    assert "border: 2px solid #5d96d8" not in DARK_STYLE

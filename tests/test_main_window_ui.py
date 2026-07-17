@@ -1,5 +1,5 @@
 from PyQt5.QtGui import QCloseEvent
-from PyQt5.QtWidgets import QApplication, QLabel, QMessageBox
+from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QMessageBox
 
 from consoleplat.config import AppSettings
 from consoleplat.ui.ai_edit_page import AIEditPage
@@ -204,7 +204,19 @@ def test_main_window_sidebar_uses_larger_nav_icons_except_settings(monkeypatch):
     for key, button in window.nav_buttons.items():
         icon_labels = [label for label in button.findChildren(QLabel) if label.objectName() == "navIcon"]
         assert icon_labels
-        assert icon_labels[0].font().pointSize() == (14 if key == "settings" else 36)
+        assert icon_labels[0].font().pointSize() == (13 if key == "settings" else 25)
+
+    window.close()
+
+
+def test_main_window_uses_a_stable_workbench_header(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+
+    assert window.findChild(QFrame, "workbenchHeader") is window.workbench_header
+    assert window.findChild(QLabel, "brandMark").text() == "CP"
 
     window.close()
 

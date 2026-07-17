@@ -4,7 +4,7 @@ Windows PyQt desktop shell for integrating the existing `SendGoods`, `PosAiImg`,
 
 Current status: integrated desktop workbench. Store monitoring, purchase-sheet export, local/AI image tasks, product-task orchestration, and embedded PutawayAiRobot/ApplyGoods pages are wired in stages. Actions that change real store state remain behind the controls and confirmations of the corresponding workflow.
 
-Current source version: `v2.0.1`. The latest packaged Windows download remains `v1.9.1`; see `RELEASE_NOTES-v2.0.1.md` for the source-only changes.
+Current source version: `v2.1.0`. The latest packaged Windows download remains `v1.9.1`; see `RELEASE_NOTES-v2.1.0.md` for the source-only changes.
 
 Version rule: when a software update changes more than 200 lines of code, increase the minor version by `0.1`; otherwise increase the patch version by `0.01`.
 

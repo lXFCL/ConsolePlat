@@ -46,18 +46,18 @@ class NavButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setCheckable(True)
         self.setAutoExclusive(True)
-        self.setFixedHeight(58)
+        self.setFixedHeight(56)
         self.setAccessibleName(title)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 5, 0, 5)
-        layout.setSpacing(2)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(1)
 
         icon_label = QLabel(icon)
         icon_label.setObjectName("navIcon")
         icon_label.setAlignment(Qt.AlignCenter)
         font = icon_label.font()
-        font.setPointSize(36 if large_icon else 14)
+        font.setPointSize(25 if large_icon else 13)
         icon_label.setFont(font)
 
         title_label = QLabel(title)
@@ -115,15 +115,15 @@ class MainWindow(QMainWindow):
     def _build_sidebar(self) -> QFrame:
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(74)
+        sidebar.setFixedWidth(78)
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(4, 12, 4, 12)
-        layout.setSpacing(7)
+        layout.setContentsMargins(6, 14, 6, 12)
+        layout.setSpacing(6)
 
         mark = QLabel("CP")
+        mark.setObjectName("brandMark")
         mark.setAlignment(Qt.AlignCenter)
-        mark.setFixedHeight(32)
-        mark.setStyleSheet("font-weight: 800; color: #fb78b7;")
+        mark.setFixedHeight(34)
         layout.addWidget(mark)
 
         for item in DEFAULT_NAV_ITEMS:
@@ -139,10 +139,13 @@ class MainWindow(QMainWindow):
     def _build_content(self) -> QWidget:
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(18, 14, 18, 18)
-        layout.setSpacing(14)
+        layout.setContentsMargins(20, 16, 20, 20)
+        layout.setSpacing(12)
 
-        header = QHBoxLayout()
+        self.workbench_header = QFrame()
+        self.workbench_header.setObjectName("workbenchHeader")
+        header = QHBoxLayout(self.workbench_header)
+        header.setContentsMargins(16, 10, 12, 10)
         header.setSpacing(12)
         identity = QVBoxLayout()
         identity.setSpacing(1)
@@ -169,7 +172,7 @@ class MainWindow(QMainWindow):
         header.addStretch(1)
         header.addWidget(self.status_pill)
         header.addWidget(self.tutorial_button)
-        layout.addLayout(header)
+        layout.addWidget(self.workbench_header)
 
         self.stack = QStackedWidget()
         for item in DEFAULT_NAV_ITEMS:

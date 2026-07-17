@@ -15,6 +15,7 @@ def test_monitor_page_uses_scroll_area_for_dense_content():
     assert scroll_areas
     assert scroll_areas[0].widgetResizable()
     assert scroll_areas[0].widget() is not None
+    assert scroll_areas[0].widget().objectName() == 'monitorScrollContent'
 
     page.close()
 

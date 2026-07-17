@@ -1,4 +1,4 @@
-"""ConsolePlat desktop integration shell."""
+'''ConsolePlat desktop integration shell.'''
 
-APP_NAME = "ConsolePlat"
-APP_VERSION = "2.0.1"
+APP_NAME = 'ConsolePlat'
+APP_VERSION = '2.1.0'
