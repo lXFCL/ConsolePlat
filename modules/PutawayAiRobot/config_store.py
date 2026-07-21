@@ -231,6 +231,7 @@ def save_product_rows(rows):
 
 
 DEFAULT_DECLARE_PRICE = "14"
+DEFAULT_WEIGHTS = (142, 147, 152, 157, 162)
 
 
 def normalize_declare_price(value, default: str = DEFAULT_DECLARE_PRICE) -> str:
@@ -247,6 +248,18 @@ def normalize_declare_price(value, default: str = DEFAULT_DECLARE_PRICE) -> str:
     return format(normalized, "f")
 
 
+def normalize_weights(value, default=DEFAULT_WEIGHTS) -> list:
+    try:
+        weights = list(value)
+    except (TypeError, ValueError):
+        return list(default)
+    if len(weights) != len(DEFAULT_WEIGHTS):
+        return list(default)
+    if any(type(weight) is not int or weight <= 0 for weight in weights):
+        return list(default)
+    return weights
+
+
 def load_runtime_settings():
     defaults = {
         "parallel_count": 1,
@@ -256,6 +269,7 @@ def load_runtime_settings():
         "browser_preference": "auto",
         "latest_excel_dir": "",
         "declare_price": DEFAULT_DECLARE_PRICE,
+        "weights": list(DEFAULT_WEIGHTS),
     }
     path = runtime_settings_path()
     if not os.path.exists(path):
@@ -287,6 +301,7 @@ def load_runtime_settings():
         out["browser_preference"] = bp
     out["latest_excel_dir"] = (data.get("latest_excel_dir") or "").strip()
     out["declare_price"] = normalize_declare_price(data.get("declare_price"))
+    out["weights"] = normalize_weights(data.get("weights"))
     return out
 
 
@@ -298,6 +313,7 @@ def save_runtime_settings(
     upload_fail_stop_threshold: int = 3,
     latest_excel_dir: str = "",
     declare_price: str = DEFAULT_DECLARE_PRICE,
+    weights=DEFAULT_WEIGHTS,
 ):
     bp = (browser_preference or "auto").strip().lower()
     if bp not in {"auto", "msedge", "chrome"}:
@@ -310,6 +326,7 @@ def save_runtime_settings(
         "browser_preference": bp,
         "latest_excel_dir": (latest_excel_dir or "").strip(),
         "declare_price": normalize_declare_price(declare_price),
+        "weights": normalize_weights(weights),
     }
     with open(runtime_settings_path(), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

@@ -895,6 +895,7 @@ def _select_shop_and_category(
     color: str = "",
     progress=None,
     declare_price: str = "14",
+    weights=(142, 147, 152, 157, 162),
 ):
     shop_name = (shop_name or "").strip()
     category = (category or "").strip()
@@ -968,9 +969,9 @@ def _select_shop_and_category(
             from package_size_flow import fill_package_size_batch
 
             fill_package_size_batch(page, "30", "25", "1", progress=progress)
-            from weight_flow import fill_weight_sequence
+            from weight_flow import fill_weights
 
-            fill_weight_sequence(page, 142, 5, 5, progress=progress)
+            fill_weights(page, weights, progress=progress)
             from suggest_price_flow import fill_suggest_price_apply_all
 
             fill_suggest_price_apply_all(page, "7", progress=progress)
@@ -1036,9 +1037,9 @@ def _select_shop_and_category(
         from package_size_flow import fill_package_size_batch
 
         fill_package_size_batch(page, "30", "25", "1", progress=progress)
-        from weight_flow import fill_weight_sequence
+        from weight_flow import fill_weights
 
-        fill_weight_sequence(page, 142, 5, 5, progress=progress)
+        fill_weights(page, weights, progress=progress)
         from suggest_price_flow import fill_suggest_price_apply_all
 
         fill_suggest_price_apply_all(page, "7", progress=progress)
@@ -1650,6 +1651,7 @@ def select_shop_category_flow(
     page_ws: str = "",
     progress=None,
     declare_price: str = "14",
+    weights=(142, 147, 152, 157, 162),
 ):
     _silence_playwright_node_warnings()
     try:
@@ -1689,6 +1691,7 @@ def select_shop_category_flow(
                 sku,
                 color,
                 declare_price=declare_price,
+                weights=weights,
                 progress=progress,
             )
         finally:

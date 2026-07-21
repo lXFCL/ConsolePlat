@@ -9,7 +9,7 @@ from PyQt5 import QtCore
 from browser_launch import launch_persistent_context_with_fallback
 from cdp_utils import close_cdp_page, list_cdp_pages, open_cdp_page
 from album_cleanup_flow import clear_album_space
-from config_store import normalize_declare_price
+from config_store import DEFAULT_WEIGHTS, normalize_declare_price, normalize_weights
 from dianxiaomi_flows import (
     HOME_URL,
     TEMU_ADD_URL,
@@ -141,6 +141,7 @@ class CdpActionWorker(QtCore.QThread):
         sku: str = "",
         color: str = "",
         declare_price: str = "14",
+        weights=DEFAULT_WEIGHTS,
     ):
         super().__init__()
         self.action = action
@@ -155,6 +156,7 @@ class CdpActionWorker(QtCore.QThread):
         self.sku = sku
         self.color = color
         self.declare_price = normalize_declare_price(declare_price)
+        self.weights = tuple(normalize_weights(weights))
 
     def run(self):
         try:
@@ -173,6 +175,7 @@ class CdpActionWorker(QtCore.QThread):
                     self.color,
                     page_ws=self.page_ws,
                     declare_price=self.declare_price,
+                    weights=self.weights,
                     progress=self.progress.emit,
                 )
                 self.ok.emit("已完成")
@@ -224,6 +227,7 @@ class BatchPublishWorker(QtCore.QThread):
         login_username: str = "",
         login_password: str = "",
         declare_price: str = "14",
+        weights=DEFAULT_WEIGHTS,
     ):
         super().__init__()
         self.cdp = (cdp or "").strip()
@@ -237,6 +241,7 @@ class BatchPublishWorker(QtCore.QThread):
         self.login_username = (login_username or "").strip()
         self.login_password = login_password or ""
         self.declare_price = normalize_declare_price(declare_price)
+        self.weights = tuple(normalize_weights(weights))
         self._slot_count = 1
         self.screen_geometry = screen_geometry or {}
 
@@ -483,6 +488,7 @@ class BatchPublishWorker(QtCore.QThread):
                 row.get("color") or "",
                 page_ws=use_target.get("ws") or "",
                 declare_price=self.declare_price,
+                weights=self.weights,
                 progress=lambda m: self.progress.emit(f"{prefix} SKU:{sku} {m}"),
             )
             success = True

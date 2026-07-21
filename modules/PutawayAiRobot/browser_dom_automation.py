@@ -9,10 +9,12 @@ from browser_launch import detect_available_browsers
 from cdp_utils import list_cdp_pages
 from config_store import (
     browser_profile_dir,
+    DEFAULT_WEIGHTS,
     load_account_profiles,
     load_product_rows,
     load_runtime_settings,
     normalize_declare_price,
+    normalize_weights,
     save_account_profiles,
     save_product_rows,
     save_runtime_settings,
@@ -183,12 +185,19 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         self.declare_price_input.setDecimals(2)
         self.declare_price_input.setRange(0.01, 999999.99)
         self.declare_price_input.setValue(14.0)
+        self.weight_inputs = []
         self.browser_preference_input = QtWidgets.QComboBox()
         runtime_form.addRow("同时并发数量：", self.parallel_publish_input)
         runtime_form.addRow("每成功多少条清理一次：", self.cleanup_every_input)
         runtime_form.addRow("单次清理最大轮次：", self.cleanup_max_rounds_input)
         runtime_form.addRow("连续上传失败停止阈值：", self.upload_fail_stop_threshold_input)
         runtime_form.addRow("申报价格：", self.declare_price_input)
+        for index, default_weight in enumerate(DEFAULT_WEIGHTS, start=1):
+            weight_input = QtWidgets.QSpinBox()
+            weight_input.setRange(1, 999999)
+            weight_input.setValue(default_weight)
+            self.weight_inputs.append(weight_input)
+            runtime_form.addRow(f"第{index}档克重（g）：", weight_input)
         runtime_form.addRow("浏览器类型：", self.browser_preference_input)
         runtime_settings_layout.addLayout(runtime_form)
         runtime_btn_row = QtWidgets.QHBoxLayout()
@@ -478,6 +487,8 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "提示", "请先在“账号配置”里保存并选择本次运行账号")
             return
         declare_price = normalize_declare_price(self.declare_price_input.value())
+        weights = tuple(normalize_weights([weight_input.value() for weight_input in self.weight_inputs]))
+        weights_text = "/".join(str(weight) for weight in weights)
         try:
             self._save_runtime_settings_from_ui()
         except Exception as e:
@@ -488,7 +499,8 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             "确认批量上架",
             "即将执行真实批量上架并立即发布。\n\n"
             f"有效商品：{len(valid_rows)} 条\n"
-            f"申报价格：{declare_price}\n\n"
+            f"申报价格：{declare_price}\n"
+            f"克重：{weights_text}g\n\n"
             "是否继续？",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.No,
@@ -510,8 +522,9 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             login_username=creds["username"],
             login_password=creds["password"],
             declare_price=declare_price,
+            weights=weights,
         )
-        self._run_action(worker, f"正在批量上架（并发{parallel_count}，申报价格{declare_price}）…")
+        self._run_action(worker, f"正在批量上架（并发{parallel_count}，申报价格{declare_price}，克重{weights_text}g）…")
 
     def open_runtime_settings_tab(self):
         idx = self.tabs.indexOf(self.runtime_settings_tab)
@@ -534,6 +547,8 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         self.cleanup_max_rounds_input.setValue(int(settings.get("cleanup_max_rounds") or 40))
         self.upload_fail_stop_threshold_input.setValue(int(settings.get("upload_fail_stop_threshold", 3)))
         self.declare_price_input.setValue(float(normalize_declare_price(settings.get("declare_price"))))
+        for weight_input, weight in zip(self.weight_inputs, normalize_weights(settings.get("weights"))):
+            weight_input.setValue(weight)
         self.latest_excel_dir_input.setText(settings.get("latest_excel_dir") or "")
         browser_pref = (settings.get("browser_preference") or "auto").strip().lower()
         idx = self.browser_preference_input.findData(browser_pref)
@@ -550,6 +565,7 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             int(self.upload_fail_stop_threshold_input.value()),
             self.latest_excel_dir_input.text(),
             normalize_declare_price(self.declare_price_input.value()),
+            [weight_input.value() for weight_input in self.weight_inputs],
         )
 
     def save_runtime_settings_ui(self):

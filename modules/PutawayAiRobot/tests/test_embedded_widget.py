@@ -70,6 +70,27 @@ def test_publish_controls_show_configured_declare_price(monkeypatch):
     widget.deleteLater()
 
 
+def test_publish_controls_show_configured_custom_weights(monkeypatch):
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_load_accounts_ui", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_load_product_rows_ui", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_reload_browser_options", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "refresh_pages", lambda self: None)
+    monkeypatch.setattr(
+        "browser_dom_automation.load_runtime_settings",
+        lambda: {"declare_price": "14", "weights": [140, 145, 150, 155, 160]},
+    )
+
+    widget = create_putaway_widget()
+
+    assert len(widget.weight_inputs) == 5
+    assert all(isinstance(weight_input, QtWidgets.QSpinBox) for weight_input in widget.weight_inputs)
+    assert [weight_input.value() for weight_input in widget.weight_inputs] == [140, 145, 150, 155, 160]
+
+    widget.deleteLater()
+
+
 def test_publish_confirmation_saves_and_snapshots_declare_price(monkeypatch):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     events = []
@@ -139,6 +160,65 @@ def test_publish_confirmation_saves_and_snapshots_declare_price(monkeypatch):
     assert "申报价格：14.5" in captured["confirmation_text"]
     assert captured["worker_kwargs"]["declare_price"] == "14.5"
     assert "申报价格14.5" in captured["status"]
+
+    widget.deleteLater()
+
+
+def test_publish_confirmation_snapshots_custom_weights(monkeypatch):
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    captured = {}
+
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_load_accounts_ui", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_load_product_rows_ui", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_load_runtime_settings_ui", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_reload_browser_options", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "refresh_pages", lambda self: None)
+    monkeypatch.setattr(
+        PutawayEmbeddedWidget,
+        "_collect_product_rows_ui",
+        lambda self: [{"shop_name": "店铺A", "category": "T恤", "sku": "SKU-1"}],
+    )
+    monkeypatch.setattr(
+        "browser_dom_automation.validate_sku_images",
+        lambda skus: {"exists": True, "image_count": 1, "missing": []},
+    )
+    monkeypatch.setattr(
+        PutawayEmbeddedWidget,
+        "_selected_credentials",
+        lambda self: {"username": "user", "password": "secret"},
+    )
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_save_runtime_settings_from_ui", lambda self: None)
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_selected_tab_url", lambda self: "https://example.test")
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_selected_tab_ws", lambda self: "ws://example.test")
+    monkeypatch.setattr(PutawayEmbeddedWidget, "_app_screen_geometry", lambda self: {})
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "question",
+        lambda _parent, _title, text, *_args, **_kwargs: captured.update(confirmation_text=text) or QtWidgets.QMessageBox.Yes,
+    )
+
+    class FakeWorker:
+        pass
+
+    monkeypatch.setattr(
+        "browser_dom_automation.BatchPublishWorker",
+        lambda *args, **kwargs: captured.update(worker_kwargs=kwargs) or FakeWorker(),
+    )
+    monkeypatch.setattr(
+        PutawayEmbeddedWidget,
+        "_run_action",
+        lambda self, worker, message: captured.update(status=message),
+    )
+
+    widget = create_putaway_widget()
+    custom_weights = [140, 145, 150, 155, 160]
+    for input_box, value in zip(widget.weight_inputs, custom_weights):
+        input_box.setValue(value)
+    widget.select_shop_category_selected()
+
+    assert "克重：140/145/150/155/160g" in captured["confirmation_text"]
+    assert captured["worker_kwargs"]["weights"] == tuple(custom_weights)
+    assert "克重140/145/150/155/160g" in captured["status"]
 
     widget.deleteLater()
 
