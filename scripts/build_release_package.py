@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 
 
-VERSION = "1.9.1"
+VERSION = "2.2.0"
 PORTABLE_NAME = f"ConsolePlat-v{VERSION}-portable"
 PRINTS_NAME = f"ConsolePlat-prints-v{VERSION}"
 

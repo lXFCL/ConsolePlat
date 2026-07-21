@@ -1,4 +1,4 @@
 '''ConsolePlat desktop integration shell.'''
 
 APP_NAME = 'ConsolePlat'
-APP_VERSION = '2.1.0'
+APP_VERSION = '2.2.0'
