@@ -250,6 +250,9 @@ class SettingsPage(QWidget):
         self.putaway_log_dir_edit = self._line_edit("putawayLogDirEdit", "留空则使用上架项目 log")
         self.applygoods_project_dir_edit = self._line_edit("applyGoodsProjectDirEdit", "留空则自动探测 ApplyGoods")
         self.program_data_dir_edit = self._line_edit("programDataDirEdit")
+        self.ai_selection_keywords_edit = QTextEdit()
+        self.ai_selection_keywords_edit.setObjectName("aiSelectionKeywordsEdit")
+        self.ai_selection_keywords_edit.setMaximumHeight(76)
         self.path_status_labels: dict[str, QLabel] = {}
 
         self.startup_width_spin = QSpinBox()
@@ -490,6 +493,7 @@ class SettingsPage(QWidget):
         form.setVerticalSpacing(8)
         form.setLabelAlignment(Qt.AlignRight)
         form.addRow("程序数据目录", self._browse_row(self.program_data_dir_edit, self.choose_program_data_dir))
+        form.addRow("AI 选品关键词", self.ai_selection_keywords_edit)
         form.addRow("启动宽度", self.startup_width_spin)
         form.addRow("启动高度", self.startup_height_spin)
         layout.addLayout(form)
@@ -1138,6 +1142,7 @@ class SettingsPage(QWidget):
         self.putaway_log_dir_edit.setText(settings.putaway_log_dir)
         self.applygoods_project_dir_edit.setText(settings.applygoods_project_dir)
         self.program_data_dir_edit.setText(settings.program_data_dir)
+        self.ai_selection_keywords_edit.setPlainText("\n".join(settings.ai_selection_keywords))
         if hasattr(self, "theme_combo"):
             self.theme_combo.setCurrentIndex(0 if (settings.theme_name or "light") == "light" else 1)
         if hasattr(self, "bg_image_edit"):
@@ -1208,6 +1213,11 @@ class SettingsPage(QWidget):
             putaway_log_dir=self.putaway_log_dir_edit.text().strip(),
             applygoods_project_dir=self.applygoods_project_dir_edit.text().strip(),
             program_data_dir=self.program_data_dir_edit.text().strip(),
+            ai_selection_keywords=[
+                item.strip()
+                for item in self.ai_selection_keywords_edit.toPlainText().splitlines()
+                if item.strip()
+            ],
             theme_name="light" if self.theme_combo.currentIndex() == 0 else "dark",
             bg_image_path=self.bg_image_edit.text().strip(),
             check_update_on_startup=self.check_update_on_startup_check.isChecked(),

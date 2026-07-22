@@ -10,6 +10,7 @@ CLI_MODULES = {
     "monitor-fetch": "consoleplat.services.monitor_fetch_cli",
     "sendgoods-export": "consoleplat.services.sendgoods_export_cli",
     "ai-image-edit": "consoleplat.services.ai_image_edit_cli",
+    "ai-selection-fetch": "consoleplat.services.ai_selection_fetch_cli",
     "version-check": "consoleplat.services.version_check_cli",
 }
 

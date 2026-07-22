@@ -124,6 +124,23 @@ def test_settings_page_exposes_monitor_export_dir(tmp_path, monkeypatch):
     page.close()
 
 
+def test_settings_page_exposes_and_saves_ai_selection_keywords(tmp_path, monkeypatch):
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(AppSettings(ai_selection_keywords=["黑白T恤", "summer tee"]))
+    monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
+    app = QApplication.instance() or QApplication([])
+
+    page = SettingsPage()
+
+    keywords_edit = page.findChild(QTextEdit, "aiSelectionKeywordsEdit")
+    assert keywords_edit.toPlainText() == "黑白T恤\nsummer tee"
+    keywords_edit.setPlainText("黑白T恤\n\nnew tee")
+    page.save_settings()
+
+    assert SettingsStore(path).load().ai_selection_keywords == ["黑白T恤", "new tee"]
+    page.close()
+
+
 def test_settings_page_exposes_monitor_print_gallery_controls(tmp_path, monkeypatch):
     path = tmp_path / "settings.json"
     SettingsStore(path).save(

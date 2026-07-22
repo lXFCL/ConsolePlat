@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QApplication, QFrame, QLabel, QMessageBox
 
 from consoleplat.config import AppSettings
 from consoleplat.ui.ai_edit_page import AIEditPage
+from consoleplat.ui.ai_selection_page import AISelectionPage
 from consoleplat.ui.local_image_page import LocalImagePage
 from consoleplat.ui.main_window import MainWindow
 from consoleplat.ui.product_publish_page import ProductPublishPage
@@ -270,6 +271,36 @@ def test_main_window_ai_edit_page_uses_real_page(monkeypatch):
 
     assert window.findChildren(AIEditPage)
 
+    window.close()
+
+
+def test_main_window_ai_selection_page_uses_real_page(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+
+    window = MainWindow()
+    window.activate_page("ai_selection")
+
+    assert window.findChildren(AISelectionPage)
+    assert window.page_title_label.text() == "AI 选品"
+    window.close()
+
+
+def test_main_window_settings_save_refreshes_loaded_ai_selection_page(monkeypatch):
+    monkeypatch.setattr("consoleplat.ui.main_window.SettingsStore", lambda: FakeSettingsStore())
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.activate_page("ai_selection")
+    selection_page = window.pages["ai_selection"]
+    settings = AppSettings(
+        program_data_dir="E:/ConsolePlatData",
+        ai_selection_keywords=["黑白T恤", "summer tee"],
+    )
+
+    window._handle_settings_saved(settings)
+
+    assert selection_page.settings.program_data_dir == "E:/ConsolePlatData"
+    assert selection_page.keyword_edit.toPlainText() == "黑白T恤\nsummer tee"
     window.close()
 
 

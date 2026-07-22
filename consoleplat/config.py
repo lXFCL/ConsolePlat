@@ -231,6 +231,7 @@ class AppSettings:
     putaway_log_dir: str = ""
     applygoods_project_dir: str = ""
     program_data_dir: str = ""
+    ai_selection_keywords: list[str] = field(default_factory=lambda: ["黑白T恤"])
     theme_name: str = "light"
     bg_image_path: str = ""
     check_update_on_startup: bool = True
@@ -295,6 +296,9 @@ class AppSettings:
         if self.print_gallery_source not in {"local", "github"}:
             self.print_gallery_source = "local"
         self.print_gallery_github_raw_base_url = (self.print_gallery_github_raw_base_url or "").rstrip("/")
+        self.ai_selection_keywords = [str(item).strip() for item in self.ai_selection_keywords if str(item).strip()]
+        if not self.ai_selection_keywords:
+            self.ai_selection_keywords = ["黑白T恤"]
         providers = _normalize_providers(list(self.ai_providers or []))
         self.ai_providers = providers
         provider_ids = {provider.provider_id for provider in providers}
@@ -440,6 +444,7 @@ class SettingsStore:
             putaway_log_dir=str(data.get("putaway_log_dir") or ""),
             applygoods_project_dir=str(data.get("applygoods_project_dir") or ""),
             program_data_dir=str(data.get("program_data_dir") or ""),
+            ai_selection_keywords=[str(item) for item in (data.get("ai_selection_keywords") or ["黑白T恤"])],
             theme_name=str(data.get("theme_name") or "light"),
             bg_image_path=str(data.get("bg_image_path") or ""),
             check_update_on_startup=bool(data.get("check_update_on_startup", True)),
@@ -540,6 +545,7 @@ class SettingsStore:
             "putaway_log_dir": settings.putaway_log_dir or "",
             "applygoods_project_dir": settings.applygoods_project_dir or "",
             "program_data_dir": settings.program_data_dir or "",
+            "ai_selection_keywords": list(settings.ai_selection_keywords or ["黑白T恤"]),
             "theme_name": settings.theme_name or "light",
             "bg_image_path": settings.bg_image_path or "",
             "check_update_on_startup": bool(settings.check_update_on_startup),

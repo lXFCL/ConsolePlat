@@ -90,6 +90,17 @@ def test_settings_store_persists_purchase_export_dir(tmp_path):
     assert loaded.purchase_export_dir == "E:/exports/purchase"
 
 
+def test_settings_store_persists_ai_selection_keywords(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(ai_selection_keywords=["黑白T恤", "oversized tee"])
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.ai_selection_keywords == ["黑白T恤", "oversized tee"]
+
+
 def test_settings_store_persists_print_gallery_preferences(tmp_path):
     path = tmp_path / "settings.json"
     store = SettingsStore(path)

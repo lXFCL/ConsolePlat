@@ -22,6 +22,7 @@ from consoleplat.models import DEFAULT_NAV_ITEMS, PAGE_TITLES, ShellState
 from consoleplat.paths import resource_path
 from consoleplat.services.version_check_service import UpdateCheckWorker, UpdateProxyConfig
 from consoleplat.ui.ai_edit_page import AIEditPage
+from consoleplat.ui.ai_selection_page import AISelectionPage
 from consoleplat.ui.apply_goods_page import ApplyGoodsPage
 from consoleplat.ui.local_image_page import LocalImagePage
 from consoleplat.ui.monitor_page import MonitorPage
@@ -211,6 +212,8 @@ class MainWindow(QMainWindow):
             return LocalImagePage()
         if key == "ai_edit":
             return AIEditPage()
+        if key == "ai_selection":
+            return AISelectionPage()
         if key == "putaway":
             return PutawayPage()
         if key == "apply":
@@ -261,6 +264,9 @@ class MainWindow(QMainWindow):
         monitor_page = self.pages.get("monitor")
         if isinstance(monitor_page, MonitorPage):
             monitor_page.reload_settings(settings)
+        selection_page = self.pages.get("ai_selection")
+        if isinstance(selection_page, AISelectionPage):
+            selection_page.reload_settings(settings)
 
     def _prepare_putaway_import_from_publish(self, record: object) -> None:
         self.activate_page("putaway")
