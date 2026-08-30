@@ -113,7 +113,11 @@ class PutawayPage(QWidget):
         QApplication.processEvents()
 
         try:
-            self.embedded_widget = self.adapter.build_embedded_widget(parent=self.container_panel)
+            self.embedded_widget = self.adapter.build_embedded_widget(
+                parent=self.container_panel,
+                home_url=self.settings.putaway_home_url,
+                album_url=self.settings.putaway_album_url,
+            )
         except Exception as exc:
             self.embedded_widget = None
             self.status_label.setText("内嵌上架界面加载失败")

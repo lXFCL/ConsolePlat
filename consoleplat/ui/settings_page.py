@@ -248,6 +248,11 @@ class SettingsPage(QWidget):
         self.putaway_project_dir_edit = self._line_edit("putawayProjectDirEdit", "留空则自动探测 PutawayAiRobot")
         self.putaway_data_dir_edit = self._line_edit("putawayDataDirEdit", "留空则使用上架项目 data")
         self.putaway_log_dir_edit = self._line_edit("putawayLogDirEdit", "留空则使用上架项目 log")
+        self.putaway_home_url_edit = self._line_edit("putawayHomeUrlEdit", "https://www.dianxiaomi.com/home.htm")
+        self.putaway_album_url_edit = self._line_edit(
+            "putawayAlbumUrlEdit",
+            "https://www.dianxiaomi.com/web/service/album",
+        )
         self.applygoods_project_dir_edit = self._line_edit("applyGoodsProjectDirEdit", "留空则自动探测 ApplyGoods")
         self.program_data_dir_edit = self._line_edit("programDataDirEdit")
         self.ai_selection_keywords_edit = QTextEdit()
@@ -460,7 +465,7 @@ class SettingsPage(QWidget):
         return self._wrap_scroll_panel(panel, fill_viewport=False)
 
     def _build_putaway_panel(self) -> QFrame:
-        panel = self._make_panel("上架模块", "PutawayAiRobot 的项目目录、data 目录和日志目录集中放在这里管理。", compact=True)
+        panel = self._make_panel("上架模块", "PutawayAiRobot 的项目目录、数据目录和店小秘网址集中放在这里管理。", compact=True)
         layout = panel.layout()
         form = QFormLayout()
         form.setHorizontalSpacing(10)
@@ -469,6 +474,8 @@ class SettingsPage(QWidget):
         form.addRow("上架项目目录", self._browse_row(self.putaway_project_dir_edit, self.choose_putaway_project_dir))
         form.addRow("上架 data 目录", self._browse_row(self.putaway_data_dir_edit, self.choose_putaway_data_dir))
         form.addRow("上架日志目录", self._browse_row(self.putaway_log_dir_edit, self.choose_putaway_log_dir))
+        form.addRow("店小秘启动网址", self.putaway_home_url_edit)
+        form.addRow("图片空间网址", self.putaway_album_url_edit)
         form.addRow("上架路径状态", self._path_status_label("putaway"))
         layout.addLayout(form)
         return self._wrap_scroll_panel(panel, fill_viewport=False)
@@ -1140,6 +1147,8 @@ class SettingsPage(QWidget):
         self.putaway_project_dir_edit.setText(settings.putaway_project_dir)
         self.putaway_data_dir_edit.setText(settings.putaway_data_dir)
         self.putaway_log_dir_edit.setText(settings.putaway_log_dir)
+        self.putaway_home_url_edit.setText(settings.putaway_home_url)
+        self.putaway_album_url_edit.setText(settings.putaway_album_url)
         self.applygoods_project_dir_edit.setText(settings.applygoods_project_dir)
         self.program_data_dir_edit.setText(settings.program_data_dir)
         self.ai_selection_keywords_edit.setPlainText("\n".join(settings.ai_selection_keywords))
@@ -1211,6 +1220,8 @@ class SettingsPage(QWidget):
             putaway_project_dir=self.putaway_project_dir_edit.text().strip(),
             putaway_data_dir=self.putaway_data_dir_edit.text().strip(),
             putaway_log_dir=self.putaway_log_dir_edit.text().strip(),
+            putaway_home_url=self.putaway_home_url_edit.text().strip(),
+            putaway_album_url=self.putaway_album_url_edit.text().strip(),
             applygoods_project_dir=self.applygoods_project_dir_edit.text().strip(),
             program_data_dir=self.program_data_dir_edit.text().strip(),
             ai_selection_keywords=[

@@ -19,7 +19,7 @@ class PutawayAdapter:
         program, args = script_command(entry)
         return program, args, self.project_dir
 
-    def build_embedded_widget(self, parent=None):
+    def build_embedded_widget(self, parent=None, home_url: str = "", album_url: str = ""):
         entry = self.project_dir / "browser_dom_automation.py"
         if not entry.exists():
             raise FileNotFoundError(f"未找到 PutawayAiRobot 入口文件：{entry}")
@@ -33,4 +33,4 @@ class PutawayAdapter:
         factory = getattr(module, "create_putaway_widget", None)
         if factory is None:
             raise AttributeError("PutawayAiRobot 未提供 create_putaway_widget() 入口")
-        return factory(parent=parent)
+        return factory(parent=parent, home_url=home_url, album_url=album_url)

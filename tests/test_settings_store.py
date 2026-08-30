@@ -90,6 +90,21 @@ def test_settings_store_persists_purchase_export_dir(tmp_path):
     assert loaded.purchase_export_dir == "E:/exports/purchase"
 
 
+def test_settings_store_persists_custom_putaway_urls(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        putaway_home_url="https://www.dianxiaomi.com/web/home",
+        putaway_album_url="https://www.dianxiaomi.com/web/service/album",
+    )
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.putaway_home_url == "https://www.dianxiaomi.com/web/home"
+    assert loaded.putaway_album_url == "https://www.dianxiaomi.com/web/service/album"
+
+
 def test_settings_store_persists_ai_selection_keywords(tmp_path):
     path = tmp_path / "settings.json"
     store = SettingsStore(path)

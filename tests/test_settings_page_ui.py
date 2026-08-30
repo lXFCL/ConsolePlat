@@ -320,6 +320,8 @@ def test_settings_page_loads_publish_titles_and_program_paths(tmp_path, monkeypa
             putaway_project_dir="E:/1PythonProject/PutawayAiRobot",
             putaway_data_dir="E:/1PythonProject/PutawayAiRobot/data",
             putaway_log_dir="E:/1PythonProject/PutawayAiRobot/log",
+            putaway_home_url="https://www.dianxiaomi.com/web/home",
+            putaway_album_url="https://www.dianxiaomi.com/web/service/album",
         )
     )
     monkeypatch.setattr("consoleplat.ui.settings_page.SettingsStore", lambda: SettingsStore(path))
@@ -334,6 +336,8 @@ def test_settings_page_loads_publish_titles_and_program_paths(tmp_path, monkeypa
     assert edits["putawayProjectDirEdit"] == "E:/1PythonProject/PutawayAiRobot"
     assert edits["putawayDataDirEdit"] == "E:/1PythonProject/PutawayAiRobot/data"
     assert edits["putawayLogDirEdit"] == "E:/1PythonProject/PutawayAiRobot/log"
+    assert edits["putawayHomeUrlEdit"] == "https://www.dianxiaomi.com/web/home"
+    assert edits["putawayAlbumUrlEdit"] == "https://www.dianxiaomi.com/web/service/album"
 
     page.close()
 

@@ -14,6 +14,8 @@ from consoleplat.paths import default_download_dir, modules_root
 
 DEFAULT_AI_EDIT_PROMPT = "保留主体，整理成适合印花的透明底效果。"
 DEFAULT_AI_PROVIDER_ID = "default-ai-provider"
+DEFAULT_PUTAWAY_HOME_URL = "https://www.dianxiaomi.com/home.htm"
+DEFAULT_PUTAWAY_ALBUM_URL = "https://www.dianxiaomi.com/web/service/album"
 
 PROJECT_DIR_NAMES = {
     "sendgoods": "SendGoods",
@@ -229,6 +231,8 @@ class AppSettings:
     putaway_project_dir: str = ""
     putaway_data_dir: str = ""
     putaway_log_dir: str = ""
+    putaway_home_url: str = DEFAULT_PUTAWAY_HOME_URL
+    putaway_album_url: str = DEFAULT_PUTAWAY_ALBUM_URL
     applygoods_project_dir: str = ""
     program_data_dir: str = ""
     ai_selection_keywords: list[str] = field(default_factory=lambda: ["黑白T恤"])
@@ -296,6 +300,8 @@ class AppSettings:
         if self.print_gallery_source not in {"local", "github"}:
             self.print_gallery_source = "local"
         self.print_gallery_github_raw_base_url = (self.print_gallery_github_raw_base_url or "").rstrip("/")
+        self.putaway_home_url = (self.putaway_home_url or DEFAULT_PUTAWAY_HOME_URL).strip()
+        self.putaway_album_url = (self.putaway_album_url or DEFAULT_PUTAWAY_ALBUM_URL).strip()
         self.ai_selection_keywords = [str(item).strip() for item in self.ai_selection_keywords if str(item).strip()]
         if not self.ai_selection_keywords:
             self.ai_selection_keywords = ["黑白T恤"]
@@ -442,6 +448,8 @@ class SettingsStore:
             putaway_project_dir=str(data.get("putaway_project_dir") or ""),
             putaway_data_dir=str(data.get("putaway_data_dir") or ""),
             putaway_log_dir=str(data.get("putaway_log_dir") or ""),
+            putaway_home_url=str(data.get("putaway_home_url") or DEFAULT_PUTAWAY_HOME_URL),
+            putaway_album_url=str(data.get("putaway_album_url") or DEFAULT_PUTAWAY_ALBUM_URL),
             applygoods_project_dir=str(data.get("applygoods_project_dir") or ""),
             program_data_dir=str(data.get("program_data_dir") or ""),
             ai_selection_keywords=[str(item) for item in (data.get("ai_selection_keywords") or ["黑白T恤"])],
@@ -543,6 +551,8 @@ class SettingsStore:
             "putaway_project_dir": settings.putaway_project_dir or "",
             "putaway_data_dir": settings.putaway_data_dir or "",
             "putaway_log_dir": settings.putaway_log_dir or "",
+            "putaway_home_url": settings.putaway_home_url or DEFAULT_PUTAWAY_HOME_URL,
+            "putaway_album_url": settings.putaway_album_url or DEFAULT_PUTAWAY_ALBUM_URL,
             "applygoods_project_dir": settings.applygoods_project_dir or "",
             "program_data_dir": settings.program_data_dir or "",
             "ai_selection_keywords": list(settings.ai_selection_keywords or ["黑白T恤"]),

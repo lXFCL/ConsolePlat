@@ -8,7 +8,7 @@ from PyQt5 import QtCore
 
 from browser_launch import launch_persistent_context_with_fallback
 from cdp_utils import close_cdp_page, list_cdp_pages, open_cdp_page
-from album_cleanup_flow import clear_album_space
+from album_cleanup_flow import ALBUM_URL, clear_album_space
 from config_store import DEFAULT_WEIGHTS, normalize_declare_price, normalize_weights
 from dianxiaomi_flows import (
     HOME_URL,
@@ -38,14 +38,16 @@ def _auto_dismiss_dialog(dialog):
             pass
 
 
-def _is_dianxiaomi_home_page(url: str) -> bool:
+def _is_dianxiaomi_home_page(url: str, home_url: str = HOME_URL) -> bool:
     try:
         parsed = urlparse((url or "").strip())
+        configured = urlparse((home_url or HOME_URL).strip())
     except Exception:
         return False
-    host = (parsed.netloc or "").lower()
-    path = (parsed.path or "").rstrip("/").lower()
-    return host == "www.dianxiaomi.com" and path == "/home.htm"
+    return (
+        (parsed.netloc or "").lower() == (configured.netloc or "").lower()
+        and (parsed.path or "").rstrip("/").lower() == (configured.path or "").rstrip("/").lower()
+    )
 
 
 class BrowserWorker(QtCore.QThread):
@@ -194,14 +196,20 @@ class AlbumCleanupWorker(QtCore.QThread):
     failed = QtCore.pyqtSignal(str)
     progress = QtCore.pyqtSignal(str)
 
-    def __init__(self, cdp: str, max_rounds: int = 40):
+    def __init__(self, cdp: str, max_rounds: int = 40, album_url: str = ALBUM_URL):
         super().__init__()
         self.cdp = (cdp or "").strip()
         self.max_rounds = max(1, int(max_rounds or 40))
+        self.album_url = (album_url or ALBUM_URL).strip()
 
     def run(self):
         try:
-            clear_album_space(self.cdp, progress=self.progress.emit, max_rounds=self.max_rounds)
+            clear_album_space(
+                self.cdp,
+                progress=self.progress.emit,
+                max_rounds=self.max_rounds,
+                album_url=self.album_url,
+            )
             self.ok.emit("图片空间清理完成")
         except Exception as e:
             self.failed.emit(str(e))
@@ -228,6 +236,8 @@ class BatchPublishWorker(QtCore.QThread):
         login_password: str = "",
         declare_price: str = "14",
         weights=DEFAULT_WEIGHTS,
+        home_url: str = HOME_URL,
+        album_url: str = ALBUM_URL,
     ):
         super().__init__()
         self.cdp = (cdp or "").strip()
@@ -242,6 +252,8 @@ class BatchPublishWorker(QtCore.QThread):
         self.login_password = login_password or ""
         self.declare_price = normalize_declare_price(declare_price)
         self.weights = tuple(normalize_weights(weights))
+        self.home_url = (home_url or HOME_URL).strip()
+        self.album_url = (album_url or ALBUM_URL).strip()
         self._slot_count = 1
         self.screen_geometry = screen_geometry or {}
 
@@ -453,7 +465,7 @@ class BatchPublishWorker(QtCore.QThread):
             return 0
         for page in pages:
             url = (page.get("url") or "").strip()
-            if not _is_dianxiaomi_home_page(url):
+            if not _is_dianxiaomi_home_page(url, self.home_url):
                 continue
             ws = (page.get("webSocketDebuggerUrl") or "").strip()
             try:
@@ -523,6 +535,7 @@ class BatchPublishWorker(QtCore.QThread):
                             progress=self.progress.emit,
                             max_rounds=self.cleanup_max_rounds,
                             max_seconds=max(90, min(240, int(self.cleanup_max_rounds or 40) * 6)),
+                            album_url=self.album_url,
                         )
                         return
                     except Exception as e:
@@ -557,6 +570,7 @@ class BatchPublishWorker(QtCore.QThread):
                     self.login_password,
                     progress=self.progress.emit,
                     timeout_s=240,
+                    home_url=self.home_url,
                 )
             self._close_home_pages_after_start()
             self.progress.emit("开始前清理图片空间…")

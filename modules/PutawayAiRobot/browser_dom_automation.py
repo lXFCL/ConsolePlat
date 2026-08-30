@@ -19,6 +19,7 @@ from config_store import (
     save_product_rows,
     save_runtime_settings,
 )
+from album_cleanup_flow import ALBUM_URL
 from dianxiaomi_flows import HOME_URL
 from excel_importer import find_latest_xlsx_in_directory, load_product_rows_from_xlsx
 from image_resolver import validate_sku_images
@@ -26,8 +27,10 @@ from workers import AlbumCleanupWorker, BatchPublishWorker, BrowserWorker, CdpAc
 
 
 class PutawayEmbeddedWidget(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, home_url: str = "", album_url: str = ""):
         super().__init__(parent)
+        self.home_url = (home_url or HOME_URL).strip()
+        self.album_url = (album_url or ALBUM_URL).strip()
 
         self.user_data_dir_input = QtWidgets.QLineEdit(browser_profile_dir())
         self.port_input = QtWidgets.QSpinBox()
@@ -523,6 +526,8 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             login_password=creds["password"],
             declare_price=declare_price,
             weights=weights,
+            home_url=self.home_url,
+            album_url=self.album_url,
         )
         self._run_action(worker, f"正在批量上架（并发{parallel_count}，申报价格{declare_price}，克重{weights_text}g）…")
 
@@ -536,7 +541,11 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         if not cdp:
             QtWidgets.QMessageBox.warning(self, "提示", "CDP地址为空")
             return
-        worker = AlbumCleanupWorker(cdp, max_rounds=int(self.cleanup_max_rounds_input.value()))
+        worker = AlbumCleanupWorker(
+            cdp,
+            max_rounds=int(self.cleanup_max_rounds_input.value()),
+            album_url=self.album_url,
+        )
         self._run_action(worker, "正在清理图片空间…")
 
     def _load_runtime_settings_ui(self):
@@ -599,7 +608,7 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
         worker = BrowserWorker(
             self.user_data_dir_input.text(),
             port,
-            HOME_URL,
+            self.home_url,
             creds["username"],
             creds["password"],
             browser_preference=str(self.browser_preference_input.currentData() or "auto"),
@@ -884,8 +893,8 @@ class PutawayEmbeddedWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "失败", str(e))
 
 
-def create_putaway_widget(parent=None):
-    return PutawayEmbeddedWidget(parent)
+def create_putaway_widget(parent=None, home_url: str = "", album_url: str = ""):
+    return PutawayEmbeddedWidget(parent, home_url=home_url, album_url=album_url)
 
 
 class MainWindow(QtWidgets.QMainWindow):

@@ -1490,10 +1490,12 @@ def ensure_logged_in_account(
     password: str = "",
     progress=None,
     timeout_s: int = 180,
+    home_url: str = HOME_URL,
 ):
     _silence_playwright_node_warnings()
     username = (username or "").strip()
     password = password or ""
+    home_url = (home_url or HOME_URL).strip()
     if not username:
         return
     try:
@@ -1521,7 +1523,7 @@ def ensure_logged_in_account(
                 pass
 
             if "dianxiaomi.com" not in ((target.url or "").lower()):
-                target.goto(HOME_URL, wait_until="domcontentloaded", timeout=12000)
+                target.goto(home_url, wait_until="domcontentloaded", timeout=12000)
 
             current = get_logged_in_username(target)
             if current and _normalize_account_name(current) == _normalize_account_name(username):
@@ -1537,7 +1539,7 @@ def ensure_logged_in_account(
                 if progress:
                     progress("未识别到当前登录账号，正在打开店小秘首页检查登录状态…")
                 try:
-                    target.goto(HOME_URL, wait_until="domcontentloaded", timeout=12000)
+                    target.goto(home_url, wait_until="domcontentloaded", timeout=12000)
                 except Exception:
                     pass
 

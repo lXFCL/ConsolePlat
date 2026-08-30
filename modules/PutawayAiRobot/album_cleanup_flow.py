@@ -1,9 +1,9 @@
 import re
 import time
+from urllib.parse import urlparse
 
 
-ALBUM_URL = "https://www.dianxiaomi.com/album/index.htm"
-ALBUM_CLEAN_URL = "https://www.dianxiaomi.com/album/index.htm?cleanup=1"
+ALBUM_URL = "https://www.dianxiaomi.com/web/service/album"
 DEFAULT_CLEANUP_TIMEOUT_S = 240
 
 
@@ -358,14 +358,26 @@ def _pick_any_page(browser):
     raise RuntimeError("CDP已连接，但未发现可用上下文")
 
 
-def _pick_album_page(browser):
+def _is_album_page_url(page_url: str, album_url: str = ALBUM_URL) -> bool:
+    try:
+        page = urlparse((page_url or "").strip())
+        album = urlparse((album_url or ALBUM_URL).strip())
+    except Exception:
+        return False
+    return (
+        page.netloc.lower() == album.netloc.lower()
+        and page.path.rstrip("/").lower() == album.path.rstrip("/").lower()
+    )
+
+
+def _pick_album_page(browser, album_url: str = ALBUM_URL):
     for ctx in browser.contexts:
         for pg in ctx.pages:
             try:
-                u = (pg.url or "").lower()
+                u = pg.url or ""
             except Exception:
                 u = ""
-            if "/album/index.htm" in u:
+            if _is_album_page_url(u, album_url):
                 return pg, ctx
     return None, None
 
@@ -384,19 +396,19 @@ def _close_page_quietly(page):
         pass
 
 
-def _close_album_pages(browser):
+def _close_album_pages(browser, album_url: str = ALBUM_URL):
     for ctx in browser.contexts:
         for pg in list(ctx.pages):
             try:
-                u = (pg.url or "").lower()
+                u = pg.url or ""
             except Exception:
                 u = ""
-            if "/album/index.htm" not in u:
+            if not _is_album_page_url(u, album_url):
                 continue
             _close_page_quietly(pg)
 
 
-def _wait_album_pages_closed(browser, timeout_s: float = 3.0):
+def _wait_album_pages_closed(browser, album_url: str = ALBUM_URL, timeout_s: float = 3.0):
     end = time.time() + max(0.5, float(timeout_s))
     while time.time() < end:
         found = False
@@ -408,10 +420,10 @@ def _wait_album_pages_closed(browser, timeout_s: float = 3.0):
                 except Exception:
                     pass
                 try:
-                    u = (pg.url or "").lower()
+                    u = pg.url or ""
                 except Exception:
                     u = ""
-                if "/album/index.htm" in u:
+                if _is_album_page_url(u, album_url):
                     found = True
                     break
             if found:
@@ -452,14 +464,15 @@ def _wait_cleanup_settled(page, timeout_s: float = 10.0):
     return _is_no_data(page, timeout_ms=220)
 
 
-def _refresh_album_page(page):
+def _refresh_album_page(page, album_url: str = ALBUM_URL):
+    album_url = (album_url or ALBUM_URL).strip()
     try:
-        page.evaluate(f"window.location.href={ALBUM_URL!r}")
+        page.evaluate(f"window.location.href={album_url!r}")
         return
     except Exception:
         pass
     try:
-        page.goto(ALBUM_URL, wait_until="commit", timeout=2500)
+        page.goto(album_url, wait_until="commit", timeout=2500)
         return
     except Exception:
         pass
@@ -578,10 +591,10 @@ def _album_open_url(base_url: str, suffix: str):
     return f"{base}{sep}_ts={int(time.time() * 1000)}_{suffix}"
 
 
-def _open_album_window(browser):
+def _open_album_window(browser, album_url: str = ALBUM_URL):
     seed_page, _ = _pick_any_page(browser)
     marker = f"album_window_{int(time.time() * 1000)}"
-    target_url = _album_open_url(ALBUM_CLEAN_URL, marker)
+    target_url = _album_open_url(album_url, marker)
     sess = seed_page.context.new_cdp_session(seed_page)
     created = sess.send("Target.createTarget", {"url": target_url, "newWindow": True, "background": False})
     want_tid = ((created or {}).get("targetId") or "").strip()
@@ -622,13 +635,13 @@ def _open_album_window(browser):
     raise RuntimeError("图片空间独立窗口打开失败")
 
 
-def _open_album_page(page, retries: int = 4):
+def _open_album_page(page, album_url: str = ALBUM_URL, retries: int = 4):
     for i in range(max(1, int(retries))):
         try:
             page.bring_to_front()
         except Exception:
             pass
-        url = _album_open_url(ALBUM_CLEAN_URL if "cleanup=1" in ALBUM_CLEAN_URL else ALBUM_URL, str(i))
+        url = _album_open_url(album_url, str(i))
         try:
             page.evaluate(f"window.location.href={url!r}")
         except Exception:
@@ -670,18 +683,18 @@ def _open_album_page(page, retries: int = 4):
     return False
 
 
-def _refresh_then_open_album_cleanup(page):
+def _refresh_then_open_album_cleanup(page, album_url: str = ALBUM_URL):
     try:
-        u = (page.url or "").lower()
+        u = page.url or ""
     except Exception:
         u = ""
-    if "/album/index.htm" in u and _wait_album_ready(page, timeout_s=3.0):
+    if _is_album_page_url(u, album_url) and _wait_album_ready(page, timeout_s=3.0):
         try:
             page.evaluate("window.stop && window.stop()")
         except Exception:
             pass
         return True
-    return _open_album_page(page, retries=3)
+    return _open_album_page(page, album_url=album_url, retries=3)
 
 
 def _reuse_or_open_album_window(
@@ -691,6 +704,7 @@ def _reuse_or_open_album_window(
     progress_text: str = "刷新当前图片空间页面…",
     attempts: int = 3,
     force_new: bool = False,
+    album_url: str = ALBUM_URL,
 ):
     page = current_page
     try:
@@ -702,7 +716,7 @@ def _reuse_or_open_album_window(
         _close_page_quietly(page)
         page = None
     if page is None and not force_new:
-        page, _ = _pick_album_page(browser)
+        page, _ = _pick_album_page(browser, album_url)
     if page is not None:
         for idx in range(max(1, int(attempts))):
             if progress:
@@ -711,7 +725,7 @@ def _reuse_or_open_album_window(
                 page.on("dialog", lambda d: d.accept())
             except Exception:
                 pass
-            if _refresh_then_open_album_cleanup(page):
+            if _refresh_then_open_album_cleanup(page, album_url):
                 return page
         _close_page_quietly(page)
         page = None
@@ -720,20 +734,20 @@ def _reuse_or_open_album_window(
     for idx in range(max(1, int(attempts))):
         if progress and idx > 0:
             progress("重新打开独立图片空间窗口…")
-        new_page = _open_album_window(browser)
+        new_page = _open_album_window(browser, album_url)
         try:
             new_page.on("dialog", lambda d: d.accept())
         except Exception:
             pass
-        if _refresh_then_open_album_cleanup(new_page):
+        if _refresh_then_open_album_cleanup(new_page, album_url):
             return new_page
         _close_page_quietly(new_page)
     raise RuntimeError("图片空间页面打开失败（页面持续转圈或超时），请检查网络和账号状态")
 
 
-def _restore_album_page(page):
+def _restore_album_page(page, album_url: str = ALBUM_URL):
     for i in range(3):
-        url = _album_open_url(ALBUM_URL, f"restore_{i}")
+        url = _album_open_url(album_url, f"restore_{i}")
         try:
             page.evaluate(f"window.location.href={url!r}")
         except Exception:
@@ -752,6 +766,7 @@ def clear_album_space(
     max_rounds: int = 40,
     max_seconds: int = DEFAULT_CLEANUP_TIMEOUT_S,
     force_new_page: bool = True,
+    album_url: str = ALBUM_URL,
 ):
     try:
         from playwright.sync_api import sync_playwright
@@ -761,6 +776,7 @@ def clear_album_space(
     cdp_base_url = (cdp_base_url or "").strip().rstrip("/")
     if not cdp_base_url:
         raise RuntimeError("CDP地址为空")
+    album_url = (album_url or ALBUM_URL).strip()
 
     deadline = time.time() + max(30.0, float(max_seconds or DEFAULT_CLEANUP_TIMEOUT_S))
 
@@ -775,14 +791,15 @@ def clear_album_space(
             if force_new_page:
                 if progress:
                     progress("关闭旧图片空间窗口，重新打开清理页面…")
-                _close_album_pages(browser)
-                _wait_album_pages_closed(browser, timeout_s=3.0)
+                _close_album_pages(browser, album_url)
+                _wait_album_pages_closed(browser, album_url, timeout_s=3.0)
             page = _reuse_or_open_album_window(
                 browser,
                 progress=progress,
                 progress_text="打开新的图片空间清理页面…",
                 attempts=4,
                 force_new=force_new_page,
+                album_url=album_url,
             )
             keep_page_open = False
 
@@ -861,6 +878,7 @@ def clear_album_space(
                         progress_text="全选未就绪，重开图片空间清理页面重试…",
                         attempts=3,
                         force_new=True,
+                        album_url=album_url,
                     )
                     continue
 
@@ -887,6 +905,7 @@ def clear_album_space(
                         progress_text="删除按钮未就绪，重开图片空间清理页面重试…",
                         attempts=3,
                         force_new=True,
+                        album_url=album_url,
                     )
                     continue
 
@@ -905,6 +924,7 @@ def clear_album_space(
                         progress_text="确认按钮未就绪，重开图片空间清理页面重试…",
                         attempts=3,
                         force_new=True,
+                        album_url=album_url,
                     )
                     continue
 
@@ -920,6 +940,7 @@ def clear_album_space(
                         progress_text="页面状态未稳定，重开图片空间清理页面继续…",
                         attempts=3,
                         force_new=True,
+                        album_url=album_url,
                     )
                     continue
                 if progress:

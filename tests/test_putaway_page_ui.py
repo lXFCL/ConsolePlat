@@ -24,7 +24,7 @@ def test_putaway_page_does_not_build_embedded_widget_until_requested(tmp_path, m
     app = QApplication.instance() or QApplication([])
     calls = []
 
-    def fake_build(self, parent=None):
+    def fake_build(self, parent=None, **_kwargs):
         calls.append(parent)
         return QWidget(parent)
 
@@ -47,7 +47,7 @@ def test_putaway_page_mounts_embedded_widget_once_when_loaded(tmp_path, monkeypa
     class FakeEmbeddedWidget(QWidget):
         pass
 
-    def fake_build(self, parent=None):
+    def fake_build(self, parent=None, **_kwargs):
         calls.append(parent)
         widget = FakeEmbeddedWidget(parent)
         widget.setObjectName("fakePutawayEmbeddedWidget")
@@ -70,11 +70,44 @@ def test_putaway_page_mounts_embedded_widget_once_when_loaded(tmp_path, monkeypa
     page.close()
 
 
+def test_putaway_page_passes_custom_urls_to_embedded_widget(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    captured = {}
+
+    class FakeEmbeddedWidget(QWidget):
+        pass
+
+    def fake_build(self, parent=None, home_url="", album_url=""):
+        captured["parent"] = parent
+        captured["home_url"] = home_url
+        captured["album_url"] = album_url
+        return FakeEmbeddedWidget(parent)
+
+    monkeypatch.setattr("consoleplat.ui.putaway_page.PutawayAdapter.build_embedded_widget", fake_build, raising=False)
+    path = tmp_path / "settings.json"
+    SettingsStore(path).save(
+        AppSettings(
+            putaway_project_dir="E:/1PythonProject/PutawayAiRobot",
+            putaway_home_url="https://www.dianxiaomi.com/web/home",
+            putaway_album_url="https://www.dianxiaomi.com/web/service/album",
+        )
+    )
+    monkeypatch.setattr("consoleplat.ui.putaway_page.SettingsStore", lambda: SettingsStore(path))
+    page = PutawayPage()
+
+    page._load_embedded()
+
+    assert captured["parent"] is page.container_panel
+    assert captured["home_url"] == "https://www.dianxiaomi.com/web/home"
+    assert captured["album_url"] == "https://www.dianxiaomi.com/web/service/album"
+    page.close()
+
+
 def test_putaway_page_shows_import_error_when_embed_load_fails(tmp_path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     calls = []
 
-    def fake_build(self, parent=None):
+    def fake_build(self, parent=None, **_kwargs):
         calls.append(parent)
         raise ModuleNotFoundError("missing putaway dependency")
 
@@ -116,7 +149,7 @@ def test_putaway_page_prepare_product_import_switches_tab_and_imports_latest_exc
         def import_from_latest_excel(self):
             calls.append("import")
 
-    def fake_build(self, parent=None):
+    def fake_build(self, parent=None, **_kwargs):
         return FakeEmbeddedWidget(parent)
 
     monkeypatch.setattr("consoleplat.ui.putaway_page.PutawayAdapter.build_embedded_widget", fake_build, raising=False)
