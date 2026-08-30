@@ -1,2 +1,2 @@
-APP_VERSION = "3.8"
+APP_VERSION = "3.9"
 APP_TITLE = f"浏览器DOM自动化 v{APP_VERSION}"
