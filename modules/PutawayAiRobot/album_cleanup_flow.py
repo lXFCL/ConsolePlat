@@ -90,6 +90,7 @@ def _visible_dialog(page, timeout_ms: int = 350):
 
 def _select_all_candidates(page):
     return [
+        page.locator('label.ant-checkbox-wrapper:has-text("全选") input.ant-checkbox-input').first,
         page.get_by_role("checkbox", name=_text_re("全选")).first,
         page.locator('label:has-text("全选") input[type="checkbox"]').first,
         page.locator("thead input[type='checkbox']").first,
@@ -166,6 +167,8 @@ def _page_size_select_candidates(page):
 
 def _delete_action_candidates(page):
     return [
+        page.locator("button.ant-btn.btn-orange").first,
+        page.locator("button.ant-btn.btn-orange", has_text=_text_re("删除图片", "删除")).first,
         page.locator('button.btn-orange[onclick*="batchDelPic"]').first,
         page.locator('[onclick*="batchDelPic"]').first,
         page.locator('input[type="button"][value*="批量删除"]').first,
@@ -188,6 +191,12 @@ def _trigger_delete_by_script(page):
                         return false;
                     };
                     if (call('batchDelPic') || call('batchDeletePic') || call('batchDelete')) return true;
+                    const currentButton = Array.from(document.querySelectorAll('button.ant-btn.btn-orange'))
+                        .find(el => /删除图片|删除/.test(((el.innerText || el.textContent || '') + '').trim()));
+                    if (currentButton) {
+                        currentButton.click();
+                        return true;
+                    }
                     const nodes = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"], [role="button"]'));
                     const btn = nodes.find(el => {
                         const txt = ((el.innerText || el.textContent || el.value || '') + '').trim();

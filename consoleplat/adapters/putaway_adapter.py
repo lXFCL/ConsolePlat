@@ -4,6 +4,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 import importlib.util
+import inspect
 
 from consoleplat.runtime import script_command
 
@@ -33,4 +34,14 @@ class PutawayAdapter:
         factory = getattr(module, "create_putaway_widget", None)
         if factory is None:
             raise AttributeError("PutawayAiRobot 未提供 create_putaway_widget() 入口")
-        return factory(parent=parent, home_url=home_url, album_url=album_url)
+        parameters = inspect.signature(factory).parameters
+        accepts_var_keywords = any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        kwargs = {"parent": parent}
+        if accepts_var_keywords or "home_url" in parameters:
+            kwargs["home_url"] = home_url
+        if accepts_var_keywords or "album_url" in parameters:
+            kwargs["album_url"] = album_url
+        return factory(**kwargs)

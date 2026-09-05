@@ -2,8 +2,38 @@ from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication, QLabel, QLineEdit, QTabWidget, QWidget
 
+from consoleplat.adapters.putaway_adapter import PutawayAdapter
 from consoleplat.config import AppSettings, SettingsStore
 from consoleplat.ui.putaway_page import PutawayPage
+
+
+def test_putaway_adapter_loads_legacy_factory_without_custom_url_parameters(tmp_path):
+    project_dir = tmp_path / "PutawayAiRobot"
+    project_dir.mkdir()
+    (project_dir / "browser_dom_automation.py").write_text(
+        "\n".join(
+            [
+                "def create_putaway_widget(parent=None):",
+                "    return {'parent': parent, 'factory': 'legacy'}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    parent = object()
+    adapter = PutawayAdapter(
+        project_dir=project_dir,
+        data_dir_path=project_dir / "data",
+        log_dir_path=project_dir / "log",
+    )
+
+    widget = adapter.build_embedded_widget(
+        parent=parent,
+        home_url="https://www.dianxiaomi.com/home.htm",
+        album_url="https://www.dianxiaomi.com/web/service/album",
+    )
+
+    assert widget == {"parent": parent, "factory": "legacy"}
 
 
 def _page_with_temp_store(tmp_path, monkeypatch):
