@@ -165,10 +165,18 @@ def _page_size_select_candidates(page):
     ]
 
 
+def _selected_delete_menu_candidates(page):
+    return [
+        page.locator('[role="menuitem"][data-menu-id="selected"]').first,
+        page.locator('.ant-dropdown-menu-item[data-menu-id="selected"]').first,
+        page.get_by_role("menuitem", name=_text_re("删除选中", "删除选中图片")).first,
+        page.locator('[role="menuitem"]:has-text("删除选中")').first,
+    ]
+
+
 def _delete_action_candidates(page):
     return [
-        page.locator("button.ant-btn.btn-orange").first,
-        page.locator("button.ant-btn.btn-orange", has_text=_text_re("删除图片", "删除")).first,
+        *_selected_delete_menu_candidates(page),
         page.locator('button.btn-orange[onclick*="batchDelPic"]').first,
         page.locator('[onclick*="batchDelPic"]').first,
         page.locator('input[type="button"][value*="批量删除"]').first,
@@ -177,7 +185,20 @@ def _delete_action_candidates(page):
     ] + _action_locators(page, "批量删除", "删除图片", "删除", "清空")
 
 
+def _click_current_album_selected_delete(page):
+    trigger = page.locator("button.ant-btn.btn-orange").first
+    if not _click_locator(trigger, timeout_ms=1200):
+        return False
+    selected = _first_visible(_selected_delete_menu_candidates(page), timeout_ms=1200)
+    return selected is not None and _click_locator(selected, timeout_ms=1200)
+
+
 def _trigger_delete_by_script(page):
+    try:
+        if _click_current_album_selected_delete(page):
+            return True
+    except Exception:
+        pass
     try:
         return bool(
             page.evaluate(
@@ -191,12 +212,6 @@ def _trigger_delete_by_script(page):
                         return false;
                     };
                     if (call('batchDelPic') || call('batchDeletePic') || call('batchDelete')) return true;
-                    const currentButton = Array.from(document.querySelectorAll('button.ant-btn.btn-orange'))
-                        .find(el => /删除图片|删除/.test(((el.innerText || el.textContent || '') + '').trim()));
-                    if (currentButton) {
-                        currentButton.click();
-                        return true;
-                    }
                     const nodes = Array.from(document.querySelectorAll('button, a, input[type="button"], input[type="submit"], [role="button"]'));
                     const btn = nodes.find(el => {
                         const txt = ((el.innerText || el.textContent || el.value || '') + '').trim();
