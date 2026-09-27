@@ -59,12 +59,72 @@ def _click_first(locators, timeout_ms: int):
     return False
 
 
+def _select_grouped_ant_option(page, group_text: str, option_text: str) -> bool:
+    groups = page.locator(".ant-select-dropdown:visible .ant-select-item-group")
+    options = page.locator(".ant-select-dropdown:visible .ant-select-item-option-grouped")
+    try:
+        group_count = int(groups.count())
+        option_count = int(options.count())
+    except Exception:
+        return False
+
+    matching_group = False
+    for i in range(group_count):
+        group = groups.nth(i)
+        try:
+            if (group.inner_text(timeout=600) or "").strip() == group_text:
+                matching_group = True
+                break
+        except Exception:
+            continue
+    if not matching_group:
+        return False
+
+    for i in range(option_count):
+        option = options.nth(i)
+        try:
+            option_group = option.evaluate(
+                """el => {
+                    let sibling = el.previousElementSibling;
+                    while (sibling && !sibling.classList.contains('ant-select-item-group')) {
+                        sibling = sibling.previousElementSibling;
+                    }
+                    return sibling ? sibling.textContent.trim() : '';
+                }"""
+            )
+            option_label = (option.get_attribute("label") or option.inner_text(timeout=600) or "").strip()
+        except Exception:
+            continue
+        if option_group != group_text or option_label != option_text:
+            continue
+        try:
+            option.scroll_into_view_if_needed(timeout=900)
+        except Exception:
+            pass
+        try:
+            option.click(timeout=1200)
+            return True
+        except Exception:
+            try:
+                option.click(timeout=1200, force=True)
+                return True
+            except Exception:
+                return False
+    return False
+
+
 def _select_dropdown_option(page, option_text: str):
     option_text = (option_text or "").strip()
     if not option_text:
         raise RuntimeError("引用模板名称为空")
 
     tokens = [t for t in re.split(r"\s+", option_text) if t]
+
+    if "店小秘模板" in tokens:
+        grouped_option = " ".join(token for token in tokens if token != "店小秘模板").strip()
+        if grouped_option and _select_grouped_ant_option(page, "店小秘模板", grouped_option):
+            return
+        raise RuntimeError(f"未找到店小秘模板分组下的尺码表选项：{grouped_option or option_text}")
 
     def _match_all(txt: str):
         txt = (txt or "").strip()
